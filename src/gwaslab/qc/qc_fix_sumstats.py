@@ -1630,24 +1630,36 @@ def flip_by_inverse(sumstats: pd.DataFrame, matched_index: pd.Series, log: Log, 
         log.write(" -Flipping column: OR = 1 / OR...", verbose=verbose) 
         sumstats.loc[matched_index, "OR"] = factor / sumstats.loc[matched_index, "OR"].values
     
-    if has_or_95l:
-        log.write(" -Flipping column: OR_95U = 1 / OR_95L...", verbose=verbose) 
+    if has_or_95l and has_or_95u:
+        log.write(" -Flipping column: OR_95U = 1 / OR_95L...", verbose=verbose)
+        log.write(" -Flipping column: OR_95L = 1 / OR_95U...", verbose=verbose)
+        original_or_95l = sumstats.loc[matched_index, "OR_95L"].values
+        original_or_95u = sumstats.loc[matched_index, "OR_95U"].values
+        sumstats.loc[matched_index, "OR_95U"] = factor / original_or_95l
+        sumstats.loc[matched_index, "OR_95L"] = factor / original_or_95u
+    elif has_or_95l:
+        log.write(" -Flipping column: OR_95U = 1 / OR_95L...", verbose=verbose)
         sumstats.loc[matched_index, "OR_95U"] = factor / sumstats.loc[matched_index, "OR_95L"].values
-    
-    if has_or_95u:
-        log.write(" -Flipping column: OR_95L = 1 / OR_95U...", verbose=verbose) 
+    elif has_or_95u:
+        log.write(" -Flipping column: OR_95L = 1 / OR_95U...", verbose=verbose)
         sumstats.loc[matched_index, "OR_95L"] = factor / sumstats.loc[matched_index, "OR_95U"].values
     
     if has_hr:
         log.write(" -Flipping column: HR = 1 / HR...", verbose=verbose) 
         sumstats.loc[matched_index, "HR"] = factor / sumstats.loc[matched_index, "HR"].values
     
-    if has_hr_95l:
-        log.write(" -Flipping column: HR_95U = 1 / HR_95L...", verbose=verbose) 
+    if has_hr_95l and has_hr_95u:
+        log.write(" -Flipping column: HR_95U = 1 / HR_95L...", verbose=verbose)
+        log.write(" -Flipping column: HR_95L = 1 / HR_95U...", verbose=verbose)
+        original_hr_95l = sumstats.loc[matched_index, "HR_95L"].values
+        original_hr_95u = sumstats.loc[matched_index, "HR_95U"].values
+        sumstats.loc[matched_index, "HR_95U"] = factor / original_hr_95l
+        sumstats.loc[matched_index, "HR_95L"] = factor / original_hr_95u
+    elif has_hr_95l:
+        log.write(" -Flipping column: HR_95U = 1 / HR_95L...", verbose=verbose)
         sumstats.loc[matched_index, "HR_95U"] = factor / sumstats.loc[matched_index, "HR_95L"].values
-    
-    if has_hr_95u:
-        log.write(" -Flipping column: HR_95L = 1 / HR_95U...", verbose=verbose) 
+    elif has_hr_95u:
+        log.write(" -Flipping column: HR_95L = 1 / HR_95U...", verbose=verbose)
         sumstats.loc[matched_index, "HR_95L"] = factor / sumstats.loc[matched_index, "HR_95U"].values
     
     return sumstats

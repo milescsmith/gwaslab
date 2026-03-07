@@ -1,5 +1,9 @@
 # Update Logs
 
+# v4.1.2 20260307
+
+- Fixed CI flipping for `OR_95L`/`OR_95U` and `HR_95L`/`HR_95U` so both bounds are computed from original values when both columns are present
+
 # v4.1.1 20260208
 
 - Fixed `plot_miami2()` highlight/pinpoint/annotation not working: auto-detect `id1`/`id2` (SNPID/rsID) from Sumstats objects when not explicitly specified, so that SNP ID columns are included in the merged data for variant matching
