@@ -22,6 +22,7 @@ from .gwascatalog import (
     search_variants,
     search_traits,
 )
+from .sumstats_download import download_sumstats
 
 __all__ = [
     "GWASCatalogClient",
@@ -32,5 +33,6 @@ __all__ = [
     "search_associations",
     "search_variants",
     "search_traits",
+    "download_sumstats",
 ]
 

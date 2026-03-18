@@ -1,115 +1,34 @@
-from typing import Optional, Any
+"""
+GWASLab CLI - Main entry point.
+
+Simple flat CLI structure with flags for operations.
+
+Operation Order:
+When multiple operations are specified, they are executed in this order:
+  1. QC (--qc, --remove, --remove-dup, --normalize)
+  2. Harmonization (--harmonize, --ref-seq)
+  3. Assign rsID (--assign-rsid)
+  4. rsID to CHR:POS (--rsid-to-chrpos)
+  5. Liftover (--liftover) [includes auto QC if not done]
+  6. Plot (--plot) [outputs to file, no --output needed]
+  7. Extract (--extract) [outputs to --output]
+  8. Format conversion (--output with --to-fmt)
+
+Note: --plot and --extract handle their own output and exit after completion.
+"""
+
 import argparse
 import sys
+from typing import Optional
+
 import gwaslab as gl
+from gwaslab.CLI import load_sumstats
 
-def _load_sumstats(path: str, fmt: str, nrows: Optional[int]) -> gl.Sumstats:
-    return gl.Sumstats(path, fmt=fmt, nrows=nrows) if nrows is not None else gl.Sumstats(path, fmt=fmt)
-
-def _cmd_version(_args: argparse.Namespace) -> None:
-    gl.show_version()
-
-def _process_sumstats(args: argparse.Namespace) -> gl.Sumstats:
-    """Main processing function that handles QC, harmonization, and formatting"""
-    # Load sumstats
-    s = _load_sumstats(args.input, args.fmt, args.nrows)
-    
-    # Determine what processing to do based on options
-    do_qc = args.qc or args.remove or args.remove_dup or args.normalize
-    do_harmonize = (args.ref_seq is not None or 
-                   args.ref_rsid_tsv is not None or 
-                   args.ref_rsid_vcf is not None or 
-                   args.ref_infer is not None or
-                   args.harmonize)
-    
-    # Perform QC if requested
-    if do_qc:
-        s.basic_check(
-            remove=args.remove,
-            remove_dup=args.remove_dup,
-            threads=args.threads,
-            normalize=args.normalize,
-            verbose=not args.quiet
-        )
-    
-    # Perform harmonization if requested
-    if do_harmonize:
-        harmonize_kwargs = {
-            "basic_check": args.basic_check if not do_qc else False,  # Skip if QC already done
-            "ref_seq": args.ref_seq,
-            "ref_rsid_tsv": args.ref_rsid_tsv,
-            "ref_rsid_vcf": args.ref_rsid_vcf,
-            "ref_infer": args.ref_infer,
-            "ref_alt_freq": args.ref_alt_freq,
-            "ref_maf_threshold": args.ref_maf_threshold,
-            "maf_threshold": args.maf_threshold,
-            "threads": args.threads,
-            "remove": args.remove,
-            "verbose": not args.quiet,
-            "sweep_mode": args.sweep_mode
-        }
-        # Remove None values
-        harmonize_kwargs = {k: v for k, v in harmonize_kwargs.items() if v is not None}
-        s.harmonize(**harmonize_kwargs)
-    
-    # Handle assign-rsid if specified
-    if args.assign_rsid:
-        s.assign_rsid(
-            ref_rsid_tsv=args.ref_rsid_tsv,
-            ref_rsid_vcf=args.ref_rsid_vcf,
-            threads=args.threads,
-            overwrite=args.overwrite
-        )
-    
-    # Handle rsid-to-chrpos if specified
-    if args.rsid_to_chrpos:
-        # Use HDF5-based parallel processing (faster than old TSV approach)
-        # Accepts VCF file (will auto-generate HDF5 path) or direct HDF5 path
-        # Note: ref_rsid_tsv is reused for HDF5 path for backward compatibility
-        rsid_to_chrpos_kwargs = {
-            "ref_rsid_to_chrpos_vcf": args.ref_rsid_vcf if args.ref_rsid_vcf else None,
-            "ref_rsid_to_chrpos_hdf5": args.ref_rsid_tsv if args.ref_rsid_tsv else None,
-            "build": args.build,
-            "threads": args.threads if args.threads > 1 else 4,  # Default to 4 for rsid-to-chrpos
-            "verbose": not args.quiet
-        }
-        # Remove None values
-        rsid_to_chrpos_kwargs = {k: v for k, v in rsid_to_chrpos_kwargs.items() if v is not None}
-        s.rsid_to_chrpos(**rsid_to_chrpos_kwargs)
-    
-    # Output formatting
-    if args.out is not None:
-        to_format_kwargs = {
-            "fmt": args.to_fmt,
-            "tab_fmt": args.tab_fmt,
-            "gzip": not args.no_gzip,
-            "bgzip": args.bgzip,
-            "tabix": args.tabix,
-            "hapmap3": args.hapmap3,
-            "exclude_hla": args.exclude_hla,
-            "hla_range": (args.hla_lower, args.hla_upper) if args.exclude_hla else None,
-            "n": args.n,
-            "chr_prefix": args.chr_prefix,
-            "xymt_number": args.xymt_number,
-            "verbose": not args.quiet
-        }
-        # Remove None values
-        to_format_kwargs = {k: v for k, v in to_format_kwargs.items() if v is not None}
-        s.to_format(args.out, **to_format_kwargs)
-    
-    return s
 
 def main(argv: Optional[list] = None) -> None:
+    """Main entry point for GWASLab CLI."""
     if argv is None:
         argv = sys.argv[1:]
-    
-    # Check if version command
-    if "version" in argv:
-        parser = argparse.ArgumentParser(prog="gwaslab", add_help=True)
-        parser.add_argument("version", nargs="?", help="Show version")
-        args = parser.parse_args(argv)
-        _cmd_version(args)
-        return
     
     parser = argparse.ArgumentParser(
         prog="gwaslab",
@@ -117,94 +36,313 @@ def main(argv: Optional[list] = None) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic QC and output
-  gwaslab --input sumstats.tsv --fmt auto --qc --out cleaned.tsv --to-fmt gwaslab
+  # Process sumstats
+  gwaslab --input sumstats.tsv --qc --output cleaned.tsv
+  gwaslab --input sumstats.tsv --harmonize --ref-seq ref.fa --output harmonized.tsv
+  gwaslab --input sumstats.tsv --liftover 19 38 --output lifted_hg38.tsv
+  gwaslab --input sumstats.tsv --infer-build --liftover 19 38 --output lifted_hg38.tsv
+  gwaslab --input sumstats.tsv --output converted.ldsc --to-fmt ldsc
   
-  # Harmonization with reference
-  gwaslab --input sumstats.tsv --fmt auto --ref-seq ref.fasta --harmonize --out harmonized.tsv --to-fmt gwaslab
+  # Plot
+  gwaslab --input sumstats.tsv --plot manhattan --output manhattan.png
+  gwaslab --input sumstats.tsv --plot qq --output qq.png
   
-  # Format conversion only
-  gwaslab --input sumstats.tsv --fmt gwaslab --out sumstats.ldsc --to-fmt ldsc
+  # Extract
+  gwaslab --input sumstats.tsv --extract lead --output leads.tsv
+  gwaslab --input sumstats.tsv --extract novel --efo EFO_0004330 --output novel.tsv
+  
+  # Other commands
+  gwaslab version
+  gwaslab config
+  gwaslab path config
+  gwaslab formatbook list
+  gwaslab download-sumstats GCST90270926
         """
     )
     
-    # Input/Output arguments
-    parser.add_argument("--input", required=True, help="Input sumstats file path")
-    parser.add_argument("--fmt", default="auto", help="Input format (default: auto)")
-    parser.add_argument("--nrows", type=int, help="Number of rows to read (for testing)")
-    parser.add_argument("--out", help="Output file path")
+    # Input/Output
+    parser.add_argument("--input", "-i", help="Input sumstats file path")
+    parser.add_argument("--output", "-o", help="Output file path")
+    parser.add_argument("--fmt", "-f", default="auto", help="Input format (default: auto)")
     parser.add_argument("--to-fmt", default="gwaslab", help="Output format (default: gwaslab)")
-    parser.add_argument("--tab-fmt", default="tsv", choices=["tsv", "csv", "parquet"], help="Tabular format (default: tsv)")
+    parser.add_argument("--nrows", type=int, help="Number of rows to read (for testing)")
     
-    # Processing mode flags
-    processing_group = parser.add_argument_group("Processing Options")
-    processing_group.add_argument("--qc", action="store_true", help="Perform quality control (basic_check)")
-    processing_group.add_argument("--harmonize", action="store_true", help="Perform harmonization")
-    processing_group.add_argument("--assign-rsid", action="store_true", help="Assign rsID to variants")
-    processing_group.add_argument("--rsid-to-chrpos", action="store_true", help="Convert rsID to CHR:POS")
+    # Processing flags
+    parser.add_argument("--qc", action="store_true", help="Perform quality control")
+    parser.add_argument("--harmonize", action="store_true", help="Perform harmonization")
+    parser.add_argument("--assign-rsid", action="store_true", help="Assign rsID to variants")
+    parser.add_argument("--rsid-to-chrpos", action="store_true", help="Convert rsID to CHR:POS")
+    parser.add_argument("--infer-build", action="store_true",
+                        help="Infer genome build from HapMap3 SNP coordinates (hg19/hg38)")
+    parser.add_argument("--liftover", nargs=2, metavar=("FROM_BUILD", "TO_BUILD"),
+                        help="Liftover from one build to another (e.g., 19 38)")
+    
+    # Plot flag
+    parser.add_argument("--plot", choices=["manhattan", "qq", "mqq", "regional", "miami", "forest"],
+                        help="Generate a plot")
+    
+    # Extract flag
+    parser.add_argument("--extract", choices=["lead", "novel", "proxy"],
+                        help="Extract variants")
+    
+    # Common options
+    parser.add_argument("--threads", "-t", type=int, default=1, help="Number of threads")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Suppress output")
     
     # QC options
-    qc_group = parser.add_argument_group("QC Options")
-    qc_group.add_argument("--remove", action="store_true", help="Remove bad quality variants")
-    qc_group.add_argument("--remove-dup", action="store_true", help="Remove duplicated variants")
-    qc_group.add_argument("--normalize", action="store_true", help="Normalize indels")
+    parser.add_argument("--remove", action="store_true", help="Remove bad quality variants")
+    parser.add_argument("--remove-dup", action="store_true", help="Remove duplicated variants")
+    parser.add_argument("--normalize", action="store_true", help="Normalize indels")
     
     # Harmonization options
-    harm_group = parser.add_argument_group("Harmonization Options")
-    harm_group.add_argument("--basic-check", action="store_true", default=True, help="Run basic QC in harmonization (default: True)")
-    harm_group.add_argument("--no-basic-check", dest="basic_check", action="store_false", help="Skip basic QC in harmonization")
-    harm_group.add_argument("--ref-seq", help="Reference sequence file (FASTA) for allele flipping")
-    harm_group.add_argument("--ref-rsid-tsv", help="Reference rsID HDF5 file (legacy name, accepts HDF5 path)")
-    harm_group.add_argument("--ref-rsid-vcf", help="Reference rsID VCF/BCF file")
-    harm_group.add_argument("--ref-infer", help="Reference VCF/BCF file for strand inference")
-    harm_group.add_argument("--ref-alt-freq", help="Allele frequency field name in VCF INFO (default: AF)")
-    harm_group.add_argument("--ref-maf-threshold", type=float, default=0.4, help="MAF threshold for reference (default: 0.4)")
-    harm_group.add_argument("--maf-threshold", type=float, default=0.40, help="MAF threshold for sumstats (default: 0.40)")
-    harm_group.add_argument("--sweep-mode", action="store_true", help="Use sweep mode for large datasets")
+    parser.add_argument("--ref-seq", help="Reference FASTA file")
+    parser.add_argument("--ref-rsid-tsv", help="Reference rsID HDF5 file")
+    parser.add_argument("--ref-rsid-vcf", help="Reference rsID VCF file")
+    parser.add_argument("--ref-infer", help="Reference VCF for strand inference")
+    parser.add_argument("--ref-maf-threshold", type=float, default=0.4)
+    parser.add_argument("--maf-threshold", type=float, default=0.40)
+    parser.add_argument("--sweep-mode", action="store_true")
     
-    # Assign rsID options
-    assign_group = parser.add_argument_group("Assign rsID Options")
-    assign_group.add_argument("--overwrite", choices=["all", "invalid", "empty"], default="empty", help="Overwrite mode for rsID assignment (default: empty)")
+    # Output options
+    parser.add_argument("--no-gzip", action="store_true")
+    parser.add_argument("--bgzip", action="store_true")
+    parser.add_argument("--tabix", action="store_true")
+    parser.add_argument("--hapmap3", action="store_true")
+    parser.add_argument("--exclude-hla", action="store_true")
+    parser.add_argument("--build", default="19")
+    parser.add_argument("--chr-prefix", default="")
     
-    # rsID to CHR:POS options
-    rtc_group = parser.add_argument_group("rsID to CHR:POS Options")
-    rtc_group.add_argument("--build", default="19", help="Genome build (default: 19)")
-    # Note: The following arguments are kept for backward compatibility but are not currently used
-    # by rsid_to_chrpos (the function doesn't support overwrite, and block_size is deprecated)
-    rtc_group.add_argument("--overwrite-rtc", action="store_true", help="[Not implemented] Overwrite existing CHR:POS")
-    rtc_group.add_argument("--chunksize", type=int, default=5000000, help="[Not implemented] Chunk size for processing (default: 5000000)")
+    # Plot options
+    parser.add_argument("--sig-level", type=float, default=5e-8)
+    parser.add_argument("--ylim", type=float, nargs=2)
+    parser.add_argument("--highlight", nargs="+")
+    parser.add_argument("--chr", type=int, help="Chromosome for regional plot")
+    parser.add_argument("--start", type=int, help="Start position for regional plot")
+    parser.add_argument("--end", type=int, help="End position for regional plot")
     
-    # Output formatting options
-    format_group = parser.add_argument_group("Output Formatting Options")
-    format_group.add_argument("--no-gzip", action="store_true", help="Disable gzip compression")
-    format_group.add_argument("--bgzip", action="store_true", help="Use bgzip compression")
-    format_group.add_argument("--tabix", action="store_true", help="Create tabix index")
-    format_group.add_argument("--hapmap3", action="store_true", help="Extract HapMap3 variants only")
-    format_group.add_argument("--exclude-hla", action="store_true", help="Exclude HLA region")
-    format_group.add_argument("--hla-lower", type=int, default=25, help="HLA region lower bound (default: 25)")
-    format_group.add_argument("--hla-upper", type=int, default=34, help="HLA region upper bound (default: 34)")
-    format_group.add_argument("--n", type=float, help="Add N column with specified value")
-    format_group.add_argument("--chr-prefix", default="", help="Prefix for chromosome column (e.g., 'chr')")
-    format_group.add_argument("--xymt-number", action="store_true", help="Use numeric notation for X, Y, MT (23, 24, 25)")
+    # Extract options
+    parser.add_argument("--sig-level-extract", type=float, default=5e-8, dest="sig_level_extract")
+    parser.add_argument("--windowsizekb", type=int, default=500)
+    parser.add_argument("--efo", nargs="+", help="EFO IDs for novel extraction")
+    parser.add_argument("--only-novel", action="store_true")
     
-    # General options
-    general_group = parser.add_argument_group("General Options")
-    general_group.add_argument("--threads", type=int, default=1, help="Number of threads for parallel processing (default: 1)")
-    general_group.add_argument("--quiet", action="store_true", help="Suppress output messages")
+    # Subcommands (version, config, etc.)
+    subparsers = parser.add_subparsers(dest="command")
+    
+    # Version
+    version_parser = subparsers.add_parser("version", help="Show version")
+    version_parser.set_defaults(func=lambda _: gl.show_version())
+    
+    # Config
+    config_parser = subparsers.add_parser("config", help="Show configuration")
+    config_parser.add_argument("--json", action="store_true")
+    config_parser.set_defaults(func=_run_config)
+    
+    # Path
+    path_parser = subparsers.add_parser("path", help="Resolve path")
+    path_parser.add_argument("keyword")
+    path_parser.set_defaults(func=_run_path)
+    
+    # Formatbook
+    fb_parser = subparsers.add_parser("formatbook", help="Manage formats")
+    fb_sub = fb_parser.add_subparsers(dest="fb_action")
+    fb_list = fb_sub.add_parser("list", help="List formats")
+    fb_list.add_argument("--json", action="store_true")
+    fb_list.set_defaults(func=_run_fb_list)
+    fb_show = fb_sub.add_parser("show", help="Show format")
+    fb_show.add_argument("format")
+    fb_show.set_defaults(func=_run_fb_show)
+    fb_update = fb_sub.add_parser("update", help="Update formatbook")
+    fb_update.set_defaults(func=lambda _: gl.update_formatbook())
+    
+    # Download
+    dl_parser = subparsers.add_parser("download-sumstats", help="Download from GWAS Catalog")
+    dl_parser.add_argument("gcst_id")
+    dl_parser.add_argument("--output-dir", "-o")
+    dl_parser.set_defaults(func=_run_download)
     
     args = parser.parse_args(argv)
     
-    # If no processing is specified but output is requested, do basic check
-    # This ensures output is properly formatted
-    if not (args.qc or args.harmonize or args.assign_rsid or args.rsid_to_chrpos):
-        if args.out is not None:
-            args.qc = True
-        else:
-            # If no output and no processing, just load and return (no-op)
-            return
+    # Handle subcommands
+    if args.command:
+        if hasattr(args, 'func'):
+            args.func(args)
+        return
     
-    # Process sumstats
-    _process_sumstats(args)
+    # Require --input for main operations
+    if not args.input:
+        parser.error("--input is required (or use a subcommand like 'version', 'config')")
+    
+    # Derive the input build: --build flag takes precedence; otherwise infer from
+    # the first argument of --liftover (the FROM build).
+    # If --infer-build is set together with --liftover, build will be updated
+    # after infer_build() runs, so we start with the FROM build as a safe default.
+    input_build = args.build
+    if args.liftover and args.build == "19" and not args.infer_build:
+        # If user didn't explicitly set --build but did set --liftover,
+        # the FROM build is the true build of the input file.
+        input_build = args.liftover[0]
+
+    # Load sumstats
+    s = load_sumstats(args.input, args.fmt, args.nrows, build=input_build)
+    
+    # Processing
+    if args.qc or args.remove or args.remove_dup or args.normalize:
+        # normalize defaults to True in basic_check; --no-normalize disables it.
+        # If --qc is given without --normalize, honour basic_check's default (True).
+        normalize = args.normalize if args.normalize else (True if args.qc else False)
+        s.basic_check(
+            remove=args.remove,
+            remove_dup=args.remove_dup,
+            threads=args.threads,
+            normalize=normalize,
+            verbose=not args.quiet
+        )
+    
+    if args.harmonize or args.ref_seq:
+        s.harmonize(
+            basic_check=not args.qc,
+            ref_seq=args.ref_seq,
+            ref_rsid_tsv=args.ref_rsid_tsv,
+            ref_rsid_vcf=args.ref_rsid_vcf,
+            ref_infer=args.ref_infer,
+            ref_maf_threshold=args.ref_maf_threshold,
+            maf_threshold=args.maf_threshold,
+            threads=args.threads,
+            sweep_mode=args.sweep_mode,
+            verbose=not args.quiet
+        )
+    
+    if args.assign_rsid:
+        s.assign_rsid(
+            ref_rsid_tsv=args.ref_rsid_tsv,
+            ref_rsid_vcf=args.ref_rsid_vcf,
+            threads=args.threads,
+            verbose=not args.quiet
+        )
+    
+    if args.rsid_to_chrpos:
+        s.rsid_to_chrpos(
+            ref_rsid_to_chrpos_vcf=args.ref_rsid_vcf,
+            ref_rsid_to_chrpos_hdf5=args.ref_rsid_tsv,
+            build=args.build,
+            threads=args.threads if args.threads > 1 else 4,
+            verbose=not args.quiet
+        )
+    
+    if args.infer_build:
+        s.infer_build(verbose=not args.quiet)
+    
+    if args.liftover:
+        # Liftover requires QC to ensure valid CHR/POS
+        if not (args.qc or args.remove or args.remove_dup or args.normalize):
+            s.basic_check(verbose=not args.quiet)
+        from_build, to_build = args.liftover
+        s.liftover(
+            from_build=from_build,
+            to_build=to_build,
+            verbose=not args.quiet
+        )
+    
+    # Plotting
+    if args.plot:
+        if args.plot == "manhattan":
+            s.plot_mqq(mode="m", save=args.output, verbose=not args.quiet)
+        elif args.plot == "qq":
+            s.plot_qq(save=args.output, verbose=not args.quiet)
+        elif args.plot == "mqq":
+            s.plot_mqq(mode="mqq", save=args.output, verbose=not args.quiet)
+        elif args.plot == "regional":
+            if not all([args.chr, args.start, args.end]):
+                parser.error("--chr, --start, --end required for regional plot")
+            s.plot_mqq(mode="r", region=(args.chr, args.start, args.end), save=args.output, verbose=not args.quiet)
+        elif args.plot == "miami":
+            parser.error("Miami plot requires two inputs. Use Python API: gl.plot_miami2()")
+        elif args.plot == "forest":
+            s.plot_forest(save=args.output, verbose=not args.quiet)
+        return
+    
+    # Extraction
+    if args.extract:
+        if args.extract == "lead":
+            result = s.get_lead(
+                sig_level=args.sig_level_extract,
+                windowsizekb=args.windowsizekb,
+                verbose=not args.quiet
+            )
+            if args.output:
+                result.to_csv(args.output, sep="\t", index=False)
+        elif args.extract == "novel":
+            result = s.get_novel(
+                efo=args.efo or False,
+                only_novel=args.only_novel,
+                sig_level=args.sig_level_extract,
+                verbose=not args.quiet
+            )
+            if args.output:
+                result.to_csv(args.output, sep="\t", index=False)
+        elif args.extract == "proxy":
+            parser.error("Proxy extraction not yet implemented in CLI")
+        return
+    
+    # Output (if not plot/extract which handle their own output)
+    if args.output:
+        s.to_format(
+            args.output,
+            fmt=args.to_fmt,
+            gzip=not args.no_gzip,
+            bgzip=args.bgzip,
+            tabix=args.tabix,
+            hapmap3=args.hapmap3,
+            verbose=not args.quiet
+        )
+
+
+def _run_config(args):
+    import json
+    if args.json:
+        print(json.dumps({"paths": gl.options.paths}, indent=2))
+    else:
+        for k, v in gl.options.paths.items():
+            print(f"{k}: {v}")
+
+
+def _run_path(args):
+    import sys
+    if args.keyword in gl.options.paths:
+        print(gl.options.paths[args.keyword])
+    else:
+        path = gl.get_path(args.keyword, verbose=False)
+        if path:
+            print(path)
+        else:
+            print(f"Path not found: {args.keyword}", file=sys.stderr)
+            sys.exit(1)
+
+
+def _run_fb_list(args):
+    import json
+    formats = gl.list_formats()
+    if args.json:
+        print(json.dumps({"formats": formats}, indent=2))
+    else:
+        for f in formats:
+            print(f)
+
+
+def _run_fb_show(args):
+    import json
+    mapping = gl.check_format(args.format)
+    print(json.dumps({args.format: mapping}, indent=2))
+
+
+def _run_download(args):
+    gl.download_sumstats(
+        gcst_id=args.gcst_id,
+        output_dir=args.output_dir,
+        verbose=True
+    )
+
 
 if __name__ == "__main__":
     main()
