@@ -34,7 +34,7 @@ Homepage = "https://cloufield.github.io/gwaslab/"
 Repository = "https://github.com/Cloufield/gwaslab"
 
 [project.scripts]
-gwaslab = "gwaslab.CLI.cli:main"
+gwaslab = "gwaslab_cli.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
