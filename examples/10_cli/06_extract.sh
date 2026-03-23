@@ -54,6 +54,7 @@ echo "=== [4] Extract novel variants for a trait (BMI, EFO_0004340) ==="
 gwaslab \
     --input   "$INPUT" \
     --qc \
+    --remove \
     --extract novel \
     --efo     EFO_0004340 \
     --output  "output/06_novel_bmi.tsv"
@@ -63,6 +64,7 @@ echo "=== [5] Novel variants — return only truly novel hits ==="
 gwaslab \
     --input      "$INPUT" \
     --qc \
+    --remove \
     --extract    novel \
     --efo        EFO_0004340 \
     --only-novel \
@@ -73,6 +75,7 @@ echo "=== [6] Novel variants for multiple traits ==="
 gwaslab \
     --input   "$INPUT" \
     --qc \
+    --remove \
     --extract novel \
     --efo     EFO_0004340 EFO_0004330 \
     --output  "output/06_novel_multi_trait.tsv"

@@ -82,6 +82,7 @@ from gwaslab.bd.bd_download import scan_downloaded_files
 from gwaslab.bd.bd_download import add_local_data
 from gwaslab.bd.bd_download import remove_local_record
 from gwaslab.bd.bd_config import options
+from gwaslab.extension.gwascatalog.sumstats_download import download_sumstats
 from gwaslab.qc.qc_reserved_headers import researved_header
 from gwaslab.info.g_Log import Log
 from gwaslab.viz.viz_aux_params import VizParamsManager, load_viz_config
