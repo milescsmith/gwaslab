@@ -1,4 +1,4 @@
-from gwaslab.CLI.cli import main
+from gwaslab_cli.main import main
 
 if __name__ == "__main__":
     main()

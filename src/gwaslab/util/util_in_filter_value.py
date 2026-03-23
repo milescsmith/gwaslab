@@ -1343,10 +1343,14 @@ def _exclude_hla(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS", l
         
     raw_len = len(sumstats)
     
+    # Ensure POS column is numeric for comparison
+    pos_numeric = pd.to_numeric(sumstats[pos], errors='coerce')
+    
     if str(sumstats[chrom].dtype) == "string":
-        is_in_hla = (sumstats[chrom].astype("string")=="6")&(sumstats[pos]>lower)&(sumstats[pos]<upper)
+        is_in_hla = (sumstats[chrom].astype("string")=="6")&(pos_numeric>lower)&(pos_numeric<upper)
     else:
-        is_in_hla = (sumstats[chrom]==6)&(sumstats[pos]>lower)&(sumstats[pos]<upper)
+        chrom_numeric = pd.to_numeric(sumstats[chrom], errors='coerce')
+        is_in_hla = (chrom_numeric==6)&(pos_numeric>lower)&(pos_numeric<upper)
     
     sumstats = sumstats.loc[~is_in_hla, : ]
     

@@ -16,6 +16,22 @@ gwaslab --input <file> --fmt <format> [--options] --to-fmt <format> --out <file>
 # Show version
 gwaslab version
 
+# Show default and current config paths
+gwaslab config
+
+# Show one configured path by key
+gwaslab config show config
+gwaslab config show reference
+
+# Resolve built-in path key
+gwaslab path config
+
+# List all formats in formatbook
+gwaslab formatbook list
+
+# Show one format mapping
+gwaslab formatbook show metal
+
 # Basic QC and output
 gwaslab --input sumstats.tsv --fmt auto --qc --out cleaned.tsv --to-fmt gwaslab
 
@@ -24,7 +40,89 @@ gwaslab --input sumstats.tsv --fmt auto --ref-seq ref.fasta --harmonize --out ha
 
 # Format conversion only
 gwaslab --input sumstats.tsv --fmt gwaslab --out sumstats.ldsc --to-fmt ldsc
+
+# Plot (CLI runs fix_chr + fix_pos if basic_check was not run)
+gwaslab --input sumstats.tsv --plot manhattan --out manhattan.png
+
+# Assign rsID (CLI runs fix_chr + fix_pos if basic_check was not run)
+gwaslab --input sumstats.tsv --fmt auto --assign-rsid --ref-rsid-vcf /path/to/rsid.vcf.gz --out output.tsv --to-fmt gwaslab
+
+# Liftover (CLI runs fix_chr + fix_pos if basic_check was not run)
+gwaslab --input sumstats.tsv --liftover 19 38 --out lifted_hg38.tsv
 ```
+
+## Utility Subcommands
+
+### config
+
+Inspect GWASLab path configuration and query a single configured path.
+
+```bash
+# Show default + current path config
+gwaslab config
+
+# Show one configured path by keyword
+gwaslab config show config
+gwaslab config show reference
+
+# JSON output (easy to parse)
+gwaslab config --json
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Print as JSON |
+| `show <keyword>` | Show JSON content for `config`/`reference`/`formatbook`; otherwise print resolved path |
+
+### path
+
+Resolve a local path by built-in key or downloaded reference keyword.
+
+```bash
+# Built-in keys
+gwaslab path config
+gwaslab path reference
+gwaslab path formatbook
+gwaslab path data_directory
+
+# Downloaded reference keyword
+gwaslab path <downloaded_keyword>
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `keyword` | Built-in key or downloaded reference keyword |
+
+### formatbook
+
+Inspect and update format definitions in the formatbook (e.g., `saige`, `metal`).
+
+```bash
+# List all available formats
+gwaslab formatbook list
+
+# Show mapping for one format
+gwaslab formatbook show saige
+
+# JSON output
+gwaslab formatbook list --json
+
+# Update local formatbook from remote repository
+gwaslab formatbook update
+```
+
+**Actions and options:**
+
+| Command | Description |
+|--------|-------------|
+| `formatbook list` | List available formats in formatbook |
+| `formatbook show <format>` | Show header mapping for one format |
+| `formatbook update` | Update formatbook from remote source |
+| `--json` | Print output in JSON format (`list` only) |
 
 ## Command Structure
 
@@ -98,7 +196,6 @@ gwaslab --input sumstats.tsv --fmt auto \
   --ref-seq /path/to/reference.fasta \
   --ref-rsid-vcf /path/to/rsid.vcf.gz \
   --ref-infer /path/to/inference.vcf.gz \
-  --ref-alt-freq AF \
   --maf-threshold 0.40 \
   --ref-maf-threshold 0.4 \
   --sweep-mode \
@@ -118,7 +215,6 @@ gwaslab --input sumstats.tsv --fmt auto \
 | `--ref-rsid-tsv` | Reference rsID HDF5 file (legacy name, accepts HDF5 path) | None |
 | `--ref-rsid-vcf` | Reference rsID VCF/BCF file | None |
 | `--ref-infer` | Reference VCF/BCF file for strand inference | None |
-| `--ref-alt-freq` | Allele frequency field name in VCF INFO | `AF` |
 | `--ref-maf-threshold` | MAF threshold for reference | 0.4 |
 | `--maf-threshold` | MAF threshold for sumstats | 0.40 |
 | `--sweep-mode` | Use sweep mode for large datasets | False |
@@ -139,7 +235,7 @@ gwaslab --input sumstats.tsv --fmt auto --assign-rsid --ref-rsid-vcf /path/to/rs
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--assign-rsid` | Assign rsID to variants | False |
+| `--assign-rsid` | Assign rsID to variants (auto runs `fix_chr` + `fix_pos` if basic_check not run) | False |
 | `--ref-rsid-tsv` | Reference rsID HDF5 file (legacy name, accepts HDF5 path) | None |
 | `--ref-rsid-vcf` | Reference rsID VCF/BCF file | None |
 | `--overwrite` | Overwrite mode (`all`, `invalid`, `empty`) | `empty` |
@@ -165,9 +261,21 @@ gwaslab --input sumstats.tsv --fmt auto --rsid-to-chrpos --ref-rsid-tsv /path/to
 | `--ref-rsid-vcf` | Reference VCF file for rsID to CHR:POS conversion (auto-generates HDF5) | None |
 | `--ref-rsid-tsv` | Reference HDF5 file path for rsID to CHR:POS conversion | None |
 | `--build` | Genome build version | `19` |
-| `--overwrite-rtc` | Overwrite existing CHR:POS | False |
-| `--chunksize` | Chunk size for processing | 5000000 |
 | `--threads` | Number of threads for parallel processing | 4 (when using rsid-to-chrpos) |
+
+### Liftover
+
+Convert coordinates between genome builds:
+
+```bash
+# Liftover from hg19 to hg38
+gwaslab --input sumstats.tsv --fmt auto --liftover 19 38 --out lifted_hg38.tsv --to-fmt gwaslab
+```
+
+**Liftover Notes:**
+
+- CLI auto-runs `fix_chr` + `fix_pos` before liftover if `basic_check` was not run.
+- You can still run `--qc` earlier in the same command when full QC is preferred.
 
 ## Output Formatting Options
 

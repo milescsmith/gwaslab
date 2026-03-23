@@ -996,7 +996,9 @@ def _mqqplot(insumstats,
   
         if len(sumstats)==0:
             log.warning("No valid data! Please check the input.")
-            return None
+            if _get_region_lead==True:
+                return None, log, [], []
+            return None, log
     
     ## EAF
     eaf_raw = pd.Series(dtype="float64")
@@ -1101,7 +1103,9 @@ def _mqqplot(insumstats,
             lines_to_plot = pd.Series(list(lines_to_plot.iloc[:2]) + list(lines_to_plot.iloc[3:])).reset_index(drop=True)
     except:
         log.warning("No valid data! Please check the input.")
-        return None
+        if _get_region_lead==True:
+            return None, log, [], []
+        return None, log
     
     log.write("Finished data conversion and sanity check.",verbose=verbose)
     

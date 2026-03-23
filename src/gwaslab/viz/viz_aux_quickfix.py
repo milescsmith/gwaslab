@@ -195,12 +195,17 @@ def _quick_assign_i_with_rank(sumstats, chrpad, use_rank=False, chrom="CHR",pos=
     else:
         posdic = sumstats.groupby(chrom)[pos].max()
     
+    chrom_numeric = pd.to_numeric(sumstats[chrom], errors='coerce')
+    max_chr = chrom_numeric.max(skipna=True)
+    if pd.isna(max_chr):
+        raise ValueError("No valid CHR values available for x-axis assignment.")
+    max_chr = int(max_chr)
+
     if _posdiccul is None:
         # convert to dictionary
         posdiccul = posdic.to_dict()
         
         # fill empty chr with 0
-        max_chr = sumstats[chrom].max()
         posdiccul = {i: posdiccul.get(i, 0) for i in range(max_chr + 1)}
 
         # cumulative sum dictionary
@@ -210,14 +215,13 @@ def _quick_assign_i_with_rank(sumstats, chrpad, use_rank=False, chrom="CHR",pos=
         posdiccul = _posdiccul
     # convert base pair postion to x axis position using the cumulative sum dictionary
     # Use vectorized map with pre-computed mapping Series
-    chrom_int = sumstats[chrom].astype(int)
+    chrom_int = chrom_numeric.astype("Int64")
     add_mapping = pd.Series(posdiccul)
     sumstats["_ADD"] = (chrom_int - 1).map(add_mapping)
     
     if drop_chr_start==True:
             posdic_min = sumstats.groupby(chrom)[pos].min()
             posdiccul_min = posdic_min.to_dict()
-            max_chr = sumstats[chrom].max()
             posdiccul_min = {i: posdiccul_min.get(i, 0) for i in range(max_chr + 1)}
             for i in range(1, max_chr + 1):
                 posdiccul_min[i] = posdiccul_min[i-1] + posdiccul_min[i]

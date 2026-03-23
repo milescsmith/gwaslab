@@ -489,8 +489,8 @@ def _check_data_consistency(sumstats_obj: Union['Sumstats', pd.DataFrame], beta:
             one_na = p_values.isna() | derived_p_values.isna()
             valid_mask = ~one_na & (p_values > 0) & (derived_p_values > 0)
             
-            # Initialize consistency check: NaN pairs are considered consistent
-            is_close = pd.Series(both_na, index=sumstats.index)
+            # Initialize consistency check with explicit bool dtype for pandas compatibility.
+            is_close = pd.Series(both_na, index=sumstats.index, dtype=bool)
             
             # Initialize fold_change Series for all indices
             fold_change = pd.Series(index=sumstats.index, dtype=float)
@@ -505,8 +505,10 @@ def _check_data_consistency(sumstats_obj: Union['Sumstats', pd.DataFrame], beta:
                 # Convert rtol to fold change threshold (e.g., rtol=0.001 → 1.001x acceptable)
                 fold_threshold = 1.0 + rtol
                 
-                # Check consistency based on fold change
-                is_close[valid_mask] = fold_change[valid_mask] <= fold_threshold
+                # Check consistency based on fold change and assign plain numpy bools
+                # to avoid future pandas dtype-assignment warnings.
+                close_mask = fold_change.loc[valid_mask].le(fold_threshold).to_numpy(dtype=bool)
+                is_close.loc[valid_mask] = close_mask
                 
                 # For variants where fold change check fails, also verify with np.isclose
                 # as a secondary check (handles edge cases with very small values)
@@ -519,7 +521,7 @@ def _check_data_consistency(sumstats_obj: Union['Sumstats', pd.DataFrame], beta:
                         atol=atol, 
                         equal_nan=equal_nan
                     )
-                    is_close[fold_inconsistent] = np_close_secondary
+                    is_close.loc[fold_inconsistent] = np.asarray(np_close_secondary, dtype=bool)
             
             inconsistent = ~is_close & ~one_na  # Exclude single NaN cases from inconsistent count
             if inconsistent.any():
@@ -561,8 +563,8 @@ def _check_data_consistency(sumstats_obj: Union['Sumstats', pd.DataFrame], beta:
         one_na = p_values.isna() | derived_p_values.isna()
         valid_mask = ~one_na & (p_values > 0) & (derived_p_values > 0)
         
-        # Initialize consistency check: NaN pairs are considered consistent
-        is_close = pd.Series(both_na, index=sumstats.index)
+        # Initialize consistency check with explicit bool dtype for pandas compatibility.
+        is_close = pd.Series(both_na, index=sumstats.index, dtype=bool)
         
         # Initialize fold_change Series for all indices
         fold_change = pd.Series(index=sumstats.index, dtype=float)
@@ -577,8 +579,10 @@ def _check_data_consistency(sumstats_obj: Union['Sumstats', pd.DataFrame], beta:
             # Convert rtol to fold change threshold (e.g., rtol=0.001 → 1.001x acceptable)
             fold_threshold = 1.0 + rtol
             
-            # Check consistency based on fold change
-            is_close[valid_mask] = fold_change[valid_mask] <= fold_threshold
+            # Check consistency based on fold change and assign plain numpy bools
+            # to avoid future pandas dtype-assignment warnings.
+            close_mask = fold_change.loc[valid_mask].le(fold_threshold).to_numpy(dtype=bool)
+            is_close.loc[valid_mask] = close_mask
             
             # For variants where fold change check fails, also verify with np.isclose
             # as a secondary check (handles edge cases with very small values)
@@ -591,7 +595,7 @@ def _check_data_consistency(sumstats_obj: Union['Sumstats', pd.DataFrame], beta:
                     atol=atol, 
                     equal_nan=equal_nan
                 )
-                is_close[fold_inconsistent] = np_close_secondary
+                is_close.loc[fold_inconsistent] = np.asarray(np_close_secondary, dtype=bool)
         
         inconsistent = ~is_close & ~one_na  # Exclude single NaN cases from inconsistent count
         if inconsistent.any():
