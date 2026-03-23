@@ -32,6 +32,9 @@ gwaslab formatbook list
 # Show one format mapping
 gwaslab formatbook show metal
 
+# Download one GWAS Catalog study by accession
+gwaslab download-sumstats GCST90270926 --output-dir downloads
+
 # Basic QC and output
 gwaslab --input sumstats.tsv --fmt auto --qc --out cleaned.tsv --to-fmt gwaslab
 
@@ -49,6 +52,12 @@ gwaslab --input sumstats.tsv --fmt auto --assign-rsid --ref-rsid-vcf /path/to/rs
 
 # Liftover (CLI runs fix_chr + fix_pos if basic_check was not run)
 gwaslab --input sumstats.tsv --liftover 19 38 --out lifted_hg38.tsv
+
+# Infer build (hg19/hg38) from HapMap3 coordinates
+gwaslab --input sumstats.tsv --infer-build --out inferred.tsv
+
+# Extract lead signals
+gwaslab --input sumstats.tsv --extract lead --out lead.tsv
 ```
 
 ## Utility Subcommands
@@ -124,14 +133,29 @@ gwaslab formatbook update
 | `formatbook update` | Update formatbook from remote source |
 | `--json` | Print output in JSON format (`list` only) |
 
+### download-sumstats
+
+Download one GWAS Catalog summary-statistics dataset by GCST accession.
+
+```bash
+gwaslab download-sumstats GCST90270926
+gwaslab download-sumstats GCST90270926 --output-dir ./downloads
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `gcst_id` | GWAS Catalog accession ID (e.g., `GCST90270926`) |
+| `--output-dir` | Output directory for downloaded files |
+
 ## Command Structure
 
 ### Required Arguments
 
 | Argument | Description | Example |
 |----------|-------------|---------|
-| `--input` | Input sumstats file path | `--input data/sumstats.tsv` |
-| `--fmt` | Input format (default: `auto`) | `--fmt gwaslab` or `--fmt auto` |
+| `--input` | Input sumstats file path (required for main processing mode) | `--input data/sumstats.tsv` |
 
 ### Optional Arguments
 
@@ -143,6 +167,16 @@ gwaslab formatbook update
 | `--nrows` | Number of rows to read (for testing) | None |
 | `--quiet` | Suppress output messages | False |
 | `--threads` | Number of threads for parallel processing | 1 |
+
+### Plot / Extract Shared Optional Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--sig-level` | Significance threshold used in Manhattan/MQQ/Regional plotting | `5e-8` |
+| `--ylim <min> <max>` | Y-axis limits for plotting | None |
+| `--highlight <id ...>` | Variant IDs (e.g. rsID/SNPID) to highlight in Manhattan/MQQ/Regional plots | None |
+| `--sig-level-extract` | P-value threshold for `--extract` operations | `5e-8` |
+| `--windowsizekb` | Window size for lead extraction | `500` |
 
 ## Processing Options
 
@@ -215,9 +249,24 @@ gwaslab --input sumstats.tsv --fmt auto \
 | `--ref-rsid-tsv` | Reference rsID HDF5 file (legacy name, accepts HDF5 path) | None |
 | `--ref-rsid-vcf` | Reference rsID VCF/BCF file | None |
 | `--ref-infer` | Reference VCF/BCF file for strand inference | None |
+| `--ref-alt-freq` | INFO field name for ALT allele frequency when using `--ref-infer` | `AF` |
 | `--ref-maf-threshold` | MAF threshold for reference | 0.4 |
 | `--maf-threshold` | MAF threshold for sumstats | 0.40 |
 | `--sweep-mode` | Use sweep mode for large datasets | False |
+
+### Infer Build
+
+Infer genome build (`hg19`/`hg38`) from HapMap3 SNP coordinates:
+
+```bash
+gwaslab --input sumstats.tsv --infer-build --out inferred.tsv --to-fmt gwaslab
+```
+
+**Infer Build Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--infer-build` | Infer genome build from HapMap3 coordinates | False |
 
 ### Assign rsID
 
@@ -276,6 +325,63 @@ gwaslab --input sumstats.tsv --fmt auto --liftover 19 38 --out lifted_hg38.tsv -
 
 - CLI auto-runs `fix_chr` + `fix_pos` before liftover if `basic_check` was not run.
 - You can still run `--qc` earlier in the same command when full QC is preferred.
+
+### Plotting
+
+Generate plots from one input sumstats file:
+
+```bash
+# Manhattan
+gwaslab --input sumstats.tsv --plot manhattan --out manhattan.png
+
+# QQ
+gwaslab --input sumstats.tsv --plot qq --out qq.png
+
+# Combined Manhattan+QQ
+gwaslab --input sumstats.tsv --plot mqq --out mqq.png
+
+# Regional
+gwaslab --input sumstats.tsv --plot regional --chr 6 --start 26000000 --end 34000000 --out region.png
+
+# Forest
+gwaslab --input sumstats.tsv --plot forest --out forest.png
+```
+
+**Plot Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--plot` | Plot type: `manhattan`, `qq`, `mqq`, `regional`, `miami`, `forest` | None |
+| `--sig-level` | Significance threshold for Manhattan/MQQ/Regional plots | `5e-8` |
+| `--ylim` | Y-axis range for Manhattan/MQQ/Regional plots (`min max`) | None |
+| `--highlight` | Variant IDs to highlight in Manhattan/MQQ/Regional plots | None |
+| `--chr`, `--start`, `--end` | Required region triplet for `--plot regional` | None |
+
+Notes:
+- `--plot miami` is currently not available from single-input CLI mode and exits with guidance to use Python API.
+- As with liftover/assign-rsid, CLI runs `fix_chr` + `fix_pos` before plotting if `basic_check` was not run.
+
+### Extract
+
+Extract lead or novel variants:
+
+```bash
+# Lead variants
+gwaslab --input sumstats.tsv --extract lead --out lead.tsv
+
+# Novel variants with GWAS Catalog EFO trait(s)
+gwaslab --input sumstats.tsv --extract novel --efo EFO_0004340 --out novel.tsv
+```
+
+**Extract Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--extract` | Extract mode: `lead`, `novel`, `proxy` (`proxy` not yet implemented) | None |
+| `--sig-level-extract` | P-value threshold used for extraction | `5e-8` |
+| `--windowsizekb` | Lead-variant window size (kb) | `500` |
+| `--efo` | One or more EFO IDs for novel extraction | None |
+| `--only-novel` | Return only truly novel hits in novel extraction | False |
 
 ## Output Formatting Options
 

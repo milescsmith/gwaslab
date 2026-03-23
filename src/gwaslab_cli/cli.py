@@ -310,16 +310,25 @@ Examples:
             # Plotting needs sanitized CHR/POS. If basic_check was not run,
             # apply the lightweight fallback of fix_chr + fix_pos.
             ensure_coords_ready()
+        plot_common_kwargs = {
+            "save": args.output,
+            "verbose": not args.quiet,
+            "sig_level": args.sig_level,
+        }
+        if args.ylim:
+            plot_common_kwargs["ylim"] = tuple(args.ylim)
+        if args.highlight:
+            plot_common_kwargs["highlight"] = args.highlight
         if args.plot == "manhattan":
-            s.plot_mqq(mode="m", save=args.output, verbose=not args.quiet)
+            s.plot_mqq(mode="m", **plot_common_kwargs)
         elif args.plot == "qq":
             s.plot_qq(save=args.output, verbose=not args.quiet)
         elif args.plot == "mqq":
-            s.plot_mqq(mode="mqq", save=args.output, verbose=not args.quiet)
+            s.plot_mqq(mode="mqq", **plot_common_kwargs)
         elif args.plot == "regional":
             if not all([args.chr, args.start, args.end]):
                 parser.error("--chr, --start, --end required for regional plot")
-            s.plot_mqq(mode="r", region=(args.chr, args.start, args.end), save=args.output, verbose=not args.quiet)
+            s.plot_mqq(mode="r", region=(args.chr, args.start, args.end), **plot_common_kwargs)
         elif args.plot == "miami":
             parser.error("Miami plot requires two inputs. Use Python API: gl.plot_miami2()")
         elif args.plot == "forest":

@@ -3,7 +3,8 @@
 # 03_liftover.sh — Genome Build Liftover
 # =============================================================================
 # Lift GWAS summary statistics from one genome build to another.
-# GWASLab automatically runs QC before liftover if --qc is not specified.
+# If --qc is not specified, CLI runs fix_chr + fix_pos before liftover
+# (full QC still requires explicitly adding --qc).
 #
 # IMPORTANT: the FROM build must match the actual build of the input file.
 # --liftover <FROM> <TO> sets the input build automatically from <FROM>.
