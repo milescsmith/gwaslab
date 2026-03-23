@@ -20,15 +20,15 @@
 
 set -euo pipefail
 
-INPUT="../0_sample_data/toy_data/to_harmonize.tsv"
+INPUT="../../test/raw/to_harmonize.tsv"
 mkdir -p output
 
 # ---- Paths to reference files -----------------------------------------------
 # Update these to point at your local copies, or use:
 #   gwaslab path hg19_fa    (to resolve configured paths)
-REF_SEQ="${REF_SEQ:-/path/to/hg19.fa}"
-REF_VCF="${REF_VCF:-/path/to/dbsnp_hg19.vcf.gz}"
-REF_INFER="${REF_INFER:-/path/to/1000G_hg19.vcf.gz}"
+REF_SEQ="${REF_SEQ:-../../test/output/simulated_ref.fasta.gz}"
+REF_VCF="${REF_VCF:-../../test/output/simulated_ref.vcf.gz}"
+REF_INFER="${REF_INFER:-../../test/output/simulated_ref.vcf.gz}"
 
 
 echo "=== [1] Harmonize with reference FASTA (allele alignment only) ==="

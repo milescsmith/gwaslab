@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-INPUT="../0_sample_data/toy_data/dirty_sumstats.tsv"
+INPUT="../../test/raw/dirty_sumstats.tsv"
 mkdir -p output/plots
 
 echo "=== [1] Manhattan plot ==="

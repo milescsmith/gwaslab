@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-INPUT="../0_sample_data/toy_data/dirty_sumstats.tsv"
+INPUT="../../test/raw/dirty_sumstats.tsv"
 OUTPUT="output/01_cleaned.tsv"
 
 mkdir -p output

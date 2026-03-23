@@ -18,11 +18,11 @@
 
 set -euo pipefail
 
-INPUT="../0_sample_data/toy_data/dirty_sumstats.tsv"
+INPUT="../../test/raw/dirty_sumstats.tsv"
 mkdir -p output/pipeline output/pipeline/plots
 
-REF_SEQ="${REF_SEQ:-/path/to/hg19.fa}"
-REF_VCF="${REF_VCF:-/path/to/dbsnp_hg19.vcf.gz}"
+REF_SEQ="${REF_SEQ:-../../test/output/simulated_ref.fasta.gz}"
+REF_VCF="${REF_VCF:-../../test/output/simulated_ref.vcf.gz}"
 
 
 # =============================================================================

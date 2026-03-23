@@ -817,16 +817,41 @@ def update_formatbook(log: Log = Log()) -> None:
     log.write("Available formats:",",".join(available_formats))
     log.write("Formatbook has been updated!")
 
+def list_formats_with_descriptions(log: Log = Log(), *, silent: bool = False) -> List[Tuple[str, str]]:
+    """
+    Return sorted (format keyword, description) entries from the formatbook.
+
+    Description is taken from ``meta_data.format_name`` when present.
+
+    Parameters
+    ----------
+    silent : bool, default False
+        If True, do not write the "Available formats" line to the log (for CLI tables).
+    """
+    data_path = options.paths["formatbook"]
+    with open(data_path, encoding="utf-8") as f:
+        book = json.load(f)
+    rows: List[Tuple[str, str]] = []
+    for key in sorted(book.keys()):
+        meta = book[key].get("meta_data") or {}
+        raw = meta.get("format_name", "")
+        if raw is None:
+            desc = ""
+        elif isinstance(raw, str):
+            desc = raw
+        else:
+            desc = str(raw)
+        rows.append((key, desc))
+    if not silent:
+        log.write("Available formats:", ",".join(k for k, _ in rows))
+    return rows
+
+
 def list_formats(log: Log = Log()) -> List[str]:
     '''
     Display all available formats in the formatbook for GWASLab.
     '''
-    data_path = options.paths["formatbook"]
-    book=json.load(open(data_path))
-    available_formats = list(book.keys())
-    available_formats.sort()
-    log.write("Available formats:",",".join(available_formats))    
-    return available_formats
+    return [k for k, _ in list_formats_with_descriptions(log)]
 
 def check_format(fmt: str, log: Log = Log()) -> Dict[str, str]:
     '''

@@ -123,6 +123,11 @@ Examples:
     parser.add_argument("--ref-rsid-tsv", help="Reference rsID HDF5 file")
     parser.add_argument("--ref-rsid-vcf", help="Reference rsID VCF file")
     parser.add_argument("--ref-infer", help="Reference VCF for strand inference")
+    parser.add_argument(
+        "--ref-alt-freq",
+        default=None,
+        help="VCF INFO field for ALT allele frequency when using --ref-infer (default: AF)",
+    )
     parser.add_argument("--ref-maf-threshold", type=float, default=0.4)
     parser.add_argument("--maf-threshold", type=float, default=0.40)
     parser.add_argument("--sweep-mode", action="store_true")
@@ -249,12 +254,16 @@ Examples:
             basic_check = False
         else:
             basic_check = not args.qc
+        ref_alt_freq_kw = None
+        if args.ref_infer:
+            ref_alt_freq_kw = args.ref_alt_freq or "AF"
         s.harmonize(
             basic_check=basic_check,
             ref_seq=args.ref_seq,
             ref_rsid_tsv=args.ref_rsid_tsv,
             ref_rsid_vcf=args.ref_rsid_vcf,
             ref_infer=args.ref_infer,
+            ref_alt_freq=ref_alt_freq_kw,
             ref_maf_threshold=args.ref_maf_threshold,
             maf_threshold=args.maf_threshold,
             threads=args.threads,
@@ -314,7 +323,29 @@ Examples:
         elif args.plot == "miami":
             parser.error("Miami plot requires two inputs. Use Python API: gl.plot_miami2()")
         elif args.plot == "forest":
-            s.plot_forest(save=args.output, verbose=not args.quiet)
+            # Use the viz implementation directly: `gwaslab.plot_forest` applies viz_params
+            # filtering that can drop beta_col/se_col for GWAS column names (BETA/SE).
+            from gwaslab.viz.viz_plot_forestplot import plot_forest as viz_plot_forest
+
+            df = s.data
+            study_col = "SNPID" if "SNPID" in df.columns else df.columns[0]
+            if "BETA" in df.columns and "SE" in df.columns:
+                beta_col, se_col = "BETA", "SE"
+            elif "beta" in df.columns and "se" in df.columns:
+                beta_col, se_col = "beta", "se"
+            else:
+                parser.error(
+                    "Forest plot requires BETA/SE (or beta/se) columns in the sumstats."
+                )
+            viz_plot_forest(
+                df,
+                study_col=study_col,
+                beta_col=beta_col,
+                se_col=se_col,
+                group_col=False,
+                save=args.output,
+                verbose=not args.quiet,
+            )
         return
 
     # Extraction

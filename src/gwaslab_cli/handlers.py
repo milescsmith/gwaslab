@@ -105,12 +105,20 @@ def run_fb_list(args) -> None:
     import json
     import gwaslab as gl
 
-    formats = gl.list_formats()
+    rows = gl.list_formats_with_descriptions(silent=True)
     if args.json:
-        print(json.dumps({"formats": formats}, indent=2))
+        payload = {
+            "formats": [
+                {"index": i, "name": name, "description": desc}
+                for i, (name, desc) in enumerate(rows, start=1)
+            ]
+        }
+        print(json.dumps(payload, indent=2))
     else:
-        for fmt in formats:
-            print(fmt)
+        w_idx = len(str(len(rows))) if rows else 1
+        w_name = max((len(name) for name, _ in rows), default=0)
+        for i, (name, desc) in enumerate(rows, start=1):
+            print(f"{i:>{w_idx}}  {name:<{w_name}}  {desc}")
 
 
 def run_fb_show(args) -> None:

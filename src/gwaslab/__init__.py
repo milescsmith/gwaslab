@@ -68,6 +68,7 @@ from gwaslab.bd.bd_common_data import get_format_dict
 from gwaslab.bd.bd_common_data import get_formats_list
 from gwaslab.bd.bd_download import update_formatbook
 from gwaslab.bd.bd_download import list_formats
+from gwaslab.bd.bd_download import list_formats_with_descriptions
 from gwaslab.bd.bd_download import check_format
 from gwaslab.bd.bd_download import check_available_ref
 from gwaslab.bd.bd_download import update_available_ref
