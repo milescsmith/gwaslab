@@ -4,16 +4,16 @@ import unittest
 import tempfile
 import shutil
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from gwaslab.CLI.cli import main
+from gwaslab_cli.main import main
 from gwaslab.g_Sumstats import Sumstats
 
-RAW_DIR = os.path.join(os.path.dirname(__file__), "raw")
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "raw")
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
 
 
 class TestCLIVersion(unittest.TestCase):

@@ -18,7 +18,49 @@ from gwaslab_cli.handlers import (
     run_fb_update,
     run_version,
     run_download,
+    run_download_ref,
+    run_list_ref,
+    run_init,
+    run_report,
 )
+
+
+def _add_download_ref_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "keyword",
+        help=(
+            "Reference keyword (see: gwaslab list ref --available; gwaslab config show reference)"
+        ),
+    )
+    p.add_argument(
+        "--directory",
+        "-d",
+        metavar="DIR",
+        help="Directory for downloaded file (default: GWASLab data directory)",
+    )
+    p.add_argument(
+        "--local-filename",
+        metavar="NAME",
+        help="Optional local filename (default: from download URL)",
+    )
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing local file if present",
+    )
+
+
+def _add_download_sumstats_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("gcst_id", help="GWAS Catalog accession (e.g. GCST90270926)")
+    p.add_argument(
+        "-o",
+        "--output-dir",
+        "--directory",
+        "-d",
+        dest="output_dir",
+        metavar="DIR",
+        help="Output directory for downloaded files",
+    )
 
 
 def main(argv: Optional[list] = None) -> None:
@@ -33,14 +75,15 @@ def main(argv: Optional[list] = None) -> None:
             "\n"
             "Processing order (when multiple flags are given):\n"
             "  1. QC            --qc / --remove / --remove-dup / --normalize\n"
-            "  2. Harmonize     --harmonize [--ref-seq ...]\n"
-            "  3. Assign rsID   --assign-rsid  (auto fix_chr+fix_pos if QC not run)\n"
-            "  4. rsID→CHR:POS  --rsid-to-chrpos\n"
-            "  5. Infer build   --infer-build\n"
-            "  6. Liftover      --liftover FROM TO  (auto fix_chr+fix_pos if QC not run)\n"
-            "  7. Plot          --plot TYPE         (auto fix_chr+fix_pos if QC not run; writes to --output, then exits)\n"
-            "  8. Extract       --extract TYPE      (writes to --output, then exits)\n"
-            "  9. Save          --output FILE [--to-fmt FORMAT]"
+            "  2. Filter region --filter-region CHR START END (auto fix_chr+fix_pos if QC not run)\n"
+            "  3. Harmonize     --harmonize [--ref-seq ...]\n"
+            "  4. Assign rsID   --assign-rsid  (auto fix_chr+fix_pos if QC not run)\n"
+            "  5. rsID→CHR:POS  --rsid-to-chrpos\n"
+            "  6. Infer build   --infer-build\n"
+            "  7. Liftover      --liftover FROM TO  (auto fix_chr+fix_pos if QC not run)\n"
+            "  8. Plot          --plot TYPE         (auto fix_chr+fix_pos if QC not run; writes to --output, then exits)\n"
+            "  9. Extract       --extract TYPE      (writes to --output, then exits)\n"
+            " 10. Save          --output FILE [--to-fmt FORMAT]"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -49,6 +92,7 @@ Examples:
   gwaslab --input sumstats.tsv --qc --output cleaned.tsv
   gwaslab --input sumstats.tsv --harmonize --ref-seq ref.fa --output harmonized.tsv
   gwaslab --input sumstats.tsv --liftover 19 38 --output lifted_hg38.tsv
+  gwaslab --input sumstats.tsv --filter-region 7 126253550 128253550 --output chr7_region.tsv.gz
   gwaslab --input sumstats.tsv --infer-build --liftover 19 38 --output lifted_hg38.tsv
   gwaslab --input sumstats.tsv --output converted.ldsc --to-fmt ldsc
 
@@ -67,7 +111,17 @@ Examples:
   gwaslab config show reference
   gwaslab path config
   gwaslab formatbook list
+  gwaslab list ref --available
+  gwaslab download ref 1kg_eas_hg19
+  gwaslab download sumstats GCST90270926 --directory ./downloads
   gwaslab download-sumstats GCST90270926
+  gwaslab download-ref 1kg_eas_hg19
+  gwaslab init
+  gwaslab init --directory /path/to/reference/cache
+
+  # QC report (HTML or PDF)
+  gwaslab report --input sumstats.tsv --output qc_report.html
+  gwaslab report -i sumstats.tsv -o report.pdf --vcf ref.vcf.gz --quiet
         """,
     )
 
@@ -98,11 +152,17 @@ Examples:
         metavar=("FROM_BUILD", "TO_BUILD"),
         help="Liftover from one build to another (runs fix_chr+fix_pos if basic_check was not run)",
     )
+    parser.add_argument(
+        "--filter-region",
+        nargs=3,
+        metavar=("CHR", "START", "END"),
+        help="Filter variants to a genomic region (runs fix_chr+fix_pos if basic_check was not run)",
+    )
 
     # Plot flag
     parser.add_argument(
         "--plot",
-        choices=["manhattan", "qq", "mqq", "regional", "miami", "forest"],
+        choices=["manhattan", "qq", "mqq", "regional", "miami"],
         help="Generate a plot (runs fix_chr+fix_pos if basic_check was not run)",
     )
 
@@ -198,11 +258,179 @@ Examples:
     fb_update = fb_sub.add_parser("update", help="Update formatbook")
     fb_update.set_defaults(func=run_fb_update)
 
-    # Download
-    dl_parser = subparsers.add_parser("download-sumstats", help="Download from GWAS Catalog")
-    dl_parser.add_argument("gcst_id")
-    dl_parser.add_argument("--output-dir", "-o")
+    # download ref | sumstats (unified entry; same flags as legacy flat commands)
+    download_group = subparsers.add_parser(
+        "download",
+        help="Download reference data or GWAS Catalog sumstats",
+    )
+    download_sub = download_group.add_subparsers(dest="download_action", required=True)
+    dl_ref_cmd = download_sub.add_parser(
+        "ref",
+        help="Download a reference file by keyword (same as download-ref)",
+    )
+    _add_download_ref_args(dl_ref_cmd)
+    dl_ref_cmd.set_defaults(func=run_download_ref)
+    dl_sum_cmd = download_sub.add_parser(
+        "sumstats",
+        help="Download sumstats from GWAS Catalog (same as download-sumstats)",
+    )
+    _add_download_sumstats_args(dl_sum_cmd)
+    dl_sum_cmd.set_defaults(func=run_download)
+
+    # Download sumstats (legacy flat command)
+    dl_parser = subparsers.add_parser(
+        "download-sumstats",
+        help="Download from GWAS Catalog (alias of: gwaslab download sumstats)",
+    )
+    _add_download_sumstats_args(dl_parser)
     dl_parser.set_defaults(func=run_download)
+
+    # Download reference (legacy flat command)
+    dl_ref_parser = subparsers.add_parser(
+        "download-ref",
+        help="Download a reference by keyword (alias of: gwaslab download ref)",
+    )
+    _add_download_ref_args(dl_ref_parser)
+    dl_ref_parser.set_defaults(func=run_download_ref)
+
+    # List reference catalogs
+    list_parser = subparsers.add_parser(
+        "list",
+        help="List items (e.g. reference keywords available or already registered)",
+    )
+    list_sub = list_parser.add_subparsers(dest="list_action", required=True)
+    list_ref_parser = list_sub.add_parser(
+        "ref",
+        help="List reference keywords from the catalog and/or local download registry",
+    )
+    list_ref_parser.add_argument(
+        "--available",
+        action="store_true",
+        help="Show keywords from the remote reference catalog (reference.json)",
+    )
+    list_ref_parser.add_argument(
+        "--downloaded",
+        action="store_true",
+        help="Show keywords registered in local config (downloaded references)",
+    )
+    list_ref_parser.add_argument("--json", action="store_true", help="Print JSON")
+    list_ref_parser.add_argument("--quiet", "-q", action="store_true", help="Less logging")
+    list_ref_parser.set_defaults(func=run_list_ref)
+
+    # Init — scan data directory for downloaded reference files
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Scan data directory for reference files and register matches",
+    )
+    init_parser.add_argument(
+        "--dir",
+        "-d",
+        "--directory",
+        dest="scan_dir",
+        metavar="DIR",
+        help="Directory to scan (default: GWASLab data directory, see gwaslab path data_directory)",
+    )
+    init_parser.add_argument("--quiet", "-q", action="store_true", help="Less logging")
+    init_parser.set_defaults(func=run_init)
+
+    report_parser = subparsers.add_parser(
+        "report",
+        help="Generate QC HTML/PDF report (QC, lead variants, MQQ, optional regional plots)",
+    )
+    report_parser.add_argument("--input", "-i", required=True, help="Input sumstats file")
+    report_parser.add_argument(
+        "--output",
+        "-o",
+        required=True,
+        help="Report file path (.html or .pdf; PDF needs weasyprint)",
+    )
+    report_parser.add_argument("--fmt", "-f", default="auto", help="Input format (default: auto)")
+    report_parser.add_argument("--build", default="19", help="Genome build of input (default: 19)")
+    report_parser.add_argument(
+        "--filter-region",
+        nargs=3,
+        metavar=("CHR", "START", "END"),
+        help="Filter input to a genomic region before report generation",
+    )
+    report_parser.add_argument("--nrows", type=int, help="Max rows to read (for testing)")
+    report_parser.add_argument("--threads", "-t", type=int, default=1, help="Thread count")
+    report_parser.add_argument("--quiet", "-q", action="store_true", help="Less logging")
+    report_parser.add_argument(
+        "--title",
+        default="GWAS Quality Control Report",
+        dest="report_title",
+        help="Report title",
+    )
+    report_parser.add_argument(
+        "--remove",
+        action="store_true",
+        help="Remove low-quality variants in basic_check (same as main --remove)",
+    )
+    report_parser.add_argument("--remove-dup", action="store_true", help="Remove duplicates in basic_check")
+    report_parser.add_argument(
+        "--no-normalize",
+        action="store_true",
+        help="Disable indel normalization in basic_check",
+    )
+    report_parser.add_argument(
+        "--sig-level",
+        type=float,
+        default=5e-8,
+        help="Genome-wide significance for get_lead and MQQ (default: 5e-8)",
+    )
+    report_parser.add_argument(
+        "--windowsizekb",
+        type=int,
+        default=500,
+        help="Lead clumping window (kb) and regional window basis (default: 500)",
+    )
+    report_parser.add_argument(
+        "--lead-anno",
+        action="store_true",
+        help="Annotate lead variants (slower)",
+    )
+    report_parser.add_argument("--mqq-dpi", type=int, default=300, help="MQQ figure DPI (default: 300)")
+    report_parser.add_argument(
+        "--vcf",
+        dest="regional_vcf",
+        metavar="PATH",
+        help="Reference VCF (tabix-indexed) for LD in regional plots",
+    )
+    report_parser.add_argument(
+        "--harmonize",
+        action="store_true",
+        help="Run harmonization after basic_check (supply reference options)",
+    )
+    report_parser.add_argument("--ref-seq", help="Reference FASTA for harmonization")
+    report_parser.add_argument("--ref-rsid-tsv", help="Reference rsID HDF5 for harmonization")
+    report_parser.add_argument("--ref-rsid-vcf", help="Reference rsID VCF for harmonization")
+    report_parser.add_argument("--ref-infer", help="Reference VCF for strand inference (harmonization)")
+    report_parser.add_argument(
+        "--ref-alt-freq",
+        default=None,
+        help="VCF INFO field for ALT allele frequency with --ref-infer (default: AF)",
+    )
+    report_parser.add_argument("--ref-maf-threshold", type=float, default=0.4)
+    report_parser.add_argument("--maf-threshold", type=float, default=0.40)
+    report_parser.add_argument("--sweep-mode", action="store_true", help="Harmonization sweep mode")
+    report_parser.add_argument(
+        "--save-sumstats",
+        metavar="PATH",
+        dest="save_sumstats",
+        help="Also write processed sumstats with to_format() (base path)",
+    )
+    report_parser.add_argument("--save-fmt", default="gwaslab", help="Format for --save-sumstats (default: gwaslab)")
+    report_parser.add_argument(
+        "--save-tab-fmt",
+        default="tsv",
+        help="Table format for --save-sumstats (default: tsv)",
+    )
+    report_parser.add_argument(
+        "--save-no-gzip",
+        action="store_true",
+        help="Disable gzip for --save-sumstats",
+    )
+    report_parser.set_defaults(func=run_report)
 
     args = parser.parse_args(argv)
 
@@ -246,6 +474,18 @@ Examples:
         )
         ran_basic_check = True
         coords_ready = True
+
+    if args.filter_region:
+        ensure_coords_ready()
+        region_chr, region_start, region_end = args.filter_region
+        try:
+            region_start = int(region_start)
+            region_end = int(region_end)
+        except ValueError:
+            parser.error("--filter-region START and END must be integers")
+        if region_start > region_end:
+            parser.error("--filter-region requires START <= END")
+        s.filter_region(inplace=True, region=(region_chr, region_start, region_end), verbose=not args.quiet)
 
     if args.harmonize or args.ref_seq:
         if args.basic_check:
@@ -331,30 +571,6 @@ Examples:
             s.plot_mqq(mode="r", region=(args.chr, args.start, args.end), **plot_common_kwargs)
         elif args.plot == "miami":
             parser.error("Miami plot requires two inputs. Use Python API: gl.plot_miami2()")
-        elif args.plot == "forest":
-            # Use the viz implementation directly: `gwaslab.plot_forest` applies viz_params
-            # filtering that can drop beta_col/se_col for GWAS column names (BETA/SE).
-            from gwaslab.viz.viz_plot_forestplot import plot_forest as viz_plot_forest
-
-            df = s.data
-            study_col = "SNPID" if "SNPID" in df.columns else df.columns[0]
-            if "BETA" in df.columns and "SE" in df.columns:
-                beta_col, se_col = "BETA", "SE"
-            elif "beta" in df.columns and "se" in df.columns:
-                beta_col, se_col = "beta", "se"
-            else:
-                parser.error(
-                    "Forest plot requires BETA/SE (or beta/se) columns in the sumstats."
-                )
-            viz_plot_forest(
-                df,
-                study_col=study_col,
-                beta_col=beta_col,
-                se_col=se_col,
-                group_col=False,
-                save=args.output,
-                verbose=not args.quiet,
-            )
         return
 
     # Extraction

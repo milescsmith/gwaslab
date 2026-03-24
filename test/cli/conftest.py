@@ -54,6 +54,9 @@ def example_cli_workdir(tmp_path: Path) -> Path:
     work.mkdir(parents=True)
     for sh in EXAMPLES_CLI.glob("*.sh"):
         shutil.copy2(sh, work / sh.name)
+    # Some example scripts call local helper Python utilities.
+    for py in EXAMPLES_CLI.glob("*.py"):
+        shutil.copy2(py, work / py.name)
     test_link = tmp_path / "test"
     if not test_link.exists():
         test_link.symlink_to(REPO_ROOT / "test", target_is_directory=True)

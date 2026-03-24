@@ -32,7 +32,11 @@ gwaslab formatbook list
 # Show one format mapping
 gwaslab formatbook show metal
 
-# Download one GWAS Catalog study by accession
+# Reference catalog + downloads (see "Download" and "list ref" sections)
+gwaslab list ref --available
+gwaslab download ref 1kg_eas_hg19
+# Sumstats download: output dir is -o / --output-dir / -d / --directory (all equivalent)
+gwaslab download sumstats GCST90270926 --directory downloads
 gwaslab download-sumstats GCST90270926 --output-dir downloads
 
 # Basic QC and output
@@ -133,21 +137,50 @@ gwaslab formatbook update
 | `formatbook update` | Update formatbook from remote source |
 | `--json` | Print output in JSON format (`list` only) |
 
-### download-sumstats
+### Download (references and GWAS Catalog sumstats)
 
-Download one GWAS Catalog summary-statistics dataset by GCST accession.
+GWASLab keeps **flat legacy commands** (`download-ref`, `download-sumstats`) and adds a **grouped form** so documentation and flags line up:
+
+| Goal | Grouped command | Legacy (same behavior) |
+|------|-------------------|-------------------------|
+| Fetch a packaged reference by keyword | `gwaslab download ref KEY` | `gwaslab download-ref KEY` |
+| Fetch GWAS Catalog sumstats by GCST | `gwaslab download sumstats GCST…` | `gwaslab download-sumstats GCST…` |
+
+**Unified output directory flag for sumstats:** any of `-o`, `--output-dir`, `-d`, or `--directory` sets the download folder (same underlying option).
 
 ```bash
-gwaslab download-sumstats GCST90270926
-gwaslab download-sumstats GCST90270926 --output-dir ./downloads
+# References
+gwaslab download ref 1kg_eas_hg19
+gwaslab download ref 1kg_eas_hg19 --directory ~/.gwaslab --overwrite
+gwaslab download-ref 1kg_eas_hg19 --directory ~/.gwaslab
+
+# GWAS Catalog sumstats
+gwaslab download sumstats GCST90270926
+gwaslab download sumstats GCST90270926 --directory ./downloads
+gwaslab download-sumstats GCST90270926 -o ./downloads
 ```
 
-**Options:**
+Reference downloads also accept `--local-filename` and `--overwrite` (see `gwaslab download ref --help`).
+
+### list ref
+
+List **available** reference keywords (from the bundled/updated reference catalog) and/or **downloaded** entries registered in your local config. With no scope flags, both sections are shown.
+
+```bash
+gwaslab list ref
+gwaslab list ref --available
+gwaslab list ref --downloaded
+gwaslab list ref --available --downloaded --json
+```
 
 | Option | Description |
 |--------|-------------|
-| `gcst_id` | GWAS Catalog accession ID (e.g., `GCST90270926`) |
-| `--output-dir` | Output directory for downloaded files |
+| `--available` | Only keywords you can install with `gwaslab download ref …` |
+| `--downloaded` | Only keywords already recorded under `downloaded` in config |
+| `--json` | Machine-readable output |
+| `-q` / `--quiet` | Less library logging |
+
+GWAS Catalog sumstats do not have a browseable `list` command in the CLI (you supply a `GCST…` ID).
 
 ## Command Structure
 
@@ -342,16 +375,15 @@ gwaslab --input sumstats.tsv --plot mqq --out mqq.png
 
 # Regional
 gwaslab --input sumstats.tsv --plot regional --chr 6 --start 26000000 --end 34000000 --out region.png
-
-# Forest
-gwaslab --input sumstats.tsv --plot forest --out forest.png
 ```
+
+Forest plots are not supported on the CLI; use the Python API (`gl.plot_forest()`, see [Forest plot](ForestPlot.md)).
 
 **Plot Options:**
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--plot` | Plot type: `manhattan`, `qq`, `mqq`, `regional`, `miami`, `forest` | None |
+| `--plot` | Plot type: `manhattan`, `qq`, `mqq`, `regional`, `miami` | None |
 | `--sig-level` | Significance threshold for Manhattan/MQQ/Regional plots | `5e-8` |
 | `--ylim` | Y-axis range for Manhattan/MQQ/Regional plots (`min max`) | None |
 | `--highlight` | Variant IDs to highlight in Manhattan/MQQ/Regional plots | None |

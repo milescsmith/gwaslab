@@ -161,6 +161,7 @@ def compare_effect(path1,
     # 1. Load sumstats1 minimal columns
     sumstats, common_snp_set = configure_common_snp_set(path1, path2,
                                snplist,
+                               anno,
                                label,
                                log, verbose)
     
@@ -186,7 +187,8 @@ def compare_effect(path1,
     ######### load sumstats1
 
     # 4. Load sumstats2 minimal columns
-    if snplist is not None:
+    need_coords = (snplist is None) or (anno == "GENENAME")
+    if snplist is not None and not need_coords:
         cols_to_extract = ["SNPID", "MLOG10P" if scaled2 else "P"]
     else:
         cols_to_extract = ["SNPID", "MLOG10P" if scaled2 else "P", "CHR", "POS"]
@@ -527,8 +529,10 @@ def configure_headers(mode, scaled1, scaled2, log, verbose):
 
 def configure_common_snp_set(path1, path2,
                              snplist,
+                             anno,
                              label,
                              log, verbose):
+    need_coords = (snplist is None) or (anno == "GENENAME")
     # favor snplist if provided
     if snplist is not None:
         log.write(" -Using provided snplist for intersection...", verbose=verbose)
@@ -540,6 +544,8 @@ def configure_common_snp_set(path1, path2,
         # prepare columns from path1 according to downstream needs
         use_pcol = "MLOG10P" if ("MLOG10P" in path1.data.columns) else "P"
         cols_to_extract = ["SNPID", use_pcol]
+        if need_coords:
+            cols_to_extract.extend(["CHR", "POS"])
     else:
         snp2 = load_sumstats(path=path2, usecols="SNPID", label=label[1], log=log, verbose=verbose)
         common_snp_set = set(snp2["SNPID"].values)
@@ -562,7 +568,7 @@ def rename_sumtats(sumstats, snplist, scaled, suffix=""):
         rename_dict["MLOG10P"] = "MLOG10P{}".format(suffix)
     else:
         rename_dict["P"] = "P{}".format(suffix)
-    if snplist is None:
+    if ("CHR" in sumstats.columns) and ("POS" in sumstats.columns):
         rename_dict["CHR"] = "CHR"
         rename_dict["POS"] = "POS"
     return sumstats.rename(columns=rename_dict)
@@ -577,7 +583,22 @@ def extract_snp_for_comparison(sumstats, snplist, label,
         log.write(" -Extract variants in the given list from "+label+"...")
         sig_list = sumstats.loc[sumstats["SNPID"].isin(snplist),:].copy()
         if anno=="GENENAME":
-            sig_list = _anno_gene(sig_list,"SNPID","CHR","POS", build=build, verbose=verbose, **get_lead_kwargs)
+            # _anno_gene does not accept all lead-SNP kwargs (e.g. anno/window),
+            # so pass only supported keys.
+            anno_gene_kwargs = {}
+            if isinstance(get_lead_kwargs, dict):
+                for key in ("source", "gtf_path", "log"):
+                    if key in get_lead_kwargs:
+                        anno_gene_kwargs[key] = get_lead_kwargs[key]
+            sig_list = _anno_gene(
+                sig_list,
+                id="SNPID",
+                chrom="CHR",
+                pos="POS",
+                build=build,
+                verbose=verbose,
+                **anno_gene_kwargs
+            )
     else:
         ######### 8,2 otherwise use the automatically detected lead SNPs
         log.write(" -Extract lead variants from "+label +"...", verbose=verbose)

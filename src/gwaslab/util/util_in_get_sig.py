@@ -1029,7 +1029,9 @@ def _get_novel(
     6. Novelty determination based on distance threshold
     7. Grouped comparisons when group_key is provided
 
-    When no significant variants are found, returns None after logging a message.
+    When there are no lead variants to compare (or input is empty), returns early with an
+    empty DataFrame (and an empty known-variants frame if ``output_known=True``) without
+    querying GWAS Catalog or user reference files.
     """
     import pandas as pd
     # Handle both DataFrame and Sumstats object
@@ -1068,6 +1070,23 @@ def _get_novel(
             xymt=xymt,anno=anno,build=build,wc_correction=wc_correction, source=source,verbose=verbose)
     else:
         allsig = insumstats.copy()
+
+    if len(allsig) == 0:
+        log.write(
+            " -No variants to compare (no lead SNPs at this threshold, or empty input); "
+            "skipping GWAS Catalog / reference lookup and novelty assignment.",
+            verbose=verbose,
+        )
+        out = allsig.copy()
+        if "NOVEL" not in out.columns:
+            out["NOVEL"] = pd.Series(dtype="boolean", index=out.index)
+        if only_novel is True:
+            if output_known is True:
+                return out, pd.DataFrame()
+            return out
+        if output_known is True:
+            return out, pd.DataFrame()
+        return out
 
     ############################################################################################
     knownsig = pd.DataFrame()
@@ -1139,7 +1158,17 @@ def _get_novel(
 
     # create helper column TCHR+POS for knownsig and all sig
      ############################################################################################
-    maxpos = insumstats["POS"].max()
+    maxpos = insumstats[pos].max()
+    if pd.isna(maxpos) and len(knownsig) and "POS" in knownsig.columns:
+        maxpos = knownsig["POS"].max()
+    if pd.isna(maxpos) and pos in allsig.columns:
+        maxpos = allsig[pos].max()
+    if pd.isna(maxpos):
+        maxpos = 250_000_000
+        log.write(
+            " -Warning: could not infer max POS from sumstats; using 250000000 for TCHR+POS encoding.",
+            verbose=verbose,
+        )
     big_number = determine_big_number(maxpos)
     knownsig = add_tchr_pos(knownsig, chrom, pos, big_number)
     allsig = add_tchr_pos(allsig, chrom, pos, big_number)
@@ -1154,9 +1183,12 @@ def _get_novel(
         log.write(" -Number of groups in sumstats:{}".format(number_of_groups_allsig), verbose=verbose)
         log.write(" -Number of groups in reference:{}".format(number_of_groups_known), verbose=verbose)
 
-    log.write(" -Lead variants in known loci:",len(knownsig), verbose=verbose)
-    log.write(" -Checking the minimum distance between identified lead variants and provided known variants...", verbose=verbose)
-    
+    log.write(" -Reference variants (known loci): {}".format(len(knownsig)), verbose=verbose)
+    log.write(
+        " -For each lead variant, computing distance to the nearest reference variant...",
+        verbose=verbose,
+    )
+
     ############################################################################################
     if group_key is None:
         # get distance
@@ -1210,14 +1242,19 @@ def _get_novel(
     except:
         pass
 
-    log.write(" -Identified ",len(allsig)-sum(allsig["NOVEL"])," known variants in current sumstats...", verbose=verbose)
-    log.write(" -Identified ",sum(allsig["NOVEL"])," novel variants in current sumstats...", verbose=verbose)
+    if len(allsig) > 0 and "NOVEL" in allsig.columns:
+        log.write(" -Identified ",len(allsig)-sum(allsig["NOVEL"])," known variants in current sumstats...", verbose=verbose)
+        log.write(" -Identified ",sum(allsig["NOVEL"])," novel variants in current sumstats...", verbose=verbose)
     
     # how to return
     if only_novel is True:
         if output_known is True:
+            if len(allsig) == 0 or "NOVEL" not in allsig.columns:
+                return allsig, knownsig
             return allsig.loc[allsig["NOVEL"],:], knownsig
         else:
+            if len(allsig) == 0 or "NOVEL" not in allsig.columns:
+                return allsig
             return allsig.loc[allsig["NOVEL"],:]
     else:
         if output_known is True:
@@ -1346,8 +1383,11 @@ def _check_cis(
 
 
 def determine_big_number(maxpos, big_number = 1000000000):
+    if maxpos is None or pd.isna(maxpos):
+        return big_number
+    maxpos = float(maxpos)
     for i in range(7):
-        if maxpos*10 >  big_number:
+        if maxpos * 10 > big_number:
             big_number = int(big_number * 10)
         else:
             break
@@ -1415,13 +1455,18 @@ def determine_distance(allsig, knownsig):
     return allsig
 
 def determine_novel(allsig, windowsizekb_for_novel):
-    if len(allsig)==0 or "DISTANCE_TO_KNOWN" not in allsig.columns:
+    if len(allsig) == 0 or "DISTANCE_TO_KNOWN" not in allsig.columns:
+        if len(allsig) == 0 and "NOVEL" not in allsig.columns:
+            allsig = allsig.copy()
+            allsig["NOVEL"] = pd.Series(dtype="boolean", index=allsig.index)
         return allsig
     allsig["NOVEL"] = allsig["DISTANCE_TO_KNOWN"].abs() > windowsizekb_for_novel*1000
     allsig.loc[allsig["DISTANCE_TO_KNOWN"].isna(), "NOVEL"] = True
     return allsig
 
 def determine_location(allsig):
+    if len(allsig) == 0 or "DISTANCE_TO_KNOWN" not in allsig.columns:
+        return allsig
     allsig["LOCATION_OF_KNOWN"]="NoReference"
     allsig.loc[ allsig["DISTANCE_TO_KNOWN"]== 0,"LOCATION_OF_KNOWN"] = "Same"
     allsig.loc[ allsig["DISTANCE_TO_KNOWN"] > 0 ,"LOCATION_OF_KNOWN"] = "Upstream"
@@ -1429,6 +1474,8 @@ def determine_location(allsig):
     return allsig
 
 def determine_if_same_chromosome(allsig, knownsig, maxpos):
+    if len(allsig) == 0 or "DISTANCE_TO_KNOWN" not in allsig.columns:
+        return allsig
     if sum(allsig["DISTANCE_TO_KNOWN"].abs() > maxpos)>0:
         not_on_same_chromosome = allsig["DISTANCE_TO_KNOWN"].abs() > maxpos
         allsig.loc[ not_on_same_chromosome ,"DISTANCE_TO_KNOWN"] = pd.NA

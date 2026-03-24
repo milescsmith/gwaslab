@@ -2,27 +2,37 @@
 # =============================================================================
 # 07_pipeline.sh — Full Analysis Pipeline
 # =============================================================================
-# Chains QC → Harmonization → Liftover → Extract → Plot in a single script.
-# Demonstrates real-world workflow patterns.
+# Runs several pipeline examples (A–F) in one script: QC, harmonize, liftover, plot, extract.
+# Each block is a separate gwaslab invocation sharing the same INPUT/refs.
 #
 # Usage:
 #   bash 07_pipeline.sh
 #
-# Reference files (update paths or set env variables):
-#   REF_SEQ   : hg19 reference FASTA
-#   REF_VCF   : dbSNP VCF for rsID annotation
+# Reference files (defaults):
+#   REF_SEQ / REF_VCF — gzipped FASTA + VCF built from INPUT below by
+#   build_ref_from_sumstats.py (NEA=REF at POS, EA=ALT, AF=EAF) so harmonize/rsID match.
+#   Override REF_SEQ and REF_VCF to use your own references; skip generation by exporting
+#   both before running (the script will still run unless you remove that line).
+#   OUT_REF   : directory for generated realistic_ref.* (default: ../../test/output)
 #
 # Requires:
 #   pip install gwaslab
+#   python3 (for build_ref_from_sumstats.py); bgzip/tabix optional (for VCF index)
 # =============================================================================
 
 set -euo pipefail
 
-INPUT="../../test/raw/dirty_sumstats.tsv"
+# Realistic hg19-scale positions (liftover-friendly); use dirty_sumstats.tsv for QC torture tests
+INPUT="../../test/raw/realistic_sumstats.tsv"
 mkdir -p output/pipeline output/pipeline/plots
 
-REF_SEQ="${REF_SEQ:-../../test/output/simulated_ref.fasta.gz}"
-REF_VCF="${REF_VCF:-../../test/output/simulated_ref.vcf.gz}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUT_REF="${OUT_REF:-../../test/output}"
+mkdir -p "${SCRIPT_DIR}/${OUT_REF}"
+REF_PREFIX="${OUT_REF}/realistic_ref"
+python3 "${SCRIPT_DIR}/build_ref_from_sumstats.py" --input "${SCRIPT_DIR}/${INPUT}" --prefix "${SCRIPT_DIR}/${REF_PREFIX}"
+REF_SEQ="${REF_SEQ:-${SCRIPT_DIR}/${REF_PREFIX}.fasta.gz}"
+REF_VCF="${REF_VCF:-${SCRIPT_DIR}/${REF_PREFIX}.vcf.gz}"
 
 
 # =============================================================================
@@ -136,4 +146,4 @@ gwaslab \
     --output       "output/pipeline/F_with_rsid.tsv.gz"
 
 echo ""
-echo "All pipelines complete. Output in output/pipeline/"
+echo "All examples complete. Outputs under output/pipeline/"

@@ -7,7 +7,8 @@
 #   config         — inspect configured paths
 #   path           — resolve a named reference path
 #   formatbook     — list / inspect / update format definitions
-#   download-sumstats — download from GWAS Catalog by accession ID
+#   list ref         — list reference keywords (catalog / downloaded)
+#   download ref|sumstats — grouped downloads (legacy: download-ref, download-sumstats)
 #
 # Usage:
 #   bash 08_utility.sh
@@ -75,17 +76,21 @@ echo "=== Show column mapping for 'ssf' format ==="
 gwaslab formatbook show ssf
 
 echo ""
-echo "=== Update formatbook from upstream ==="
-gwaslab formatbook update
+echo "=== Update formatbook from upstream (needs network; non-fatal if it fails) ==="
+gwaslab formatbook update || true
 
 echo ""
 
 # --------------------------------------------------------------------------
-# download-sumstats
+# list ref / download
 # --------------------------------------------------------------------------
+echo "=== List reference keywords (catalog + local, text) ==="
+gwaslab list ref --quiet || true
+
+echo ""
 echo "=== Download sumstats from GWAS Catalog (GCST90270926) ==="
-# Files are downloaded to --output-dir (defaults to current directory)
-gwaslab download-sumstats GCST90270926 --output-dir output/
+# Same as: gwaslab download sumstats … ; output dir: -o / --output-dir / -d / --directory
+gwaslab download-sumstats GCST90270926 --directory output/
 
 echo ""
 echo "Done."

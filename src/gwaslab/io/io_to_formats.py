@@ -126,7 +126,8 @@ def _to_format(sumstats_or_dataframe,
     verbose : bool, optional
         Whether to print progress messages. Default is True
     validate : bool, optional
-         Whether to use the gwas-ssf CLI tool for validation (only for SSF format). Default is False
+         If True, validate SSF output: try gwas-ssf CLI first; on failure, non-zero exit, or Traceback
+         in stderr, fall back to the built-in pandas-based validator. Default is False
     gwas_ssf_path : str, optional
          Path to gwas-ssf CLI executable. If None, will try default paths. Default is None
 
@@ -329,7 +330,8 @@ def _to_format(sumstats_or_dataframe,
                 # Default: try system PATH
                 gwas_ssf_paths = ["gwas-ssf"]
             
-            cli_available = False
+            cli_validation_passed = False
+            cli_was_invoked = False
             for cli_path in gwas_ssf_paths:
                 if os.path.exists(cli_path) or cli_path == "gwas-ssf":
                     try:
@@ -339,28 +341,42 @@ def _to_format(sumstats_or_dataframe,
                             text=True,
                             timeout=120
                         )
-                        cli_available = True
-                        
-                        if result.returncode == 0:
+                        cli_was_invoked = True
+                        stderr_text = result.stderr or ""
+                        traceback_in_stderr = "Traceback" in stderr_text
+                        cli_validation_passed = (
+                            result.returncode == 0 and not traceback_in_stderr
+                        )
+
+                        if cli_validation_passed:
                             log.write("✓ SSF validation successful (via gwas-ssf CLI)", verbose=verbose)
                             if result.stdout:
                                 log.write(result.stdout.strip(), verbose=verbose)
                         else:
                             log.warning("✗ SSF validation failed (via gwas-ssf CLI)", verbose=verbose)
-                            if result.stderr:
-                                log.warning(result.stderr.strip()[:500], verbose=verbose)
+                            if stderr_text:
+                                log.warning(stderr_text.strip()[:500], verbose=verbose)
                             if result.stdout:
                                 log.write(result.stdout.strip()[:500], verbose=verbose)
                         break
                     except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
                         continue
-            
-            # Fallback to new validator if CLI not available
-            if not cli_available:
+
+            # Fallback when CLI missing, crashed (Traceback), or reported invalid file
+            if not cli_validation_passed:
                 try:
                     from gwaslab.extension.gwas_sumstats_tools.validate_ssf import validate_ssf_file
-                    
-                    log.write("Using built-in SSF validator (gwas-ssf CLI not available)...", verbose=verbose)
+
+                    if cli_was_invoked:
+                        log.write(
+                            "Falling back to built-in SSF validator (CLI error or non-zero exit)...",
+                            verbose=verbose,
+                        )
+                    else:
+                        log.write(
+                            "Using built-in SSF validator (gwas-ssf CLI not available)...",
+                            verbose=verbose,
+                        )
                     is_valid, message, errors = validate_ssf_file(
                         filename=output_path,
                         log=log,

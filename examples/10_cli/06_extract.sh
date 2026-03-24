@@ -14,7 +14,8 @@
 
 set -euo pipefail
 
-INPUT="../../test/raw/dirty_sumstats.tsv"
+# Realistic hg19 positions (liftover-friendly); use dirty_sumstats.tsv for QC torture tests
+INPUT="../../test/raw/realistic_sumstats.tsv"
 mkdir -p output
 
 # --------------------------------------------------------------------------
@@ -49,24 +50,24 @@ gwaslab \
 # Novel variants (requires GWAS Catalog API)
 # --------------------------------------------------------------------------
 echo ""
-echo "=== [4] Extract novel variants for a trait (BMI, EFO_0004340) ==="
+echo "=== [4] Extract novel variants for a trait (EFO_0009454) ==="
 # The EFO ID specifies the trait used to pull known loci from GWAS Catalog
 gwaslab \
     --input   "$INPUT" \
     --qc \
     --remove \
     --extract novel \
-    --efo     EFO_0004340 \
-    --output  "output/06_novel_bmi.tsv"
+    --efo     EFO_0009454 \
+    --output  "output/06_novel_trait1.tsv"
 
 echo ""
-echo "=== [5] Novel variants — return only truly novel hits ==="
+echo "=== [5] Novel variants with --only-novel (restrict to hits absent from GWAS Catalog) ==="
 gwaslab \
     --input      "$INPUT" \
     --qc \
     --remove \
     --extract    novel \
-    --efo        EFO_0004340 \
+    --efo        EFO_0009454 \
     --only-novel \
     --output     "output/06_novel_only.tsv"
 
@@ -77,8 +78,8 @@ gwaslab \
     --qc \
     --remove \
     --extract novel \
-    --efo     EFO_0004340 EFO_0004330 \
+    --efo     EFO_0009454 EFO_0004607 \
     --output  "output/06_novel_multi_trait.tsv"
 
 echo ""
-echo "Done. Output files written to output/"
+echo "Done. Output files written under output/"

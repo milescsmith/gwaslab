@@ -1,5 +1,17 @@
 # Update Logs
 
+# v4.1.3 20260324
+
+- CLI: implementation moved to the `gwaslab_cli` package; CLI documentation and example scripts updated accordingly
+- Added `download_sumstats()` to download GWAS Catalog summary statistics by GCST ID (FTP listing with harmonised-first selection, API/metadata fallbacks, optional sidecar/MD5); CLI: `gwaslab download-sumstats`
+- Minor fixes and improvements in harmonization, I/O, BD download, regional plots, and utilities
+- Fixed `compare_effect()` gene annotation with `snplist`: avoid passing unsupported lead-SNP kwargs (e.g. `anno`) to `_anno_gene()`
+- `assign_rsid()`: improved rsID assignment robustness and related harmonization flow handling
+- `harmonize()`: refined harmonization edge-case handling and status update behavior
+- `compare_effect()`: improved plotting stability and compatibility in effect comparison workflows
+- `plot_mqq()`: polished visualization behavior for Manhattan/QQ plotting paths
+- CLI tests: updated shared fixtures in `test/cli/conftest.py` for the unified command tests
+
 # v4.1.2 20260307
 
 - Fixed CI flipping for `OR_95L`/`OR_95U` and `HR_95L`/`HR_95U` so both bounds are computed from original values when both columns are present

@@ -1198,7 +1198,9 @@ def _mqqplot(insumstats,
             scatter_kwargs["markers"] = markers
 
         # Step 8: Create Manhattan panel
-        manhattan_data = to_plot if "r" in mode else sumstats
+        # In multi-reference regional mode, regional_mode_setup may leave to_plot unset.
+        # Fall back to the full sumstats table so seaborn always receives `data`.
+        manhattan_data = to_plot if ("r" in mode and to_plot is not None) else sumstats
         highlight_i = draw_manhattan_panel(
             ax1=ax1,
             sumstats=manhattan_data,

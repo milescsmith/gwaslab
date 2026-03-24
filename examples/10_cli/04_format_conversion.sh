@@ -65,6 +65,7 @@ echo "=== [4] Convert to VCF + bgzip + tabix index ==="
 gwaslab \
     --input   "$INPUT" \
     --qc \
+    --remove \
     --to-fmt  vcf \
     --bgzip \
     --tabix \
@@ -97,4 +98,4 @@ gwaslab \
     --output  "output/04_hapmap3.ldsc.gz"
 
 echo ""
-echo "Done. Output files written to output/"
+echo "Done. Output files written under output/"

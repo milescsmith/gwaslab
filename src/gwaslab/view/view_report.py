@@ -207,6 +207,7 @@ def generate_qc_report(
     step_num += 1
     log.write(f"\n[Step {step_num}/{total_steps}] Creating regional plots for lead variants...", verbose=verbose)
     regional_plots = []
+    regional_plot_errors: List[Dict[str, Any]] = []
     
     if len(lead_variants) > 0:
         # Get default window size for regional plots
@@ -219,7 +220,17 @@ def generate_qc_report(
                 pos = row.get("POS", None)
                 
                 if chrom is None or pd.isna(chrom) or pos is None or pd.isna(pos):
-                    log.write(f"WARNING: Skipping lead variant {idx} - missing CHR or POS", verbose=verbose)
+                    message = f"WARNING: Skipping lead variant {idx} - missing CHR or POS"
+                    log.write(message, verbose=verbose)
+                    regional_plot_errors.append(
+                        {
+                            "lead_index": idx,
+                            "variant_id": row.get("SNPID", None),
+                            "chrom": chrom,
+                            "pos": pos,
+                            "error_message": message,
+                        }
+                    )
                     continue
                 
                 # Get region coordinates
@@ -248,7 +259,17 @@ def generate_qc_report(
                 
                 # Verify file was created
                 if not region_plot_path.exists():
-                    log.write(f"WARNING: Regional plot file not found at {region_plot_path}", verbose=verbose)
+                    message = f"WARNING: Regional plot file not found at {region_plot_path}"
+                    log.write(message, verbose=verbose)
+                    regional_plot_errors.append(
+                        {
+                            "lead_index": idx,
+                            "variant_id": row.get("SNPID", f"chr{chrom}:{pos}"),
+                            "chrom": chrom,
+                            "pos": pos,
+                            "error_message": message,
+                        }
+                    )
                     continue
                 
                 # Store plot info
@@ -268,10 +289,27 @@ def generate_qc_report(
                 log.write(f"Created regional plot for {variant_id} (chr{chrom}:{pos})", verbose=verbose)
                 
             except Exception as e:
-                log.write(f"WARNING: Failed to create regional plot for variant {idx}: {e}", verbose=verbose)
+                message = f"WARNING: Failed to create regional plot for variant {idx}: {e}"
+                log.write(message, verbose=verbose)
+                regional_plot_errors.append(
+                    {
+                        "lead_index": idx,
+                        "variant_id": row.get("SNPID", None),
+                        "chrom": row.get("CHR", None),
+                        "pos": row.get("POS", None),
+                        "error_message": message,
+                    }
+                )
                 continue
     
     log.write(f"\nCreated {len(regional_plots)} regional plot(s).", verbose=verbose)
+    if len(regional_plot_errors) > 0:
+        regional_error_path = output_dir / f"{output_path_obj.stem}_regional_plot_errors.tsv"
+        pd.DataFrame(regional_plot_errors).to_csv(regional_error_path, sep="\t", index=False)
+        log.write(
+            f"Regional plot error report saved to: {regional_error_path} ({len(regional_plot_errors)} error(s))",
+            verbose=verbose,
+        )
     
     # Step 6: Generate summary
     log.write("\nGenerating summary statistics...", verbose=verbose)
@@ -529,6 +567,33 @@ def _generate_html_report(
             border-bottom: 1px solid #3498db;
             padding-bottom: 5px;
         }}
+        .toc {{
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin: 20px 0 30px 0;
+        }}
+        .toc h2 {{
+            margin-top: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }}
+        .toc ul {{
+            margin: 8px 0 0 0;
+            padding-left: 22px;
+        }}
+        .toc li {{
+            margin: 6px 0;
+        }}
+        .toc a {{
+            color: #2c3e50;
+            text-decoration: none;
+        }}
+        .toc a:hover {{
+            color: #3498db;
+            text-decoration: underline;
+        }}
     </style>
 </head>
 <body>
@@ -540,11 +605,47 @@ def _generate_html_report(
         report_title,
         pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
     ))
+
+    # Table of contents (generated from available sections)
+    toc_entries = [
+        ("Summary", "summary"),
+        ("Manhattan-QQ Plot", "manhattan-qq-plot"),
+    ]
+    if lead_variants is not None and len(lead_variants) > 0:
+        toc_entries.append(("Lead Variants", "lead-variants"))
+    if regional_plots:
+        toc_entries.append(("Regional Plots", "regional-plots"))
+    if summary_dict:
+        toc_entries.extend([
+            ("Summary Statistics", "summary-statistics"),
+            ("Overview", "summary-overview"),
+            ("Chromosome Distribution", "summary-chromosome-distribution"),
+            ("Missing Values", "summary-missing-values"),
+            ("Minor Allele Frequency (MAF) Distribution", "summary-maf-distribution"),
+            ("P-value Statistics", "summary-pvalue-statistics"),
+            ("Variant Status Summary", "summary-variant-status"),
+            ("Variant Metadata", "summary-variant-metadata"),
+        ])
+    if log_text:
+        toc_entries.append(("Processing Log", "processing-log"))
+    toc_entries.append(("Citation", "citation"))
+
+    toc_items_html = "\n".join(
+        [f'                <li><a href="#{anchor}">{label}</a></li>' for label, anchor in toc_entries]
+    )
+    html_parts.append(f"""
+        <div class="toc">
+            <h2 id="toc">Table of Contents</h2>
+            <ul>
+{toc_items_html}
+            </ul>
+        </div>
+    """)
     
     # Summary section
     html_parts.append("""
         <div class="section">
-            <h2>Summary</h2>
+            <h2 id="summary">Summary</h2>
             <div class="summary">
     """)
     
@@ -582,7 +683,7 @@ def _generate_html_report(
     if mqq_plot_path and mqq_plot_path.exists():
         html_parts.append("""
         <div class="section">
-            <h2>Manhattan-QQ Plot</h2>
+            <h2 id="manhattan-qq-plot">Manhattan-QQ Plot</h2>
             <div class="plot-container">
         """)
         
@@ -599,7 +700,7 @@ def _generate_html_report(
     if lead_variants is not None and len(lead_variants) > 0:
         html_parts.append("""
         <div class="section">
-            <h2>Lead Variants</h2>
+            <h2 id="lead-variants">Lead Variants</h2>
             <table>
         """)
         
@@ -641,7 +742,7 @@ def _generate_html_report(
     if regional_plots:
         html_parts.append("""
         <div class="section">
-            <h2>Regional Plots</h2>
+            <h2 id="regional-plots">Regional Plots</h2>
         """)
         
         for i, plot_info in enumerate(regional_plots, 1):
@@ -677,7 +778,7 @@ def _generate_html_report(
     if summary_dict:
         html_parts.append("""
         <div class="section">
-            <h2>Summary Statistics</h2>
+            <h2 id="summary-statistics">Summary Statistics</h2>
         """)
         
         # Overview
@@ -685,7 +786,7 @@ def _generate_html_report(
             overview = summary_dict.get("overview", summary_dict.get("META", {}))
             html_parts.append("""
             <div class="summary-category">
-                <h3>Overview</h3>
+                <h3 id="summary-overview">Overview</h3>
                 <table>
                     <thead><tr><th>Metric</th><th>Value</th></tr></thead>
                     <tbody>
@@ -699,7 +800,7 @@ def _generate_html_report(
             chr_info = summary_dict.get("chromosomes", summary_dict.get("CHR", {}))
             html_parts.append("""
             <div class="summary-category">
-                <h3>Chromosome Distribution</h3>
+                <h3 id="summary-chromosome-distribution">Chromosome Distribution</h3>
                 <table>
                     <thead><tr><th>Chromosome</th><th>Count</th></tr></thead>
                     <tbody>
@@ -715,7 +816,7 @@ def _generate_html_report(
             if missing_info and missing_info.get("Missing_total", 0) > 0:
                 html_parts.append("""
                 <div class="summary-category">
-                    <h3>Missing Values</h3>
+                    <h3 id="summary-missing-values">Missing Values</h3>
                     <table>
                         <thead><tr><th>Column</th><th>Missing Count</th></tr></thead>
                         <tbody>
@@ -731,7 +832,7 @@ def _generate_html_report(
             maf_info = summary_dict["MAF"]
             html_parts.append("""
             <div class="summary-category">
-                <h3>Minor Allele Frequency (MAF) Distribution</h3>
+                <h3 id="summary-maf-distribution">Minor Allele Frequency (MAF) Distribution</h3>
                 <table>
                     <thead><tr><th>Category</th><th>Count</th></tr></thead>
                     <tbody>
@@ -745,7 +846,7 @@ def _generate_html_report(
             p_info = summary_dict.get("p_values", summary_dict.get("P", {}))
             html_parts.append("""
             <div class="summary-category">
-                <h3>P-value Statistics</h3>
+                <h3 id="summary-pvalue-statistics">P-value Statistics</h3>
                 <table>
                     <thead><tr><th>Metric</th><th>Value</th></tr></thead>
                     <tbody>
@@ -765,7 +866,7 @@ def _generate_html_report(
             status_info = summary_dict["variant_status"]
             html_parts.append("""
             <div class="summary-category">
-                <h3>Variant Status Summary</h3>
+                <h3 id="summary-variant-status">Variant Status Summary</h3>
                 <table>
                     <thead><tr><th>Status Code</th><th>Description</th><th>Count</th></tr></thead>
                     <tbody>
@@ -782,7 +883,7 @@ def _generate_html_report(
             variants_info = summary_dict["variants"]
             html_parts.append("""
             <div class="summary-category">
-                <h3>Variant Metadata</h3>
+                <h3 id="summary-variant-metadata">Variant Metadata</h3>
                 <table>
                     <thead><tr><th>Metric</th><th>Value</th></tr></thead>
                     <tbody>
@@ -820,7 +921,7 @@ def _generate_html_report(
     if log_text:
         html_parts.append("""
         <div class="section">
-            <h2>Processing Log</h2>
+            <h2 id="processing-log">Processing Log</h2>
             <div class="log-container">
         """)
         # Escape HTML special characters in log text
@@ -831,6 +932,16 @@ def _generate_html_report(
             </div>
         </div>
         """)
+
+    # Citation section
+    html_parts.append("""
+        <div class="section">
+            <h2 id="citation">Citation</h2>
+            <div class="summary">
+                Please cite GWASLab when using this report: He, Y. et al. GWASLab: a Python toolkit for genome-wide association study summary statistics analysis and visualization.
+            </div>
+        </div>
+    """)
     
     # Footer
     html_parts.append("""

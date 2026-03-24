@@ -886,10 +886,13 @@ def _extract_lookup_table_from_vcf_bcf(
         log.write(" -Calling: bcftools view -T <TARGETS> -Ou <VCF> | "
                   "bcftools query -f '<FMT>'", verbose=verbose)
 
-    with Pool(threads) as pool:
-        log.write(f" -Finished:",end="", verbose=verbose)
-        dfs = pool.map(_worker_bcf_lookup, tasks)
-        log.write(f"", verbose=verbose, show_time=False)
+    log.write(f" -Finished:",end="", verbose=verbose)
+    if threads <= 1:
+        dfs = [_worker_bcf_lookup(task) for task in tasks]
+    else:
+        with Pool(threads) as pool:
+            dfs = pool.map(_worker_bcf_lookup, tasks)
+    log.write(f"", verbose=verbose, show_time=False)
 
     # Merge results - filter out empty DataFrames to avoid FutureWarning
     dfs_filtered = [d for d in dfs if not d.empty]

@@ -1314,6 +1314,9 @@ def _parallelize_assign_rsid(
             if not is_dataframe and hasattr(sumstats_obj, 'data') and not sumstats_obj.data.empty and chr in sumstats_obj.data.columns:
                 mapper.detect_sumstats_format(sumstats_obj.data[chr])
 
+    _ref_path = os.path.abspath(os.path.expanduser(str(path)))
+    log.write(f" -Reference file path: {_ref_path}", verbose=verbose)
+
     if ref_mode=="vcf":
         # Auto-detect reference format from VCF file
         mapper.detect_reference_format(path)
@@ -1345,10 +1348,13 @@ def _parallelize_assign_rsid(
             if to_assign.sum()<10000: threads=1
             #df_split = np.array_split(sumstats.loc[to_assign, [chr,pos,ref,alt]], threads)
             df_split = _df_split(sumstats.loc[to_assign, [chr,pos,ref,alt]], threads)
-            with Pool(threads) as pool:
-                map_func = partial(assign_rsid_single,path=path,chr=chr,pos=pos,ref=ref,alt=alt,mapper=mapper) 
-                assigned_rsid = pd.concat(pool.map(map_func,df_split))
-                sumstats.loc[to_assign,rsid] = assigned_rsid.values
+            map_func = partial(assign_rsid_single,path=path,chr=chr,pos=pos,ref=ref,alt=alt,mapper=mapper)
+            if threads <= 1:
+                assigned_rsid = pd.concat([map_func(chunk) for chunk in df_split])
+            else:
+                with Pool(threads) as pool:
+                    assigned_rsid = pd.concat(pool.map(map_func,df_split))
+            sumstats.loc[to_assign,rsid] = assigned_rsid.values
         gc.collect()
         ##################################################################################################################
 
@@ -1882,10 +1888,13 @@ def _parallelize_infer_strand(
             else:
                 #df_split = np.array_split(df_to_check, threads)
                 df_split = _df_split(df_to_check, threads)
-                with Pool(threads) as pool:
-                    map_func = partial(check_strand,chr=chr,pos=pos,ref=ref,alt=alt,eaf=eaf,status=status,ref_infer=ref_infer,ref_alt_freq=ref_alt_freq,ref_maf_threshold=ref_maf_threshold,mapper=mapper) 
-                    status_inferred = pd.concat(pool.map(map_func,df_split))
-                    sumstats.loc[unknow_palindromic_to_check,status] = status_inferred.values
+                map_func = partial(check_strand,chr=chr,pos=pos,ref=ref,alt=alt,eaf=eaf,status=status,ref_infer=ref_infer,ref_alt_freq=ref_alt_freq,ref_maf_threshold=ref_maf_threshold,mapper=mapper)
+                if threads <= 1:
+                    status_inferred = pd.concat([map_func(chunk) for chunk in df_split])
+                else:
+                    with Pool(threads) as pool:
+                        status_inferred = pd.concat(pool.map(map_func,df_split))
+                sumstats.loc[unknow_palindromic_to_check,status] = status_inferred.values
             log.write(" -Finished strand inference.",verbose=verbose)
         else:
             log.warning("No palindromic variants available for checking.")
@@ -1959,10 +1968,13 @@ def _parallelize_infer_strand(
                 else:
                     #df_split = np.array_split(sumstats.loc[unknow_indel, [chr,pos,ref,alt,eaf,status]], threads)
                     df_split = _df_split(sumstats.loc[unknow_indel, [chr,pos,ref,alt,eaf,status]], threads)
-                    with Pool(threads) as pool:
-                        map_func = partial(check_indel,chr=chr,pos=pos,ref=ref,alt=alt,eaf=eaf,status=status,ref_infer=ref_infer,ref_alt_freq=ref_alt_freq,ref_maf_threshold=ref_maf_threshold,mapper=mapper,daf_tolerance=daf_tolerance) 
-                        status_inferred = pd.concat(pool.map(map_func,df_split))
-                        sumstats.loc[unknow_indel,status] = status_inferred.values
+                    map_func = partial(check_indel,chr=chr,pos=pos,ref=ref,alt=alt,eaf=eaf,status=status,ref_infer=ref_infer,ref_alt_freq=ref_alt_freq,ref_maf_threshold=ref_maf_threshold,mapper=mapper,daf_tolerance=daf_tolerance)
+                    if threads <= 1:
+                        status_inferred = pd.concat([map_func(chunk) for chunk in df_split])
+                    else:
+                        with Pool(threads) as pool:
+                            status_inferred = pd.concat(pool.map(map_func,df_split))
+                    sumstats.loc[unknow_indel,status] = status_inferred.values
                 log.write(" -Finished indistinguishable indel inference.",verbose=verbose)
 
             #########################################################################################

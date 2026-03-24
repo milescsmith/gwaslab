@@ -71,7 +71,7 @@ def update_config(log: Log = Log(), verbose: bool = True, show_all: bool = False
         are reference identifiers and values contain metadata including local paths.
     '''
     config_path = options.paths["config"]
-    log.write(" -Updating config.json...")
+    log.write(" -Updating config.json...", verbose=verbose)
     try:
         # if config exists
         dicts = json.load(open(config_path))
@@ -188,7 +188,7 @@ def update_available_ref(log: Log = Log()) -> None:
 
 ##################################################################################
 
-def check_downloaded_ref(log: Log = Log()) -> Dict[str, Any]:
+def check_downloaded_ref(log: Log = Log(), verbose: bool = True) -> Dict[str, Any]:
     '''
     Verify and return records of local reference files that are already downloaded or manually added by user.
 
@@ -197,17 +197,19 @@ def check_downloaded_ref(log: Log = Log()) -> Dict[str, Any]:
     dict
         Dictionary mapping reference keywords to local file paths
     '''
-    log.write("Start to check downloaded reference files...")
+    log.write("Start to check downloaded reference files...", verbose=verbose)
     config_path = options.paths["config"]
-    log.write(" -Checking the config file:{}".format(config_path))
+    log.write(" -Checking the config file:{}".format(config_path), verbose=verbose)
     if not path.exists(config_path):
-        log.write(" -Config file is missing.")
-        initiate_config()      
-    else:
-        log.write(" -Config file exists.")
-        dicts = update_config()
+        log.write(" -Config file is missing.", verbose=verbose)
+        initiate_config()
+        dicts = update_config(log, verbose=verbose)
+        log.write("Finished checking downloaded reference files...", verbose=verbose)
         return dicts
-    log.write("Finished checking downloaded reference files...")
+    log.write(" -Config file exists.", verbose=verbose)
+    dicts = update_config(log, verbose=verbose)
+    log.write("Finished checking downloaded reference files...", verbose=verbose)
+    return dicts
 
 ##################################################################################
 
@@ -399,7 +401,7 @@ def remove_file(name: str, log: Log = Log()) -> None:
             log.write("No records in config file. Please download first.")
 
 #### helper #############################################################################################
-def update_record(*keys: str, value: Any, log: Log = Log()) -> None:
+def update_record(*keys: str, value: Any, log: Log = Log(), verbose: bool = True) -> None:
     """
     Update configuration with a value at a nested key path.
     Automatically creates intermediate levels if they do not exist.
@@ -439,7 +441,7 @@ def update_record(*keys: str, value: Any, log: Log = Log()) -> None:
         Value to be stored at that nested path.
     """
     if log is not None:
-        log.write(" - Updating record in config file...")
+        log.write(" - Updating record in config file...", verbose=verbose)
 
     config_path = Path(options.paths["config"])
 
@@ -576,7 +578,7 @@ def remove_local_record(keyword: str, log: Log = Log()) -> bool:
         log.write(f"Error: Failed to update config file - {str(e)}")
         return False
 
-def scan_downloaded_files(log=Log(), verbose=True):
+def scan_downloaded_files(log=Log(), verbose=True, directory: Optional[str] = None):
     """
     Scan data directory for files not in config and match with available references.
 
@@ -584,6 +586,8 @@ def scan_downloaded_files(log=Log(), verbose=True):
     ----------
     verbose : bool, optional
         Whether to show detailed logging output. Default is True.
+    directory : str, optional
+        Directory to scan. Defaults to ``options.paths["data_directory"]`` (typically ``~/.gwaslab``).
 
     Returns
     -------
@@ -591,29 +595,46 @@ def scan_downloaded_files(log=Log(), verbose=True):
         True if successful
     """
     log.write("Starting to scan data directory for unregistered files...", verbose=verbose)
-    
-    # Get directory paths
-    data_dir = options.paths["data_directory"]
+
+    if directory is None:
+        data_dir = os.path.abspath(os.path.expanduser(options.paths["data_directory"]))
+    else:
+        data_dir = os.path.abspath(os.path.expanduser(directory))
+
     log.write(f" -Scanning directory: {data_dir}", verbose=verbose)
-    
+
+    if not os.path.isdir(data_dir):
+        log.write(f" -Directory does not exist: {data_dir}", verbose=verbose)
+        return False
+
     # Get list of files in data directory
     try:
-        files_in_dir = [f for f in os.listdir(data_dir) 
-                      if os.path.isfile(os.path.join(data_dir, f))]
+        files_in_dir = [
+            f for f in os.listdir(data_dir) if os.path.isfile(os.path.join(data_dir, f))
+        ]
     except Exception as e:
-        log.write(f" -Error reading directory: {str(e)}")
+        log.write(f" -Error reading directory: {str(e)}", verbose=verbose)
         return False
-    
+
     # Get downloaded records from config
-    downloaded = check_downloaded_ref(log)
-    
+    downloaded = check_downloaded_ref(log, verbose=verbose) or {}
+
+    registered_basenames = set()
+    for _key, meta in downloaded.items():
+        if isinstance(meta, dict) and meta.get("local_path"):
+            registered_basenames.add(os.path.basename(meta["local_path"]))
+        if isinstance(meta, dict) and isinstance(meta.get("tbi"), dict):
+            tbi_path = meta["tbi"].get("local_path")
+            if tbi_path:
+                registered_basenames.add(os.path.basename(tbi_path))
+
     # Get available references
-    available = check_available_ref(log, verbose=False,show_all=True)
-    
+    available = check_available_ref(log, verbose=False, show_all=True)
+
     # Process each file in directory
     for filename in files_in_dir:
-        # Skip if already in config
-        if filename in downloaded:
+        # Skip if already registered (by basename of recorded paths)
+        if filename in registered_basenames:
             continue
             
         # Try to match with available references
@@ -632,11 +653,18 @@ def scan_downloaded_files(log=Log(), verbose=True):
         # Update config with matched reference
         local_path = os.path.join(data_dir, filename)
         try:
-            update_record("downloaded", matched_ref, "local_path", value=local_path)
+            update_record(
+                "downloaded",
+                matched_ref,
+                "local_path",
+                value=local_path,
+                log=log,
+                verbose=verbose,
+            )
             log.write(f"  -Updated config for {matched_ref} with path: {local_path}", verbose=verbose)
         except Exception as e:
-            log.write(f"  -Error updating config for {filename}: {str(e)}")
-    
+            log.write(f"  -Error updating config for {filename}: {str(e)}", verbose=verbose)
+
     log.write("Completed scanning data directory", verbose=verbose)
     return True
 

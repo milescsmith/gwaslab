@@ -3,7 +3,7 @@
 # 05_plot.sh — Visualization
 # =============================================================================
 # Generate plots from GWAS summary statistics.
-# Available plot types: manhattan, qq, mqq, regional, forest
+# Available plot types: manhattan, qq, mqq, regional)
 #
 # Usage:
 #   bash 05_plot.sh
@@ -71,15 +71,7 @@ gwaslab \
     --output "output/plots/05_regional_chr6.png"
 
 echo ""
-echo "=== [7] Forest plot ==="
-gwaslab \
-    --input  "$INPUT" \
-    --qc \
-    --plot   forest \
-    --output "output/plots/05_forest.png"
-
-echo ""
-echo "=== [8] Manhattan plot — quiet mode (suppress log messages) ==="
+echo "=== [7] Manhattan plot — quiet mode (suppress log messages) ==="
 gwaslab \
     --input  "$INPUT" \
     --qc \
@@ -88,4 +80,4 @@ gwaslab \
     --output "output/plots/05_manhattan_quiet.png"
 
 echo ""
-echo "Done. Plots written to output/plots/"
+echo "Done. Plots written under output/plots/"

@@ -18,7 +18,7 @@ OUTPUT="output/01_cleaned.tsv"
 
 mkdir -p output
 
-echo "=== [1] Minimal QC (status flags only, no removal) ==="
+echo "=== [1] QC without --remove (basic_check fixes/normalizes; rows are not dropped) ==="
 gwaslab \
     --input  "$INPUT" \
     --qc \
@@ -41,12 +41,12 @@ gwaslab \
     --output "output/01_cleaned_no_dup.tsv"
 
 echo ""
-echo "=== [4] QC already normalizes indels by default ==="
-# --normalize is redundant when --qc is used; shown here for clarity
+echo "=== [4] QC with explicit --normalize (redundant with --qc; indel normalization is already on) ==="
 gwaslab \
-    --input  "$INPUT" \
+    --input     "$INPUT" \
     --qc \
-    --output "output/01_cleaned_normalized.tsv"
+    --normalize \
+    --output    "output/01_cleaned_normalized.tsv"
 
 echo ""
 echo "=== [5] Full QC pipeline (remove + remove-dup; normalize is implicit) ==="
@@ -74,4 +74,4 @@ gwaslab \
     --output "output/01_cleaned_1000.tsv"
 
 echo ""
-echo "Done. Output files written to output/"
+echo "Done. Output files written under output/"
