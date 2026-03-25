@@ -15,6 +15,7 @@ import pandas as pd
 from gwaslab.util.util_in_filter_value import _exclude, _extract
 
 from gwaslab_cli.cli_banner import emit_cli_mode_banner
+from gwaslab_cli.pair import run_pair
 from gwaslab_cli.handlers import (
     load_sumstats,
     run_config,
@@ -585,6 +586,20 @@ Examples:
     )
     init_parser.add_argument("--quiet", "-q", action="store_true", help="Less logging")
     init_parser.set_defaults(func=run_init)
+
+    pair_parser = subparsers.add_parser(
+        "pair",
+        help="Two-sumstats workflows (operation token can appear among flags)",
+    )
+    pair_parser.add_argument(
+        "pair_argv",
+        nargs=argparse.REMAINDER,
+        help=(
+            "Pair command arguments. Example: --input1 a.tsv --input2 b.tsv "
+            "--fmt1 auto --fmt2 auto --build 19 --sync-alleles miami --output out.png"
+        ),
+    )
+    pair_parser.set_defaults(func=lambda a: run_pair(a.pair_argv))
 
     report_parser = subparsers.add_parser(
         "report",
