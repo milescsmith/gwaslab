@@ -369,7 +369,7 @@ def test_extract_proxy_errors() -> None:
             [
                 "--input",
                 str(RAW),
-                "--extract",
+                "--get",
                 "proxy",
                 "--output",
                 str(RAW.parent / "_proxy_skip.tsv"),
@@ -389,7 +389,7 @@ def test_extract_lead_writes_tsv(tmp_path: Path) -> None:
         [
             "--input",
             str(RAW),
-            "--extract",
+            "--get",
             "lead",
             "--output",
             str(out),
@@ -599,7 +599,7 @@ def test_extract_novel_calls_get_novel(
         [
             "--input",
             "/dev/null/fake.tsv",
-            "--extract",
+            "--get",
             "novel",
             "--output",
             str(out),

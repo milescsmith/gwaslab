@@ -2,6 +2,8 @@
 
 GWASLab provides a unified command-line interface for processing GWAS summary statistics. The CLI supports quality control (QC), harmonization, format conversion, and various output formatting options.
 
+> **Warning — heavy development:** The CLI is changing quickly (flags, defaults, and behavior may shift between releases). Pin a GWASLab version for reproducible pipelines, check `gwaslab --help` after upgrading, and expect occasional breaking changes until the interface stabilizes.
+
 ## Basic Usage
 
 The CLI follows a unified interface pattern:
@@ -61,7 +63,7 @@ gwaslab --input sumstats.tsv --liftover 19 38 --out lifted_hg38.tsv
 gwaslab --input sumstats.tsv --infer-build --out inferred.tsv
 
 # Extract lead signals
-gwaslab --input sumstats.tsv --extract lead --out lead.tsv
+gwaslab --input sumstats.tsv --get lead --out lead.tsv
 ```
 
 ## Utility Subcommands
@@ -201,17 +203,21 @@ GWAS Catalog sumstats do not have a browseable `list` command in the CLI (you su
 | `--quiet` | Suppress output messages | False |
 | `--threads` | Number of threads for parallel processing | 1 |
 
-### Plot / Extract Shared Optional Arguments
+Many other flags (`--fix-chr`, `--fix-chr-pos`, variant filters, `--get`, `--plot-chr`, harmonization, liftover, etc.) are summarized in **Processing Options** below and in `gwaslab --help`.
+
+### Plot / Get shared optional arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--sig-level` | Significance threshold used in Manhattan/MQQ/Regional plotting | `5e-8` |
 | `--ylim <min> <max>` | Y-axis limits for plotting | None |
 | `--highlight <id ...>` | Variant IDs (e.g. rsID/SNPID) to highlight in Manhattan/MQQ/Regional plots | None |
-| `--sig-level-extract` | P-value threshold for `--extract` operations | `5e-8` |
-| `--windowsizekb` | Window size for lead extraction | `500` |
+| `--sig-level-extract` | P-value threshold for `--get` operations | `5e-8` |
+| `--windowsizekb` | Window size (kb) for `--get lead` | `500` |
 
 ## Processing Options
+
+When multiple flags are used in one command, the CLI applies steps in this order: optional **`fix_*`** flags → **`--qc`** / remove / dedup / normalize → **`--filter-region`** → **variant filters** (`--extract` / `--exclude` / BED / `--chr` / MAF / MAC / `--snps-only` / `--min-info`) → harmonization → assign-rsid → rsid-to-chrpos → infer-build → liftover → plot (if any) → **`--get`** (if set) → **`to_format`** output. See `gwaslab --help` for the authoritative list.
 
 ### Quality Control (QC)
 
@@ -242,6 +248,59 @@ gwaslab --input sumstats.tsv --fmt auto --qc --remove --remove-dup --normalize -
 | `--remove` | Remove bad quality variants detected during QC |
 | `--remove-dup` | Remove duplicated or multi-allelic variants |
 | `--normalize` | Normalize indels (e.g., ATA:AA -> AT:A) |
+
+### Optional coordinate and ID fixes
+
+Run individual `Sumstats.fix_*()` steps without full `--qc`. These run **before** QC when combined in one command. Use them to normalize columns before export or downstream steps.
+
+| Option | Description |
+|--------|-------------|
+| `--fix-chr` | `fix_chr()` only (chromosome notation) |
+| `--fix-pos` | `fix_pos()` only (position dtype / range) |
+| `--fix-chr-pos` | `fix_chr()` then `fix_pos()` (same as `--fix-chr --fix-pos`) |
+| `--fix-chr-pos-allele` | `fix_chr()`, `fix_pos()`, and `fix_allele()` |
+| `--fix-allele` | `fix_allele()` only (allele notation) |
+| `--fix-id` | `fix_id()` only (SNPID / rsID column) |
+
+If both `fix_chr` and `fix_pos` run (via `--fix-chr-pos` or the pair `--fix-chr --fix-pos`), the CLI treats coordinates as ready for steps that normally auto-run `fix_chr` + `fix_pos` (e.g. liftover, `--assign-rsid`).
+
+### Variant filters (PLINK-style)
+
+Subset rows **after** `--filter-region` (if any) and **before** harmonization, assign-rsid, liftover, plotting, or `--get`. List-based filters require a **`SNPID`** or **`rsID`** column. BED and chromosome filters run `fix_chr` + `fix_pos` first if coordinates are not already normalized.
+
+See also `examples/10_cli/09_variant_filters.sh` for runnable demos (uses `../../src` when run from a git checkout).
+
+```bash
+# Keep only IDs in a file (one per line; # comments and extra columns ignored)
+gwaslab --input sumstats.tsv --extract keep.txt --out subset.tsv --to-fmt gwaslab
+
+# Drop IDs from a file
+gwaslab --input sumstats.tsv --exclude drop.txt --out pruned.tsv --to-fmt gwaslab
+
+# Autosomes only (example)
+gwaslab --input sumstats.tsv --chr 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 --out autosomes.tsv --to-fmt gwaslab
+
+# MAF / MAC (uses MAF, or EAF/FRQ as min(f, 1−f); MAC from column or 2×N×MAF if N present)
+gwaslab --input sumstats.tsv --maf 0.01 --max-maf 0.5 --mac 20 --out filtered.tsv --to-fmt gwaslab
+
+# SNPs only; imputation quality
+gwaslab --input sumstats.tsv --snps-only --min-info 0.8 --out qc.tsv --to-fmt gwaslab
+```
+
+**Variant filter options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--extract` | Path to file of variant IDs to **keep** (first column per line) | None |
+| `--exclude` | Path to file of variant IDs to **remove** | None |
+| `--extract-bed` | BED path: keep variants overlapping intervals (0-based half-open; uses `--build`) | None |
+| `--exclude-bed` | BED path: remove variants overlapping intervals | None |
+| `--chr` | Keep only listed chromosomes (space-separated; PLINK 2 `--chr` analog). For **`--plot regional`**, a **single** `--chr` together with `--start` and `--end` is interpreted as the plot chromosome instead of a filter | None |
+| `--maf` | Minimum MAF | None |
+| `--max-maf` | Maximum MAF | None |
+| `--mac` | Minimum MAC (uses `MAC` column, or `2 × N × MAF` when `N` and a frequency column exist) | None |
+| `--snps-only` | Keep rows where `EA` and `NEA` are single-nucleotide | False |
+| `--min-info` | Minimum **INFO** (requires a column named `INFO`, case-insensitive) | None |
 
 ### Harmonization
 
@@ -373,7 +432,10 @@ gwaslab --input sumstats.tsv --plot qq --out qq.png
 # Combined Manhattan+QQ
 gwaslab --input sumstats.tsv --plot mqq --out mqq.png
 
-# Regional
+# Regional (explicit chromosome flag)
+gwaslab --input sumstats.tsv --plot regional --plot-chr 6 --start 26000000 --end 34000000 --out region.png
+
+# Regional (legacy: one --chr with --start/--end is treated as the plot region, not a chromosome filter)
 gwaslab --input sumstats.tsv --plot regional --chr 6 --start 26000000 --end 34000000 --out region.png
 ```
 
@@ -387,30 +449,34 @@ Forest plots are not supported on the CLI; use the Python API (`gl.plot_forest()
 | `--sig-level` | Significance threshold for Manhattan/MQQ/Regional plots | `5e-8` |
 | `--ylim` | Y-axis range for Manhattan/MQQ/Regional plots (`min max`) | None |
 | `--highlight` | Variant IDs to highlight in Manhattan/MQQ/Regional plots | None |
-| `--chr`, `--start`, `--end` | Required region triplet for `--plot regional` | None |
+| `--plot-chr` | Chromosome for `--plot regional` (use with `--start`, `--end`) | None |
+| `--start`, `--end` | Genomic interval for `--plot regional` (1-based positions as in CLI) | None |
+| `--chr` | With **`--plot regional`**: if exactly **one** value is given **and** `--start`/`--end` are set, that value is the regional chromosome (same role as `--plot-chr`). With **multiple** values, or without regional plotting, `--chr` is a **variant filter** (see [Variant filters](#variant-filters-plink-style)) | None |
 
 Notes:
 - `--plot miami` is currently not available from single-input CLI mode and exits with guidance to use Python API.
 - As with liftover/assign-rsid, CLI runs `fix_chr` + `fix_pos` before plotting if `basic_check` was not run.
 
-### Extract
+### Get / variant lists
+
+**`--get`** writes lead, novel, or proxy results to `--out` / `--output` and exits (does not run the same path as `--extract` file filtering). **`--extract`** is only a variant-ID list for in-pipeline filtering (see [Variant filters](#variant-filters-plink-style)).
 
 Extract lead or novel variants:
 
 ```bash
 # Lead variants
-gwaslab --input sumstats.tsv --extract lead --out lead.tsv
+gwaslab --input sumstats.tsv --get lead --out lead.tsv
 
 # Novel variants with GWAS Catalog EFO trait(s)
-gwaslab --input sumstats.tsv --extract novel --efo EFO_0004340 --out novel.tsv
+gwaslab --input sumstats.tsv --get novel --efo EFO_0004340 --out novel.tsv
 ```
 
-**Extract Options:**
+**`--get` options:**
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--extract` | Extract mode: `lead`, `novel`, `proxy` (`proxy` not yet implemented) | None |
-| `--sig-level-extract` | P-value threshold used for extraction | `5e-8` |
+| `--get` | `lead`, `novel`, or `proxy` — write results to `--out` / `--output`, then exit (`proxy` not yet implemented) | None |
+| `--sig-level-extract` | P-value threshold for `--get` | `5e-8` |
 | `--windowsizekb` | Lead-variant window size (kb) | `500` |
 | `--efo` | One or more EFO IDs for novel extraction | None |
 | `--only-novel` | Return only truly novel hits in novel extraction | False |

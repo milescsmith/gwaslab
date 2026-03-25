@@ -357,9 +357,14 @@ class Chromosomes:
         chrom_list = self.chromosomes.copy()
         
         if add_number:
-            # Add numeric representations
+            # Add numeric representations for autosomes (1..22 for human)
             numeric_autosomes = [int(a) for a in self.autosomes if a.isdigit()]
-            chrom_list = self.chromosomes.copy() + numeric_autosomes
+            # Also add numeric X/Y/MT (e.g. 23, 24, 25 for human). FASTA titles like
+            # chrX are mapped to these via ChromosomeMapper.to_numeric; check_ref and
+            # load_and_build_fasta_records require them to be in chromlist_set or sex-chr
+            # sequences are never loaded (only string "X" was listed, not int 23).
+            numeric_sex_mt = self.get_all_sex_chromosomes_numeric()
+            chrom_list = self.chromosomes.copy() + numeric_autosomes + numeric_sex_mt
         
         return chrom_list
 

@@ -715,10 +715,29 @@ def _filter_bed(
         log.write(" -Warning: BED file is empty.", verbose=verbose)
         return sumstats if keep else sumstats.iloc[0:0].copy()
     
-    # Convert BED chromosomes to numeric (keep original 0-based coordinates)
-    bed_chr_numeric = bed_df["chrom"].apply(
-        lambda x: mapper.sumstats_to_number(str(x).strip().lstrip("chr").lstrip("CHR")) if pd.notna(x) else None
-    )
+    # Build reference layer from BED so chrX / NC_* contigs map to the same middle layer as sumstats
+    mapper.detect_reference_format(path)
+
+    def _bed_chrom_to_middle(x):
+        if pd.isna(x):
+            return pd.NA
+        s = str(x).strip()
+        n = mapper.reference_to_number(s, reference_file=path)
+        if pd.notna(n):
+            try:
+                return int(n)
+            except (TypeError, ValueError):
+                pass
+        tail = s[3:] if len(s) > 3 and s.lower().startswith("chr") else s
+        n2 = mapper.sumstats_to_number(tail)
+        if pd.notna(n2):
+            try:
+                return int(n2)
+            except (TypeError, ValueError):
+                pass
+        return pd.NA
+
+    bed_chr_numeric = bed_df["chrom"].map(_bed_chrom_to_middle)
     bed_df["_chr_num"] = bed_chr_numeric
     
     # Filter out unconvertible chromosomes

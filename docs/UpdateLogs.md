@@ -1,5 +1,12 @@
 # Update Logs
 
+# v4.1.4 20260325
+
+- CLI: PLINK-style variant filters (ID lists, BED include/exclude, `--chr`, MAF/MAC, SNPs-only, INFO); optional `fix_*` steps; `--get` lead|novel|proxy with `--extract FILE` for variant IDs
+- CLI: `--plot-chr` for regional plots so `--chr` can stay a variant filter without name clash
+- BED overlap filtering: align BED chromosomes to sumstats via the reference mapper (chrX, NC contigs, etc.)
+- Sex/MT chromosomes: numeric X/Y/MT included in chrom lists when autosomes are numeric, so FASTA-backed reference checks load those sequences
+
 # v4.1.3 20260324
 
 - CLI: implementation moved to the `gwaslab_cli` package; CLI documentation and example scripts updated accordingly

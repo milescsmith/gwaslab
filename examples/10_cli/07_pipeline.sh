@@ -124,7 +124,7 @@ gwaslab \
 gwaslab \
     --input   "$INPUT" \
     --qc \
-    --extract lead \
+    --get lead \
     --output  "output/pipeline/E_lead_variants.tsv"
 
 echo ""

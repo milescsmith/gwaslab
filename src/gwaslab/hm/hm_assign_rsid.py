@@ -23,13 +23,13 @@ where applicable and includes comprehensive logging and error handling.
 import pandas as pd
 import numpy as np
 from gwaslab.info.g_Log import Log
+from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
 import subprocess
 import shutil
 import os
 import tempfile
 from gwaslab.io.io_vcf import is_vcf_file
 from gwaslab.qc.qc_decorator import with_logging
-from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
 
 @with_logging(
     start_to_msg="assign rsID from reference",
@@ -288,7 +288,9 @@ def _assign_rsid(
         nea=nea,
         verbose=verbose,
         log=log,
-        rm_tmp_lookup=rm_tmp_lookup
+        rm_tmp_lookup=rm_tmp_lookup,
+        mapper=mapper,
+        reference_file=path_to_use if ref_mode == "vcf/bcf" else None,
     )
 
     after_missing = sumstats[rsid].isna().sum()
@@ -395,6 +397,27 @@ def _annotate_sumstats(
         sumstats_obj = sumstats
         sumstats = sumstats_obj.data
         is_dataframe = False
+
+    if mapper is None:
+        if not is_dataframe and hasattr(sumstats_obj, "mapper"):
+            mapper = sumstats_obj.mapper
+        else:
+            species = (
+                sumstats_obj.meta.get("gwaslab", {}).get("species", "homo sapiens")
+                if not is_dataframe
+                else "homo sapiens"
+            )
+            build = (
+                sumstats_obj.build
+                if not is_dataframe and hasattr(sumstats_obj, "build")
+                else None
+            )
+            mapper = ChromosomeMapper(species=species, build=build, log=log, verbose=verbose)
+            if chrom in sumstats.columns and not sumstats.empty:
+                try:
+                    mapper.detect_sumstats_format(sumstats[chrom])
+                except Exception:
+                    pass
 
     # ----------------------------------------------
     # Initialize ALLELE_FLIPPED column early (before early exit check)
@@ -521,6 +544,7 @@ def _annotate_sumstats(
     # ----------------------------------------------
     # Step 2 — assign annotation fields
     # ----------------------------------------------
+    ref_for_lookup = path_to_use if ref_mode == "vcf/bcf" else None
     sumstats = _assign_from_lookup(
         sumstats     = sumstats,
         lookup_table = lookup_tsv,
@@ -531,7 +555,9 @@ def _annotate_sumstats(
         nea          = nea,
         log          = log,
         verbose      = verbose,
-        rm_tmp_lookup=rm_tmp_lookup
+        rm_tmp_lookup=rm_tmp_lookup,
+        mapper       = mapper,
+        reference_file=ref_for_lookup,
     )
 
     # Update only if called with Sumstats object
@@ -916,8 +942,52 @@ def _extract_lookup_table_from_vcf_bcf(
     log.write(f" -Lookup table created: {out_lookup}", verbose=verbose)
     return out_lookup, rm_out_lookup
 
-import pandas as pd
-import numpy as np
+
+def _lookup_chromosome_series_to_middle(
+    series: pd.Series,
+    mapper: ChromosomeMapper,
+    reference_file: str | None = None,
+) -> pd.Series:
+    """Map lookup-table CHR values (e.g. chrX, NC_*) to middle-layer ints to match sumstats."""
+
+    def _one(v):
+        if v is None:
+            return pd.NA
+        if isinstance(v, (int, np.integer)):
+            return int(v)
+        if isinstance(v, float):
+            if np.isnan(v):
+                return pd.NA
+            return int(v)
+        s = str(v).strip()
+        if not s or s.lower() == "nan":
+            return pd.NA
+        if s.isdigit():
+            return int(s)
+        n = mapper.reference_to_number(s, reference_file=reference_file)
+        if pd.notna(n):
+            try:
+                return int(n)
+            except (TypeError, ValueError):
+                pass
+        n2 = mapper.sumstats_to_number(s)
+        if pd.notna(n2):
+            try:
+                return int(n2)
+            except (TypeError, ValueError):
+                pass
+        low = s.lower()
+        if low.startswith("chr") and len(s) > 3:
+            n3 = mapper.sumstats_to_number(s[3:])
+            if pd.notna(n3):
+                try:
+                    return int(n3)
+                except (TypeError, ValueError):
+                    pass
+        return pd.NA
+
+    return series.map(_one).astype("Int64")
+
 
 @with_logging(
     start_to_msg="assign from lookup table",
@@ -936,7 +1006,9 @@ def _assign_from_lookup(
     nea="NEA",
     verbose=True,
     log=Log(),
-    rm_tmp_lookup=False
+    rm_tmp_lookup=False,
+    mapper: ChromosomeMapper | None = None,
+    reference_file: str | None = None,
 ):
     """
     Assign annotation values from a lookup table to sumstats by matching CHR:POS:EA:NEA.
@@ -1069,13 +1141,34 @@ def _assign_from_lookup(
     # ALLELE_FLIPPED column is already initialized earlier (before early exit check)
 
     # ============================================================================
+    # Step 9b: Chromosome mapper for lookup CHR (chrX / NC_* vs numeric sumstats)
+    # ============================================================================
+    if mapper is None:
+        mapper = ChromosomeMapper(log=log, verbose=False)
+        if chrom in sumstats.columns and not sumstats.empty:
+            try:
+                mapper.detect_sumstats_format(sumstats[chrom])
+            except Exception:
+                pass
+
+    if reference_file is not None:
+        try:
+            mapper.detect_reference_format(reference_file)
+        except Exception:
+            pass
+    elif isinstance(lookup_table, str):
+        try:
+            mapper.detect_reference_format(lookup_table)
+        except Exception:
+            pass
+
+    # ============================================================================
     # Step 10: Prepare column selection and data types for chunked reading
     # ============================================================================
     # Define which columns to read from lookup table
     usecols = [chrom, pos, lookup_ea_col, lookup_nea_col] + list(assign_cols)
-    # Define data types for efficient memory usage
-    dtype = {chrom:"int64", pos:"int64",
-             lookup_ea_col:"category", lookup_nea_col:"category"}
+    # POS int64; CHR may be chrX/NC in streamed VCF-derived tables — infer CHR dtype
+    dtype = {pos: "int64", lookup_ea_col: "category", lookup_nea_col: "category"}
 
     # ============================================================================
     # Step 11: Track initial state of missing annotations
@@ -1103,8 +1196,9 @@ def _assign_from_lookup(
     # Step 14: Chunk-wise streaming processing
     # ============================================================================
     # Process lookup table in chunks to manage memory for large files
-    # Pre-compute unique chromosomes in sumstats for faster filtering
-    sumstats_chrs = set(sumstats[chrom].unique())
+    # Pre-compute unique chromosomes in sumstats for faster filtering (ints; matches normalized lookup CHR)
+    sumstats_chr_int = pd.to_numeric(sumstats[chrom], errors="coerce")
+    sumstats_chrs = {int(x) for x in sumstats_chr_int.dropna().unique()}
     
     # Iterate over chunks of the lookup table
     for chunk in pd.read_csv(
@@ -1134,19 +1228,26 @@ def _assign_from_lookup(
             
         log.write(f" -Loaded {lookup_rows:,} lookup rows...", verbose=verbose)
 
+        chunk[chrom] = _lookup_chromosome_series_to_middle(
+            chunk[chrom], mapper, reference_file=reference_file
+        )
+        chunk = chunk.loc[chunk[chrom].notna()].copy()
+        if chunk.empty:
+            continue
+
         # ========================================================================
         # Step 14c: Filter by chromosome for efficiency
         # ========================================================================
         # Only process chromosomes that exist in both sumstats and this chunk
         # This avoids unnecessary processing of non-matching chromosomes
-        chunk_chrs = set(chunk[chrom].unique())
+        chunk_chrs = {int(x) for x in chunk[chrom].unique()}
         matching_chrs = chunk_chrs & sumstats_chrs  # Set intersection
         if not matching_chrs:
             log.write(" -No matching CHR in this chunk, skipping...", verbose=verbose)
             continue
             
         # Filter sumstats to only rows with matching chromosomes
-        ss_sub = sumstats[sumstats[chrom].isin(matching_chrs)]
+        ss_sub = sumstats[sumstats_chr_int.isin(matching_chrs)]
         if ss_sub.empty:
             log.write(" -No matching CHR in this chunk, skipping...", verbose=verbose)
             continue

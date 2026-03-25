@@ -9,7 +9,7 @@
 #
 # Requires:
 #   pip install gwaslab
-#   Internet access for --extract novel (queries GWAS Catalog API)
+#   Internet access for --get novel (queries GWAS Catalog API)
 # =============================================================================
 
 set -euo pipefail
@@ -25,7 +25,7 @@ echo "=== [1] Extract lead variants (default p < 5e-8, window 500 kb) ==="
 gwaslab \
     --input   "$INPUT" \
     --qc \
-    --extract lead \
+    --get lead \
     --output  "output/06_lead_variants.tsv"
 
 echo ""
@@ -33,7 +33,7 @@ echo "=== [2] Lead variants with relaxed p-value threshold (p < 1e-5) ==="
 gwaslab \
     --input            "$INPUT" \
     --qc \
-    --extract          lead \
+    --get          lead \
     --sig-level-extract 1e-5 \
     --output           "output/06_lead_relaxed.tsv"
 
@@ -42,7 +42,7 @@ echo "=== [3] Lead variants with narrower clumping window (250 kb) ==="
 gwaslab \
     --input        "$INPUT" \
     --qc \
-    --extract      lead \
+    --get      lead \
     --windowsizekb 250 \
     --output       "output/06_lead_250kb.tsv"
 
@@ -56,7 +56,7 @@ gwaslab \
     --input   "$INPUT" \
     --qc \
     --remove \
-    --extract novel \
+    --get novel \
     --efo     EFO_0009454 \
     --output  "output/06_novel_trait1.tsv"
 
@@ -66,7 +66,7 @@ gwaslab \
     --input      "$INPUT" \
     --qc \
     --remove \
-    --extract    novel \
+    --get    novel \
     --efo        EFO_0009454 \
     --only-novel \
     --output     "output/06_novel_only.tsv"
@@ -77,7 +77,7 @@ gwaslab \
     --input   "$INPUT" \
     --qc \
     --remove \
-    --extract novel \
+    --get novel \
     --efo     EFO_0009454 EFO_0004607 \
     --output  "output/06_novel_multi_trait.tsv"
 

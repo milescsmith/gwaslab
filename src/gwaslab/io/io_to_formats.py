@@ -676,20 +676,20 @@ def _configure_output_cols_and_kwargs(sumstats, rename_dictionary, cols, no_stat
     sumstats = sumstats.rename(columns=rename_dictionary) 
 
     # configure target format args and reorder columns
-    if "format_separator" in meta_data.keys():
-        to_csvargs["sep"] = meta_data["format_separator"]
-    else:
-        to_csvargs["sep"]="\t"
-    if "format_na" in meta_data.keys():
-        to_csvargs["na_rep"] = meta_data["format_na"]
-    if "format_col_order" in meta_data.keys():
-        fixed_col =[]
-        other_col=[]
-        for i in meta_data["format_col_order"]:
+    sep = meta_data.get("format_separator")
+    to_csvargs["sep"] = sep if isinstance(sep, str) and len(sep) > 0 else "\t"
+    na_rep = meta_data.get("format_na")
+    if na_rep is not None:
+        to_csvargs["na_rep"] = na_rep
+    col_order = meta_data.get("format_col_order")
+    if col_order is not None:
+        fixed_col = []
+        other_col = []
+        for i in col_order:
             if i in sumstats.columns:
                 fixed_col.append(i)
         for i in sumstats.columns:
-            if i not in meta_data["format_col_order"]:
+            if i not in col_order:
                 other_col.append(i)
         sumstats = sumstats[fixed_col + other_col]
     log.write(" -Output columns: {}".format(",".join(sumstats.columns)),verbose=verbose)

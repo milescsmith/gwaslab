@@ -230,7 +230,6 @@ class TestReadPsam(unittest.TestCase):
         self.assertTrue(hasattr(gl, "read_psam"))
 
     @unittest.skipUnless(os.path.exists(PSAM_FILE), "psam reference file missing")
-    @unittest.expectedFailure  # formatbook expects SID/PAT/MAT columns not present in test .psam
     def test_read_psam_returns_dataframe(self):
         df = read_psam(PSAM_FILE)
         self.assertIsInstance(df, pd.DataFrame)

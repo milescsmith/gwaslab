@@ -1,8 +1,48 @@
-from typing import Dict, Any
+import gzip
+from typing import Any, Dict, Mapping, Union
+
 import pandas as pd
 from gwaslab.bd.bd_common_data import get_formats_list
 from gwaslab.info.g_Log import Log
 from gwaslab.bd.bd_common_data import get_format_dict
+
+
+def _pre_rename_dtype_map(
+    meta_data: Mapping[str, Any], dtypes: Mapping[str, Any]
+) -> Dict[Union[str, int], Any]:
+    """Map formatbook ``format_datatype`` keys to labels pandas used before rename."""
+    if "format_header" in meta_data:
+        fh = meta_data["format_header"]
+        if fh is None or fh is False:
+            out: Dict[Union[str, int], Any] = {}
+            for k, v in dtypes.items():
+                try:
+                    out[int(k)] = v
+                except (TypeError, ValueError):
+                    out[str(k)] = v
+            return out
+    return dict(dtypes)
+
+
+def _count_leading_lines_with_prefix(path: str, prefix: str) -> int:
+    """Count initial lines starting with ``prefix`` (e.g. skip VCF/PLINK2 ``##`` meta)."""
+    n = 0
+    if path.endswith(".gz"):
+        with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith(prefix):
+                    n += 1
+                else:
+                    break
+    else:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith(prefix):
+                    n += 1
+                else:
+                    break
+    return n
+
 
 def _read_tabular(path: str, fmt: str, **kwargs: Any) -> pd.DataFrame:
     
@@ -20,9 +60,21 @@ def _read_tabular(path: str, fmt: str, **kwargs: Any) -> pd.DataFrame:
     if "format_separator" in meta_data and "sep" not in kwargs:
         load_kwargs_dict["sep"] = meta_data["format_separator"]
     
-    if "format_comment" in meta_data and "comment" not in kwargs:
-        if  meta_data["format_comment"] is not None:    
-            load_kwargs_dict["comment"] = meta_data["format_comment"]
+    # format_comment: single char -> pandas ``comment=``; multi-char -> *line prefix* at file start:
+    # count consecutive leading lines starting with that string and set ``skiprows`` (no ``comment=``),
+    # since pandas only allows length-1 ``comment`` and "#" would remove the "#CHROM" header row.
+    if "format_comment" in meta_data and meta_data["format_comment"] is not None:
+        fc = meta_data["format_comment"]
+        if (
+            isinstance(fc, str)
+            and len(fc) > 1
+            and "skiprows" not in kwargs
+        ):
+            skip_n = _count_leading_lines_with_prefix(path, fc)
+            if skip_n:
+                load_kwargs_dict["skiprows"] = list(range(skip_n))
+        elif isinstance(fc, str) and len(fc) == 1 and "comment" not in kwargs:
+            load_kwargs_dict["comment"] = fc
 
     if "format_header" in meta_data and "header" not in kwargs:
         if meta_data["format_header"] is True:
@@ -40,25 +92,26 @@ def _read_tabular(path: str, fmt: str, **kwargs: Any) -> pd.DataFrame:
     df = pd.read_csv(path, **load_kwargs_dict)
     #######################################################################################
 
-    # configure header
-    if "format_header" in meta_data:
-        if meta_data["format_header"] is None:
-            num_to_name =  {}
-            for key,value in rename_dictionary.items():
-                num_to_name[int(key)] = value
+    # format_datatype keys = on-disk names before rename; only cast columns that exist
+    if "format_datatype" in meta_data:
+        dtype_map = _pre_rename_dtype_map(meta_data, meta_data["format_datatype"])
+        dtype_map = {k: v for k, v in dtype_map.items() if k in df.columns}
+        if dtype_map:
+            df = df.astype(dtype_map)
 
     # rename columns
+    # False or None => no header row was read; pandas columns are 0,1,2,... and format_dict
+    # keys are "0","1",... — convert to int so rename matches. True => file supplies names;
+    # rename_dictionary keys match those header strings.
     if "format_header" in meta_data:
-        if meta_data["format_header"] is None:
+        fh = meta_data["format_header"]
+        if fh is None or fh is False:
+            num_to_name = {int(k): v for k, v in rename_dictionary.items()}
             df = df.rename(columns=num_to_name)
         else:
             df = df.rename(columns=rename_dictionary)
     else:
         df = df.rename(columns=rename_dictionary)
-
-    # convert datatype
-    if "format_datatype" in meta_data:
-        df = df.astype(meta_data["format_datatype"])
 
     return df
 

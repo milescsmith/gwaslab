@@ -6,6 +6,8 @@ import sys
 from importlib.metadata import PackageNotFoundError, version
 from typing import Optional
 
+from gwaslab_cli.cli_banner import emit_cli_mode_banner
+
 
 def _print_version() -> None:
     """Print installed package version without importing gwaslab."""
@@ -22,6 +24,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     # Fast path for trivial commands.
     if len(argv) == 1 and argv[0] == "version":
+        emit_cli_mode_banner("gwaslab", argv, quiet=False)
         _print_version()
         return
 

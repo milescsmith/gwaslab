@@ -5,9 +5,16 @@ Simple flat CLI structure with flags for operations.
 """
 
 import argparse
+import os
 import sys
-from typing import Optional
+from typing import List, Optional
 
+import numpy as np
+import pandas as pd
+
+from gwaslab.util.util_in_filter_value import _exclude, _extract
+
+from gwaslab_cli.cli_banner import emit_cli_mode_banner
 from gwaslab_cli.handlers import (
     load_sumstats,
     run_config,
@@ -23,6 +30,159 @@ from gwaslab_cli.handlers import (
     run_init,
     run_report,
 )
+
+
+def _apply_cli_fix_steps(s, args) -> bool:
+    """Run optional Sumstats fix_* steps from CLI flags.
+
+    Returns True if both fix_chr and fix_pos were applied (so coordinates match
+    ``ensure_coords_ready()``); False otherwise.
+    """
+    verbose = not args.quiet
+    need_chr = args.fix_chr or args.fix_chr_pos or args.fix_chr_pos_allele
+    need_pos = args.fix_pos or args.fix_chr_pos or args.fix_chr_pos_allele
+    need_allele = args.fix_allele or args.fix_chr_pos_allele
+    if not (need_chr or need_pos or need_allele or args.fix_id):
+        return False
+    if need_chr:
+        s.fix_chr(verbose=verbose)
+    if need_pos:
+        s.fix_pos(verbose=verbose)
+    if need_allele:
+        s.fix_allele(verbose=verbose)
+    if args.fix_id:
+        s.fix_id(verbose=verbose)
+    return bool(need_chr and need_pos)
+
+
+def _read_variant_id_list(path: str) -> List[str]:
+    """Read one variant ID per line (first column if whitespace-separated); skip blanks and # comments."""
+    out: List[str] = []
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            out.append(line.split()[0])
+    return out
+
+
+def _variant_id_column(df: pd.DataFrame) -> Optional[str]:
+    if "SNPID" in df.columns:
+        return "SNPID"
+    if "rsID" in df.columns:
+        return "rsID"
+    return None
+
+
+def _strip_chr_token(u: str) -> str:
+    u = str(u).strip().upper()
+    return u[3:] if u.startswith("CHR") else u
+
+
+def _apply_chr_filter(s, chr_filter: List[str], verbose: bool) -> None:
+    allowed = {_strip_chr_token(t) for t in chr_filter}
+    ch = s.data["CHR"]
+    norm = ch.map(lambda x: _strip_chr_token(x) if pd.notna(x) else None)
+    mask = norm.isin(allowed)
+    before = len(s.data)
+    s.data = s.data.loc[mask].copy()
+    s.log.write(
+        f" -Chromosome filter: kept {len(s.data)} of {before} variants", verbose=verbose
+    )
+
+
+def _maf_series(df: pd.DataFrame) -> Optional[pd.Series]:
+    if "MAF" in df.columns:
+        return pd.to_numeric(df["MAF"], errors="coerce")
+    if "EAF" in df.columns:
+        e = pd.to_numeric(df["EAF"], errors="coerce")
+        return pd.Series(np.minimum(e, 1.0 - e), index=df.index)
+    if "FRQ" in df.columns:
+        e = pd.to_numeric(df["FRQ"], errors="coerce")
+        return pd.Series(np.minimum(e, 1.0 - e), index=df.index)
+    return None
+
+
+def _apply_cli_variant_filters(s, args, parser: argparse.ArgumentParser) -> None:
+    """PLINK-style variant filters (list, BED, chr, MAF/MAC, SNPs-only, INFO)."""
+    verbose = not args.quiet
+    vpath = getattr(args, "exclude", None)
+    if vpath:
+        ids = _read_variant_id_list(vpath)
+        idcol = _variant_id_column(s.data)
+        if idcol is None:
+            parser.error("--exclude requires SNPID or rsID column in sumstats")
+        s.data = _exclude(s.data, ids, id_use=idcol, log=s.log, verbose=verbose)
+    if args.extract_list_file:
+        ids = _read_variant_id_list(args.extract_list_file)
+        idcol = _variant_id_column(s.data)
+        if idcol is None:
+            parser.error("--extract list requires SNPID or rsID column in sumstats")
+        s.data = _extract(s.data, ids, id_use=idcol, log=s.log, verbose=verbose)
+    if getattr(args, "extract_bed", None):
+        p = os.path.expanduser(args.extract_bed)
+        if not os.path.isfile(p):
+            parser.error(f"--extract-bed: file not found: {args.extract_bed}")
+        s.filter_region_in(inplace=True, path=p, build=args.build, verbose=verbose)
+    if getattr(args, "exclude_bed", None):
+        p = os.path.expanduser(args.exclude_bed)
+        if not os.path.isfile(p):
+            parser.error(f"--exclude-bed: file not found: {args.exclude_bed}")
+        s.filter_region_out(inplace=True, path=p, build=args.build, verbose=verbose)
+    cf = getattr(args, "chr_filter", None)
+    if cf:
+        _apply_chr_filter(s, cf, verbose)
+    maf_s = None
+    if args.maf is not None or args.max_maf is not None or args.mac is not None:
+        maf_s = _maf_series(s.data)
+        if maf_s is None:
+            parser.error("MAF filters require MAF, EAF, or FRQ column")
+    if args.maf is not None:
+        before = len(s.data)
+        s.data = s.data.loc[maf_s >= float(args.maf)].copy()
+        s.log.write(
+            f" -MAF >= {args.maf}: {len(s.data)} of {before} variants", verbose=verbose
+        )
+        maf_s = _maf_series(s.data)
+    if args.max_maf is not None:
+        before = len(s.data)
+        s.data = s.data.loc[maf_s <= float(args.max_maf)].copy()
+        s.log.write(
+            f" -MAF <= {args.max_maf}: {len(s.data)} of {before} variants",
+            verbose=verbose,
+        )
+        maf_s = _maf_series(s.data)
+    if args.mac is not None:
+        if "MAC" in s.data.columns:
+            mac_s = pd.to_numeric(s.data["MAC"], errors="coerce")
+        elif "N" in s.data.columns and maf_s is not None:
+            n = pd.to_numeric(s.data["N"], errors="coerce")
+            mac_s = 2.0 * n * maf_s
+        else:
+            parser.error("--mac requires a MAC column or N plus MAF/EAF/FRQ")
+        before = len(s.data)
+        s.data = s.data.loc[mac_s >= float(args.mac)].copy()
+        s.log.write(
+            f" -MAC >= {args.mac}: {len(s.data)} of {before} variants", verbose=verbose
+        )
+    if getattr(args, "snps_only", False):
+        s.filter_snp(inplace=True, mode="in", verbose=verbose)
+    if args.min_info is not None:
+        info_col = None
+        for c in s.data.columns:
+            if str(c).upper() == "INFO":
+                info_col = c
+                break
+        if info_col is None:
+            parser.error("--min-info requires an INFO column")
+        before = len(s.data)
+        vals = pd.to_numeric(s.data[info_col], errors="coerce")
+        s.data = s.data.loc[vals >= float(args.min_info)].copy()
+        s.log.write(
+            f" -INFO >= {args.min_info}: {len(s.data)} of {before} variants",
+            verbose=verbose,
+        )
 
 
 def _add_download_ref_args(p: argparse.ArgumentParser) -> None:
@@ -74,16 +234,18 @@ def main(argv: Optional[list] = None) -> None:
             "GWASLab: A Python package for processing GWAS summary statistics\n"
             "\n"
             "Processing order (when multiple flags are given):\n"
-            "  1. QC            --qc / --remove / --remove-dup / --normalize\n"
-            "  2. Filter region --filter-region CHR START END (auto fix_chr+fix_pos if QC not run)\n"
-            "  3. Harmonize     --harmonize [--ref-seq ...]\n"
-            "  4. Assign rsID   --assign-rsid  (auto fix_chr+fix_pos if QC not run)\n"
-            "  5. rsID→CHR:POS  --rsid-to-chrpos\n"
-            "  6. Infer build   --infer-build\n"
-            "  7. Liftover      --liftover FROM TO  (auto fix_chr+fix_pos if QC not run)\n"
-            "  8. Plot          --plot TYPE         (auto fix_chr+fix_pos if QC not run; writes to --output, then exits)\n"
-            "  9. Extract       --extract TYPE      (writes to --output, then exits)\n"
-            " 10. Save          --output FILE [--to-fmt FORMAT]"
+            "  1. Optional fixes --fix-chr / --fix-pos / --fix-chr-pos / --fix-chr-pos-allele / --fix-allele / --fix-id\n"
+            "  2. QC            --qc / --remove / --remove-dup / --normalize\n"
+            "  3. Filter region --filter-region CHR START END (auto fix_chr+fix_pos if QC not run)\n"
+            "  4. Variant filters --extract/--exclude lists, --extract-bed/--exclude-bed, --chr, --maf/--max-maf/--mac, ...\n"
+            "  5. Harmonize     --harmonize [--ref-seq ...]\n"
+            "  6. Assign rsID   --assign-rsid  (auto fix_chr+fix_pos if QC not run)\n"
+            "  7. rsID→CHR:POS  --rsid-to-chrpos\n"
+            "  8. Infer build   --infer-build\n"
+            "  9. Liftover      --liftover FROM TO  (auto fix_chr+fix_pos if QC not run)\n"
+            " 10. Plot          --plot TYPE         (auto fix_chr+fix_pos if QC not run; writes to --output, then exits)\n"
+            " 11. Get            --get lead|novel|proxy (writes to --output, then exits)\n"
+            " 12. Save          --output FILE [--to-fmt FORMAT]"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -101,8 +263,8 @@ Examples:
   gwaslab --input sumstats.tsv --plot qq --output qq.png
 
   # Extract
-  gwaslab --input sumstats.tsv --extract lead --output leads.tsv
-  gwaslab --input sumstats.tsv --extract novel --efo EFO_0004330 --output novel.tsv
+  gwaslab --input sumstats.tsv --get lead --output leads.tsv
+  gwaslab --input sumstats.tsv --get novel --efo EFO_0004330 --output novel.tsv
 
   # Other commands
   gwaslab version
@@ -136,6 +298,36 @@ Examples:
     parser.add_argument("--qc", action="store_true", help="Perform quality control")
     parser.add_argument("--harmonize", action="store_true", help="Perform harmonization")
     parser.add_argument(
+        "--fix-chr",
+        action="store_true",
+        help="Run fix_chr() only (chromosome notation)",
+    )
+    parser.add_argument(
+        "--fix-pos",
+        action="store_true",
+        help="Run fix_pos() only (position dtype/range)",
+    )
+    parser.add_argument(
+        "--fix-chr-pos",
+        action="store_true",
+        help="Run fix_chr() then fix_pos() (same as --fix-chr --fix-pos)",
+    )
+    parser.add_argument(
+        "--fix-chr-pos-allele",
+        action="store_true",
+        help="Run fix_chr(), fix_pos(), and fix_allele()",
+    )
+    parser.add_argument(
+        "--fix-allele",
+        action="store_true",
+        help="Run fix_allele() only (allele notation)",
+    )
+    parser.add_argument(
+        "--fix-id",
+        action="store_true",
+        help="Run fix_id() only (SNPID / rsID column)",
+    )
+    parser.add_argument(
         "--assign-rsid",
         action="store_true",
         help="Assign rsID to variants (runs fix_chr+fix_pos if basic_check was not run)",
@@ -158,6 +350,65 @@ Examples:
         metavar=("CHR", "START", "END"),
         help="Filter variants to a genomic region (runs fix_chr+fix_pos if basic_check was not run)",
     )
+    parser.add_argument(
+        "--extract",
+        metavar="FILE",
+        default=None,
+        help="Variant ID list file (one ID per line); keep only these variants in the pipeline",
+    )
+    parser.add_argument(
+        "--get",
+        choices=["lead", "novel", "proxy"],
+        dest="get_mode",
+        default=None,
+        help="Write lead variants, novel associations, or proxies to --output, then exit",
+    )
+    parser.add_argument(
+        "--exclude",
+        metavar="FILE",
+        default=None,
+        help="Exclude variant IDs from this file (one per line; matches SNPID or rsID column)",
+    )
+    parser.add_argument(
+        "--extract-bed",
+        metavar="FILE",
+        default=None,
+        help="Keep variants overlapping intervals in a BED file (0-based, half-open)",
+    )
+    parser.add_argument(
+        "--exclude-bed",
+        metavar="FILE",
+        default=None,
+        help="Remove variants overlapping intervals in a BED file",
+    )
+    parser.add_argument(
+        "--chr",
+        nargs="+",
+        metavar="CHR",
+        dest="chr_filter",
+        default=None,
+        help="Keep variants on these chromosomes only (PLINK 2 --chr analog)",
+    )
+    parser.add_argument("--maf", type=float, default=None, help="Minimum MAF (uses MAF, EAF, or FRQ column)")
+    parser.add_argument("--max-maf", type=float, default=None, dest="max_maf", help="Maximum MAF")
+    parser.add_argument(
+        "--mac",
+        type=float,
+        default=None,
+        help="Minimum MAC (uses MAC column, or 2*N*MAF if N and MAF/EAF/FRQ present)",
+    )
+    parser.add_argument(
+        "--snps-only",
+        action="store_true",
+        help="Keep only SNPs (single-nucleotide EA and NEA)",
+    )
+    parser.add_argument(
+        "--min-info",
+        type=float,
+        default=None,
+        dest="min_info",
+        help="Minimum INFO score (requires INFO column)",
+    )
 
     # Plot flag
     parser.add_argument(
@@ -165,9 +416,6 @@ Examples:
         choices=["manhattan", "qq", "mqq", "regional", "miami"],
         help="Generate a plot (runs fix_chr+fix_pos if basic_check was not run)",
     )
-
-    # Extract flag
-    parser.add_argument("--extract", choices=["lead", "novel", "proxy"], help="Extract variants")
 
     # Common options
     parser.add_argument("--threads", "-t", type=int, default=1, help="Number of threads")
@@ -215,7 +463,12 @@ Examples:
     parser.add_argument("--sig-level", type=float, default=5e-8)
     parser.add_argument("--ylim", type=float, nargs=2)
     parser.add_argument("--highlight", nargs="+")
-    parser.add_argument("--chr", type=int, help="Chromosome for regional plot")
+    parser.add_argument(
+        "--plot-chr",
+        metavar="CHR",
+        default=None,
+        help="Chromosome for --plot regional (or pass a single --chr with --start/--end)",
+    )
     parser.add_argument("--start", type=int, help="Start position for regional plot")
     parser.add_argument("--end", type=int, help="End position for regional plot")
 
@@ -433,6 +686,7 @@ Examples:
     report_parser.set_defaults(func=run_report)
 
     args = parser.parse_args(argv)
+    emit_cli_mode_banner(parser.prog, argv, quiet=getattr(args, "quiet", False))
 
     # Handle subcommands
     if args.command:
@@ -443,6 +697,32 @@ Examples:
     # Require --input for main operations
     if not args.input:
         parser.error("--input is required (or use a subcommand like 'version', 'config')")
+
+    extract_list_file: Optional[str] = None
+    if args.extract is not None:
+        pe = os.path.expanduser(args.extract)
+        if not os.path.isfile(pe):
+            parser.error(f"--extract: file not found: {args.extract!r}")
+        extract_list_file = pe
+    args.extract_list_file = extract_list_file
+    args.extract_mode = args.get_mode
+
+    if args.exclude:
+        pe = os.path.expanduser(args.exclude)
+        if not os.path.isfile(pe):
+            parser.error(f"--exclude: file not found: {args.exclude!r}")
+        args.exclude = pe
+
+    if (
+        getattr(args, "plot", None) == "regional"
+        and args.plot_chr is None
+        and args.chr_filter
+        and len(args.chr_filter) == 1
+        and args.start is not None
+        and args.end is not None
+    ):
+        args.plot_chr = args.chr_filter[0]
+        args.chr_filter = None
 
     # Derive input build from --build or --liftover FROM build.
     input_build = args.build
@@ -461,6 +741,9 @@ Examples:
             s.fix_chr(verbose=not args.quiet)
             s.fix_pos(verbose=not args.quiet)
             coords_ready = True
+
+    if _apply_cli_fix_steps(s, args):
+        coords_ready = True
 
     # Processing
     if args.qc or args.remove or args.remove_dup or args.normalize:
@@ -486,6 +769,25 @@ Examples:
         if region_start > region_end:
             parser.error("--filter-region requires START <= END")
         s.filter_region(inplace=True, region=(region_chr, region_start, region_end), verbose=not args.quiet)
+
+    need_coords_for_variant_filters = bool(
+        args.extract_bed or args.exclude_bed or args.chr_filter
+    )
+    if need_coords_for_variant_filters:
+        ensure_coords_ready()
+    if (
+        args.exclude
+        or args.extract_list_file
+        or args.extract_bed
+        or args.exclude_bed
+        or args.chr_filter
+        or args.maf is not None
+        or args.max_maf is not None
+        or args.mac is not None
+        or args.snps_only
+        or args.min_info is not None
+    ):
+        _apply_cli_variant_filters(s, args, parser)
 
     if args.harmonize or args.ref_seq:
         if args.basic_check:
@@ -566,16 +868,28 @@ Examples:
         elif args.plot == "mqq":
             s.plot_mqq(mode="mqq", **plot_common_kwargs)
         elif args.plot == "regional":
-            if not all([args.chr, args.start, args.end]):
-                parser.error("--chr, --start, --end required for regional plot")
-            s.plot_mqq(mode="r", region=(args.chr, args.start, args.end), **plot_common_kwargs)
+            if args.plot_chr is None or args.start is None or args.end is None:
+                parser.error(
+                    "--plot regional requires --plot-chr, --start, and --end "
+                    "(or a single --chr CHROM together with --start and --end)"
+                )
+            reg_chr = args.plot_chr
+            try:
+                reg_chr = int(str(reg_chr))
+            except (TypeError, ValueError):
+                pass
+            s.plot_mqq(
+                mode="r",
+                region=(reg_chr, args.start, args.end),
+                **plot_common_kwargs,
+            )
         elif args.plot == "miami":
             parser.error("Miami plot requires two inputs. Use Python API: gl.plot_miami2()")
         return
 
-    # Extraction
-    if args.extract:
-        if args.extract == "lead":
+    # --get lead|novel|proxy (variant lists use --extract FILE in the filter step)
+    if args.extract_mode:
+        if args.extract_mode == "lead":
             result = s.get_lead(
                 sig_level=args.sig_level_extract,
                 windowsizekb=args.windowsizekb,
@@ -583,7 +897,7 @@ Examples:
             )
             if args.output:
                 result.to_csv(args.output, sep="\t", index=False)
-        elif args.extract == "novel":
+        elif args.extract_mode == "novel":
             result = s.get_novel(
                 efo=args.efo or False,
                 only_novel=args.only_novel,
@@ -592,7 +906,7 @@ Examples:
             )
             if args.output:
                 result.to_csv(args.output, sep="\t", index=False)
-        elif args.extract == "proxy":
+        elif args.extract_mode == "proxy":
             parser.error("Proxy extraction not yet implemented in CLI")
         return
 
