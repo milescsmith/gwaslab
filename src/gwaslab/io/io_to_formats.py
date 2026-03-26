@@ -16,7 +16,7 @@ from gwaslab.info.g_version import gwaslab_info
 
 from gwaslab.io.io_preformat_input import _print_format_info
 
-from gwaslab.bd.bd_common_data import get_format_dict
+from gwaslab.bd.bd_common_data import get_format_inverse_for_export
 from gwaslab.bd.bd_common_data import get_number_to_chr
 from gwaslab.bd.bd_common_data import get_formats_list
 from gwaslab.bd.bd_get_hapmap3 import _get_hapmap3
@@ -499,19 +499,26 @@ def tofmt(sumstats,
     elif fmt=="vcf":
         # GWAS-VCF
         log.write(" -"+fmt+" format will be loaded...",verbose=verbose)
-        meta_data,rename_dictionary = get_format_dict(fmt,inverse=True)
+        meta_data, rename_dictionary, coalesce_groups = get_format_inverse_for_export(fmt)
         _print_format_info(fmt=fmt, meta_data=meta_data,rename_dictionary=rename_dictionary,verbose=verbose, log=log, output=True, skip_meta_records=["format_fixed_header","format_contig_19","format_contig_38"])
         
-        # determine which ID to use
-        if "rsID" in sumstats.columns:
-            rename_dictionary["rsID"]="ID"
-        else:
-            rename_dictionary["SNPID"]="ID" 
+        if coalesce_groups:
+            sumstats = _apply_inverse_coalesce_for_export(sumstats, coalesce_groups)
+        coalesce_raws = {g["raw"] for g in coalesce_groups}
+
+        # Fixed VCF ID column: use rsID or SNPID only, never both (prefer rsID),
+        # unless formatbook coalesce already produced ``ID``.
+        rename_dictionary = {k: v for k, v in rename_dictionary.items() if v != "ID"}
+        if "ID" not in sumstats.columns:
+            if "rsID" in sumstats.columns:
+                rename_dictionary["rsID"] = "ID"
+            elif "SNPID" in sumstats.columns:
+                rename_dictionary["SNPID"] = "ID"
         
         # get the columns to output
         ouput_cols=[]
         for i in sumstats.columns:
-            if i in rename_dictionary.keys():
+            if i in rename_dictionary.keys() or i in coalesce_raws:
                 ouput_cols.append(i)  
         ouput_cols = ouput_cols +["STATUS"]+ cols
         sumstats = sumstats[ouput_cols]
@@ -531,6 +538,10 @@ def tofmt(sumstats,
         for i in sumstats.columns:
             if i in meta_data["format_format"]:
                 output_format.append(i)  
+
+        fixed_vcf_cols = ["#CHROM", "POS", "ID", "REF", "ALT", "INFO"]
+        _seen_fmt = set(fixed_vcf_cols)
+        format_cols = [c for c in output_format if c not in _seen_fmt]
 
         # determine path
         path = path + "."+suffix
@@ -560,8 +571,8 @@ def tofmt(sumstats,
                     REF=str(row["REF"])
                     ALT=str(row["ALT"])
                     INFO=str(row["INFO"])
-                    FORMAT=":".join(output_format)
-                    DATA=":".join(row[output_format].astype("string"))
+                    FORMAT=":".join(format_cols)
+                    DATA=":".join(row[format_cols].astype("string"))
                     file.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, DATA))
         _bgzip_tabix_md5sum(path, fmt, bgzip, md5sum, tabix, tabix_indexargs, log, verbose)
     
@@ -569,7 +580,7 @@ def tofmt(sumstats,
     elif fmt in get_formats_list() :      
         # tabular 
         log.write(" -"+fmt+" format will be loaded...",verbose=verbose)
-        meta_data,rename_dictionary = get_format_dict(fmt,inverse=True)
+        meta_data, rename_dictionary, coalesce_groups = get_format_inverse_for_export(fmt)
         _print_format_info(fmt=fmt, meta_data=meta_data,rename_dictionary=rename_dictionary,verbose=verbose, log=log, output=True)
         
         # determine if gzip or not / create path for output
@@ -581,7 +592,10 @@ def tofmt(sumstats,
         yaml_path = path + "."+suffix+".{}-meta.yaml".format(tab_fmt)
         log.write(" -Output path:",path, verbose=verbose) 
 
-        sumstats,to_csvargs = _configure_output_cols_and_kwargs(sumstats, rename_dictionary, cols, no_status, path, meta_data, to_csvargs, log, verbose)
+        sumstats,to_csvargs = _configure_output_cols_and_kwargs(
+            sumstats, rename_dictionary, cols, no_status, path, meta_data, to_csvargs, log, verbose,
+            coalesce_groups=coalesce_groups,
+        )
         
         log.write(" -Writing sumstats to: {}...".format(path),verbose=verbose)
         
@@ -629,14 +643,17 @@ def _write_tabular(sumstats,rename_dictionary, path, tab_fmt, to_csvargs, to_tab
 
 
 def fast_to_vcf(dataframe, path, vcf_header, output_format, meta_data, meta):
-    # Get the columns in the right order and convert to numpy
-    df_numpy = dataframe[['#CHROM', 'POS', 'ID', 'REF', 'ALT', 'INFO'] + output_format].to_numpy()
+    # Fixed columns + FORMAT fields; omit duplicates (e.g. ID appears in both fixed and format_format)
+    fixed_cols = ["#CHROM", "POS", "ID", "REF", "ALT", "INFO"]
+    seen = set(fixed_cols)
+    format_cols = [c for c in output_format if c not in seen]
+    df_numpy = dataframe[fixed_cols + format_cols].to_numpy()
 
     sep = '\t'
     QUAL = "."
     FILTER = "PASS"
-    FORMAT = ":".join(output_format)
-    format_format = ':'.join(['%s']*len(output_format))
+    FORMAT = ":".join(format_cols)
+    format_format = ':'.join(['%s'] * len(format_cols))
 
     single_row_format = f'%s %s %s %s %s {QUAL} {FILTER} %s {FORMAT} {format_format}'
 
@@ -650,13 +667,50 @@ def fast_to_vcf(dataframe, path, vcf_header, output_format, meta_data, meta):
     with open(path, 'w') as f:
         f.write(out_string)
 
+def _apply_inverse_coalesce_for_export(sumstats, coalesce_groups):
+    """
+    Merge GWASLab canonical columns that share one on-disk header (``format_dict`` +
+    ``format_dict_2``). Uses primary-first ``combine_first``, per formatbook reverse policy.
+    """
+    if not coalesce_groups:
+        return sumstats
+    for g in coalesce_groups:
+        raw = g["raw"]
+        order = g.get("canon_order") or []
+        present = [c for c in order if c in sumstats.columns]
+        if not present:
+            continue
+        s = sumstats[present[0]]
+        for c in present[1:]:
+            s = s.combine_first(sumstats[c])
+        sumstats = sumstats.drop(columns=present)
+        sumstats[raw] = s
+    return sumstats
+
+
 ####################################################################################################################
-def _configure_output_cols_and_kwargs(sumstats, rename_dictionary, cols, no_status, path, meta_data, to_csvargs, log, verbose):
-    # grab format cols that exist in sumstats
-    ouput_cols=[]
+def _configure_output_cols_and_kwargs(
+    sumstats,
+    rename_dictionary,
+    cols,
+    no_status,
+    path,
+    meta_data,
+    to_csvargs,
+    log,
+    verbose,
+    coalesce_groups=None,
+):
+    if coalesce_groups is None:
+        coalesce_groups = []
+    coalesce_canon = set()
+    for g in coalesce_groups:
+        coalesce_canon.update(g.get("canon_order") or [])
+    # grab format cols that exist in sumstats (including canon columns merged by coalesce)
+    ouput_cols = []
     for i in sumstats.columns:
-        if i in rename_dictionary.keys():
-            ouput_cols.append(i)  
+        if i in rename_dictionary.keys() or i in coalesce_canon:
+            ouput_cols.append(i)
     
     # + additional cols and remove duplicated
     ouput_cols_final = []
@@ -671,8 +725,9 @@ def _configure_output_cols_and_kwargs(sumstats, rename_dictionary, cols, no_stat
     except:
         pass
     
-    #filter and rename to target fromat headers
+    # filter, merge dual-mapped columns, then rename to target format headers
     sumstats = sumstats[ouput_cols_final]
+    sumstats = _apply_inverse_coalesce_for_export(sumstats, coalesce_groups)
     sumstats = sumstats.rename(columns=rename_dictionary) 
 
     # configure target format args and reorder columns

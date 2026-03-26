@@ -1,5 +1,9 @@
 # Update Logs
 
+# v4.1.5 20260326
+
+- Formatbook mapping update: ignore `null` targets in `format_dict`; add export coalescing support for `format_dict_2` (primary then secondary canonical when writing one raw header).
+
 # v4.1.4 20260325
 
 - CLI: PLINK-style variant filters (ID lists, BED include/exclude, `--chr`, MAF/MAC, SNPs-only, INFO); optional `fix_*` steps; `--get` lead|novel|proxy with `--extract FILE` for variant IDs

@@ -1,5 +1,5 @@
 import gzip
-from typing import Any, Dict, Mapping, Union
+from typing import Any, Dict, Mapping, Optional, Union
 
 import pandas as pd
 from gwaslab.bd.bd_common_data import get_formats_list
@@ -42,6 +42,59 @@ def _count_leading_lines_with_prefix(path: str, prefix: str) -> int:
                 else:
                     break
     return n
+
+
+def _multiline_header_skiprows(
+    meta_data: Mapping[str, Any],
+    load_kwargs_dict: Dict[str, Any],
+    user_kwargs: Mapping[str, Any],
+) -> None:
+    """
+    Skip trailing header rows after the column-name row (formatbook ``format_header_lines``).
+
+    Line 0 of the file (after any leading ``skiprows``) is the column header; lines
+    ``lead + 1`` … ``lead + format_header_lines - 1`` are additional header lines to skip.
+    """
+    if "skiprows" in user_kwargs:
+        return
+    raw_nl = meta_data.get("format_header_lines", 1)
+    try:
+        n_header_lines = int(raw_nl)
+    except (TypeError, ValueError):
+        return
+    if n_header_lines <= 1:
+        return
+    if "format_header" not in meta_data:
+        return
+    fh = meta_data["format_header"]
+    if fh is None or fh is False:
+        return
+
+    def _header_row_index(skiprows_val: Any) -> Optional[int]:
+        if skiprows_val is None:
+            return 0
+        if isinstance(skiprows_val, int):
+            return skiprows_val
+        if isinstance(skiprows_val, list):
+            if not skiprows_val:
+                return 0
+            if skiprows_val == list(range(len(skiprows_val))):
+                return len(skiprows_val)
+        return None
+
+    existing = load_kwargs_dict.get("skiprows")
+    lead = _header_row_index(existing)
+    if lead is None:
+        return
+    extra = list(range(lead + 1, lead + n_header_lines))
+    if not extra:
+        return
+    if existing is None:
+        load_kwargs_dict["skiprows"] = extra
+    elif isinstance(existing, int):
+        load_kwargs_dict["skiprows"] = list(range(existing)) + extra
+    else:
+        load_kwargs_dict["skiprows"] = list(existing) + extra
 
 
 def _read_tabular(path: str, fmt: str, **kwargs: Any) -> pd.DataFrame:
@@ -87,6 +140,8 @@ def _read_tabular(path: str, fmt: str, **kwargs: Any) -> pd.DataFrame:
     if "format_na" in meta_data and "na_values" not in kwargs:
         if  meta_data["format_na"] is not None:    
             load_kwargs_dict["na_values"] = meta_data["format_na"]
+
+    _multiline_header_skiprows(meta_data, load_kwargs_dict, kwargs)
 
     #######################################################################################
     df = pd.read_csv(path, **load_kwargs_dict)

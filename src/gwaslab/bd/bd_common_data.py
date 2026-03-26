@@ -439,30 +439,77 @@ def get_par(build: str = "19") -> str:
     elif build=="38":
         data_path = path.join( Path(__file__).parents[1], "data","chrx_par","chrx_par_hg38.bed.gz")
     return data_path
-def get_format_dict(fmt: str, inverse: bool = False) -> tuple:
-    """
-    Retrieve format dictionary and metadata for a specified format.
-    
-    Parameters:
-    fmt (str): Format name to look up in the format book
-    inverse (bool): If True, return inverted dictionary with value-key mapping
-    
-    Returns:
-    tuple: 
-    - dict: Metadata associated with the format
-    - dict: Format dictionary mapping fields, or inverted mapping if specified
-    """
-    #data_path =  path.dirname(__file__) + '/data/formatbook.json'
+
+
+def _read_formatbook_entry(fmt: str) -> dict:
+    """Load one format spec object from the formatbook JSON."""
     data_path = options.paths["formatbook"]
     if not path.exists(data_path):
         update_formatbook()
     dicts = json.load(open(data_path))
-    dic_meta = dicts[fmt]["meta_data"]
-    dic_dict = dicts[fmt]["format_dict"]
+    return dicts[fmt]
+
+
+def _format_dict_mapped_entries(dic_dict: dict) -> dict:
+    """Keep only raw→canonical pairs with a real canonical name (exclude JSON ``null`` / non-strings)."""
+    return {k: v for k, v in dic_dict.items() if isinstance(v, str)}
+
+
+def get_format_dict(fmt: str, inverse: bool = False) -> tuple:
+    """
+    Retrieve format dictionary and metadata for a specified format.
+
+    Parameters:
+    fmt (str): Format name to look up in the format book
+    inverse (bool): If True, return inverted dictionary with value-key mapping
+
+    Returns:
+    tuple:
+    - dict: Metadata associated with the format
+    - dict: Format dictionary mapping fields, or inverted mapping if specified
+    """
+    entry = _read_formatbook_entry(fmt)
+    dic_meta = entry["meta_data"]
+    mapped = _format_dict_mapped_entries(entry["format_dict"])
     if inverse is True:
-        inv_dic = {v: k for k, v in dic_dict.items()}
-        return dic_meta,inv_dic
-    return dic_meta, dic_dict
+        inv_dic = {v: k for k, v in mapped.items()}
+        return dic_meta, inv_dic
+    return dic_meta, mapped
+
+
+def get_format_inverse_for_export(fmt: str) -> tuple:
+    """
+    Canonical→raw rename map plus ``format_dict_2`` coalesce rules for GWASLab→target export.
+
+    Returns:
+    tuple:
+    - dict: format ``meta_data``
+    - dict: inverse rename map (canonical→raw) excluding canonicals merged via coalesce
+    - list: ``[{"raw": str, "canon_order": [primary, secondary, ...]}, ...]``
+    """
+    entry = _read_formatbook_entry(fmt)
+    dic_meta = entry["meta_data"]
+    dic_dict = entry["format_dict"]
+    mapped = _format_dict_mapped_entries(dic_dict)
+    fd2 = entry.get("format_dict_2") or {}
+    coalesce_groups = []
+    coalesce_canons = set()
+    if isinstance(fd2, dict):
+        for raw, sec in fd2.items():
+            if not isinstance(sec, str) or not sec:
+                continue
+            pri = dic_dict.get(raw)
+            if pri is None or not isinstance(pri, str) or pri == sec:
+                continue
+            coalesce_groups.append({"raw": raw, "canon_order": [pri, sec]})
+            coalesce_canons.add(pri)
+            coalesce_canons.add(sec)
+    inv_dic = {}
+    for k, v in mapped.items():
+        if v in coalesce_canons:
+            continue
+        inv_dic[v] = k
+    return dic_meta, inv_dic, coalesce_groups
 def get_formats_list() -> List[str]:
     """
     Retrieve a list of available format names from the format book.

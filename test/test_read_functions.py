@@ -272,11 +272,11 @@ class TestReadBgenSample(unittest.TestCase):
     def test_available_in_init(self):
         self.assertTrue(hasattr(gl, "read_bgen_sample"))
 
-    @unittest.expectedFailure  # 'bgen_sample' format not yet in formatbook
     def test_read_bgen_sample_returns_dataframe(self):
         df = read_bgen_sample(self.sample_file)
         self.assertIsInstance(df, pd.DataFrame)
-        self.assertGreater(len(df), 0)
+        self.assertEqual(len(df), 3)
+        self.assertNotEqual(str(df.iloc[0]["FID"]), "0")
 
 
 # ===========================================================================
