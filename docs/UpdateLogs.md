@@ -3,6 +3,8 @@
 # v4.1.5 20260326
 
 - Formatbook mapping update: ignore `null` targets in `format_dict`; add export coalescing support for `format_dict_2` (primary then secondary canonical when writing one raw header).
+- Regional plots: restored marker/`SHAPE` and VCF missing-LD behavior regressed in v4.1.3 (defaults and legend align with `region_marker_shapes` indices again; multi-ref drops reference rows from the bulk scatter as before).
+- LDSC (`_read_ld_sumstats`): `dropna` now uses only `SNP`, `Z`, `N`, `A1`, and `A2`, so extra columns that are entirely NA (e.g. after harmonization) no longer remove all rows before merging with the LD reference panel.
 
 # v4.1.4 20260325
 

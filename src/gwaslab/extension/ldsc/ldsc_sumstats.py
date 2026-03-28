@@ -245,7 +245,9 @@ def _merge_and_log(ld, sumstats, noun, log):
 
 def _read_ld_sumstats(sumstats, args, log, fh, alleles=False, dropna=True):
     #sumstats = _read_sumstats(args, log, fh, alleles=alleles, dropna=dropna)
-    sumstats = sumstats.dropna()
+    if dropna:
+        _need = [c for c in ("SNP", "Z", "N", "A1", "A2") if c in sumstats.columns]
+        sumstats = sumstats.dropna(subset=_need) if _need else sumstats.dropna()
     ref_ld = _read_ref_ld(args, log)
     n_annot = len(ref_ld.columns) - 1
     M_annot = _read_M(args, log, n_annot)

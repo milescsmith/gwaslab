@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 import random
 
@@ -11,16 +12,30 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from gwaslab.viz.viz_plot_miamiplot2 import plot_miami2
-from gwaslab.viz.viz_plot_regional2 import _plot_regional
+# regional_mode_setup / process_vcf: viz_plot_regional2; bulk scatter: draw_manhattan_panel
+from gwaslab.viz.viz_plot_regional2 import _plot_regional, regional_mode_setup, process_vcf
+from gwaslab.viz.viz_plot_manhattan_mode import draw_manhattan_panel
 from gwaslab.info.g_Log import Log
 from gwaslab.viz.viz_plot_mqqplot import _mqqplot
 from gwaslab.viz.viz_plot_trumpetplot import _plot_trumpet
 from gwaslab.viz.viz_plot_stackedregional import plot_stacked_mqq
 from gwaslab.viz.viz_plot_compare_af import plotdaf
+
+
+# Three chr1 SNPs, six samples, diploid GT — enough for allel.read_vcf(..., tabix=None)
+# and rogers_huff LD vs a chosen lead. Plain .vcf (no bgzip/tabix) keeps CI simple.
+_MINI_VCF_FOR_LD = """##fileformat=VCFv4.2
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\tS2\tS3\tS4\tS5\tS6
+1\t1000\t.\tA\tG\t.\tPASS\t.\tGT\t0/1\t0/1\t0/0\t1/1\t0/1\t0/1
+1\t1001\t.\tC\tT\t.\tPASS\t.\tGT\t0/1\t0/0\t0/1\t1/1\t0/0\t0/1
+1\t1002\t.\tG\tC\t.\tPASS\t.\tGT\t0/0\t0/1\t0/1\t1/1\t0/1\t0/0
+"""
 
 
 def make_sumstats(n=400, with_eaf=True):
@@ -481,6 +496,254 @@ class TestRelatedPlots(unittest.TestCase):
             verbose=False,
         )
         self.assertIsInstance(log, Log)
+
+    # --- Regional: SHAPE/LD palette vs seaborn markers (no VCF) + process_vcf pipeline ---
+
+    def test_regional_mode_setup_single_ref_markers_match_shape_indices(self):
+        """Single-ref markers dict keys match SHAPE column (0=no LD, 1=LD, 2=ref); palette keys 100+."""
+        df = pd.DataFrame({"LD": [100], "SHAPE": [0], "scaled_P": [1.0]})
+        ld_cols = ["#aa0000", "#00aa00", "#0000aa", "#444444", "#555555", "#666666", "#777777"]
+        shapes = ["X", "o", "^", "s"]
+        _, _, palette, style, markers, _, _ = regional_mode_setup(
+            df,
+            region_ref=[None],
+            region_ld_colors=ld_cols,
+            region_marker_shapes=shapes,
+            region_ld_colors_m=["#111111"],
+            region_ld_threshold=[0.2, 0.4, 0.6, 0.8],
+            vcf_path=None,
+            ld_path=None,
+            verbose=False,
+        )
+        self.assertEqual(style, "SHAPE")
+        self.assertEqual(markers, {0: "X", 1: "o", 2: "^"})
+        self.assertEqual(palette[100], "#aa0000")
+        self.assertEqual(palette[101], "#00aa00")
+
+    def test_regional_mode_setup_multi_ref_markers_include_missing_ld_key(self):
+        """Multi-ref: seaborn markers[0] for SHAPE=0; SHAPE=k uses list entry k (first ref = shapes[1])."""
+        df = pd.DataFrame({"LD": [200], "SHAPE": [0], "scaled_P": [1.0]})
+        ld_cols = ["#aa0000", "#00aa00", "#0000aa", "#444444", "#555555", "#666666", "#777777"]
+        shapes = ["X", "o", "^", "s", "D"]
+        _, _, _, style, markers, _, _ = regional_mode_setup(
+            df,
+            region_ref=[None, "rs2"],
+            region_ld_colors=ld_cols,
+            region_marker_shapes=shapes,
+            region_ld_colors_m=["#111111", "#222222"],
+            region_ld_threshold=[0.2, 0.4, 0.6, 0.8],
+            vcf_path=None,
+            ld_path=None,
+            verbose=False,
+        )
+        self.assertEqual(style, "SHAPE")
+        self.assertEqual(markers[0], "X")
+        self.assertEqual(markers[1], "o")
+        self.assertEqual(markers[2], "^")
+
+    def test_regional_draw_manhattan_distinct_facecolors_per_ld_hue(self):
+        """No VCF: hand-built chr_hue/LD codes and SHAPE; assert scatter facecolors and marker paths differ."""
+        fig, ax = plt.subplots(figsize=(4, 3))
+        plot_df = pd.DataFrame(
+            {
+                "i": [0.0, 1.0, 2.0],
+                "scaled_P": [2.0, 3.0, 4.0],
+                "s": [36, 36, 36],
+                "chr_hue": [100, 101, 102],
+                "SHAPE": [0, 1, 2],
+                "SNPID": ["s1", "s2", "s3"],
+                "CHR": [1, 1, 1],
+            }
+        )
+        palette = {100: "#e41a1c", 101: "#377eb8", 102: "#4daf4a"}
+        markers = {0: "X", 1: "o", 2: "^"}
+        draw_manhattan_panel(
+            ax1=ax,
+            sumstats=plot_df,
+            snpid="SNPID",
+            palette=palette,
+            marker_size=(20, 40),
+            style="SHAPE",
+            linewidth=0.5,
+            edgecolor="black",
+            legend=None,
+            scatter_kwargs={"markers": markers},
+            highlight=[],
+            highlight_chrpos=False,
+            highlight_color="#CB132D",
+            density_color=False,
+            density_range=None,
+            density_trange=(0, 10),
+            density_threshold=5,
+            density_tpalette="Blues",
+            density_palette="Reds",
+            pinpoint=[],
+            pinpoint_color="red",
+            chrom="CHR",
+            log=self.log,
+            verbose=False,
+        )
+        plt.close(fig)
+        rgbs = []
+        for coll in ax.collections:
+            fc = coll.get_facecolor()
+            if fc is not None and len(fc) > 0:
+                for row in fc:
+                    rgbs.append(tuple(np.round(row[:3], 2)))
+        unique_rgb = set(rgbs)
+        self.assertGreaterEqual(
+            len(unique_rgb),
+            3,
+            msg="Expected ≥3 distinct facecolors for three LD hue bins",
+        )
+        paths = [tuple(np.round(p.vertices.mean(axis=0), 4)) for coll in ax.collections for p in coll.get_paths()]
+        unique_path_centers = len(set(paths))
+        self.assertGreaterEqual(
+            unique_path_centers,
+            2,
+            msg="Expected multiple marker path shapes (e.g. X vs circle vs triangle)",
+        )
+
+    def test_regional_pipeline_process_vcf_ld_shape_and_manhattan(self):
+        """End-to-end regional LD: write temp VCF → process_vcf → regional_mode_setup → draw_manhattan_panel.
+
+        Covers the same path as plot_mqq(mode='r') after VCF load: LD/RSQ/SHAPE columns, lead dropped
+        from to_plot, chr_hue from LD, then sns.scatterplot hue+style. POS 2000 is absent from the VCF
+        so it stays LD=0 and SHAPE=0 (missing-LD marker) after process_vcf's missing_ld_mask.
+        """
+        fd, vcf_path = tempfile.mkstemp(suffix=".vcf")
+        os.close(fd)
+        try:
+            with open(vcf_path, "w") as fh:
+                fh.write(_MINI_VCF_FOR_LD)
+
+            # Four sumstats rows: three match VCF REF/ALT at 1000–1002; one off-panel variant at 2000 (no REFINDEX)
+            rows = []
+            for pos, nea, ea, p in [
+                (1000, "A", "G", 1e-5),
+                (1001, "C", "T", 1e-20),
+                (1002, "G", "C", 1e-8),
+                (2000, "T", "A", 1e-4),
+            ]:
+                rows.append(
+                    {
+                        "CHR": 1,
+                        "POS": pos,
+                        "NEA": nea,
+                        "EA": ea,
+                        "P": p,
+                        "SNPID": f"1:{pos}",
+                        "scaled_P": -np.log10(p),
+                    }
+                )
+            raw = pd.DataFrame(rows)
+
+            # tabix=None: allel reads the small uncompressed VCF directly (no index file).
+            out = process_vcf(
+                raw,
+                vcf_path=vcf_path,
+                region=(1, 999, 2500),
+                region_ref=[None],
+                log=self.log,
+                verbose=False,
+                pos="POS",
+                nea="NEA",
+                ea="EA",
+                region_ld_threshold=[0.2, 0.4, 0.6, 0.8],
+                vcf_chr_dict={1: "1"},
+                tabix=None,
+            )
+
+            # process_vcf output: merged LD bins (100+), RSQ, SHAPE; unmatched → LD 0, SHAPE 0
+            self.assertIn("LD", out.columns)
+            self.assertIn("SHAPE", out.columns)
+            self.assertIn("RSQ", out.columns)
+            self.assertIn(0, set(out["SHAPE"].tolist()), msg="Unmatched sumstats row should get SHAPE=0")
+            self.assertTrue((out.loc[out["POS"] == 2000, "LD"] == 0).all())
+            self.assertTrue((out.loc[out["POS"] != 2000, "LD"] >= 100).all())
+
+            # Manhattan x/size columns as _mqqplot would add after process_vcf
+            work = out.sort_values("POS").reset_index(drop=True).copy()
+            work["i"] = np.arange(len(work), dtype=float)
+            work["s"] = 40
+
+            # vcf_path set so regional_mode_setup does not overwrite LD/SHAPE with the no-VCF dummy.
+            ld_cols = [
+                "#e0e0e0",
+                "#1f77b4",
+                "#2ca02c",
+                "#d62728",
+                "#9467bd",
+                "#8c564b",
+                "#e377c2",
+            ]
+            _, _, palette, style, markers, to_plot, _ = regional_mode_setup(
+                work,
+                region_ref=[None],
+                region_ld_colors=ld_cols,
+                region_marker_shapes=["X", "o", "^", "s"],
+                region_ld_colors_m=["#000000"],
+                region_ld_threshold=[0.2, 0.4, 0.6, 0.8],
+                vcf_path=vcf_path,
+                ld_path=None,
+                verbose=False,
+            )
+
+            self.assertEqual(style, "SHAPE")
+            self.assertEqual(markers, {0: "X", 1: "o", 2: "^"})
+            self.assertEqual(len(to_plot), 3, msg="Lead SNP dropped from bulk scatter")
+            self.assertIn(0, set(to_plot["SHAPE"].tolist()))
+            self.assertIn("chr_hue", to_plot.columns)
+
+            # Same draw path as mode='r' Manhattan facet (no highlight): hue=chr_hue, style=SHAPE, markers=...
+            fig, ax = plt.subplots(figsize=(4, 3))
+            try:
+                draw_manhattan_panel(
+                    ax1=ax,
+                    sumstats=to_plot,
+                    snpid="SNPID",
+                    palette=palette,
+                    marker_size=(20, 40),
+                    style=style,
+                    linewidth=0.5,
+                    edgecolor="black",
+                    legend=None,
+                    scatter_kwargs={"markers": markers},
+                    highlight=[],
+                    highlight_chrpos=False,
+                    highlight_color="#CB132D",
+                    density_color=False,
+                    density_range=None,
+                    density_trange=(0, 10),
+                    density_threshold=5,
+                    density_tpalette="Blues",
+                    density_palette="Reds",
+                    pinpoint=[],
+                    pinpoint_color="red",
+                    chrom="CHR",
+                    log=self.log,
+                    verbose=False,
+                )
+                self.assertGreaterEqual(len(ax.collections), 1)
+                # Collect RGBA facecolors from PathCollections (LD=0 vs 101/106 must not collapse to one color)
+                rgbs = []
+                for coll in ax.collections:
+                    fc = coll.get_facecolor()
+                    if fc is not None and len(fc) > 0:
+                        for row in fc:
+                            rgbs.append(tuple(np.round(row[:3], 2)))
+                self.assertGreaterEqual(
+                    len(set(rgbs)),
+                    2,
+                    msg="Expect distinct facecolors for LD=0 vs in-panel LD bins",
+                )
+            finally:
+                plt.close(fig)
+        finally:
+            try:
+                os.unlink(vcf_path)
+            except OSError:
+                pass
 
     def test_sumstats_basic_check_and_status(self):
         # 继续添加测试：测试Sumstats.basic_check及状态记录
