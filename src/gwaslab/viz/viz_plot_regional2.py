@@ -606,7 +606,9 @@ def _plot_regional(
                 ax3.set_xticks(np.linspace(gene_track_start_i+region[1], gene_track_start_i+region[2], num=region_step))
                 ax1.set_xticks(np.linspace(gene_track_start_i+region[1], gene_track_start_i+region[2], num=region_step))
                 ax3.set_xticklabels(region_ticks,rotation=45)
-                ax1.set_xticklabels([],rotation=45)
+                # In stacked regional mode, panels share x-axis; hide labels visually
+                # instead of overriding shared ticklabel text.
+                ax1.tick_params(axis="x", which="both", labelbottom=False)
             
             if region_grid==True:
                 for i in np.linspace(gene_track_start_i+region[1], gene_track_start_i+region[2], num=region_step):

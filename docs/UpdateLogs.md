@@ -1,5 +1,9 @@
 # Update Logs
 
+# v4.1.6 20260416
+
+- Fixed stacked regional plot regressions: preserved bottom x-axis tick labels in region mode with shared x-axis and made duplicate LD-legend removal panel-specific so the first panel legend is retained.
+
 # v4.1.5 20260326
 
 - Formatbook mapping update: ignore `null` targets in `format_dict`; add export coalescing support for `format_dict_2` (primary then secondary canonical when writing one raw header).

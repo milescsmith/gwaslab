@@ -1149,7 +1149,22 @@ def _get_novel(
         if "SNPID" not in knownsig.columns:
             knownsig["SNPID"] =knownsig["CHR"].astype("string") + ":" + knownsig["POS"].astype("string")
     
-    if len(knownsig)<1:
+    if len(knownsig) < 1:
+        if efo != False:
+            log.write(
+                " -No known loci were retrieved from GWAS Catalog; "
+                "treating all extracted lead variants as novel.",
+                verbose=verbose,
+            )
+            out = allsig.copy()
+            out["NOVEL"] = True
+            if only_novel is True:
+                if output_known is True:
+                    return out, pd.DataFrame()
+                return out
+            if output_known is True:
+                return out, pd.DataFrame()
+            return out
         raise ValueError("Please input a dataframe of known loci or valid efo code")
     
     if group_key is not None:

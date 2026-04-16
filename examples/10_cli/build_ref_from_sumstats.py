@@ -114,10 +114,19 @@ def _write_vcf(variants: list[dict], sequences: dict[int, str], out_path: str) -
 
 
 def _gzip_plain_to(src: str, dst_gz: str) -> None:
+    if not os.path.isfile(src):
+        # Source may already be consumed by bgzip in fallback/retry scenarios.
+        if os.path.isfile(dst_gz):
+            return
+        raise FileNotFoundError(src)
     with open(src, "rb") as f_in:
         with gzip.open(dst_gz, "wb", compresslevel=6) as f_out:
             shutil.copyfileobj(f_in, f_out)
-    os.remove(src)
+    # Best-effort cleanup: source may already be absent in some temp-dir flows.
+    try:
+        os.remove(src)
+    except FileNotFoundError:
+        pass
 
 
 def _compress_vcf_and_tabix(vcf_plain: str, vcf_gz: str) -> None:
@@ -129,6 +138,11 @@ def _compress_vcf_and_tabix(vcf_plain: str, vcf_gz: str) -> None:
             if os.path.isfile(produced) and os.path.abspath(produced) != os.path.abspath(vcf_gz):
                 shutil.move(produced, vcf_gz)
         except subprocess.CalledProcessError:
+            produced = vcf_plain + ".gz"
+            if os.path.isfile(produced):
+                if os.path.abspath(produced) != os.path.abspath(vcf_gz):
+                    shutil.move(produced, vcf_gz)
+                return
             _gzip_plain_to(vcf_plain, vcf_gz)
     else:
         _gzip_plain_to(vcf_plain, vcf_gz)

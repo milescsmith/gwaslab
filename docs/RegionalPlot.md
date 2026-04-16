@@ -54,6 +54,9 @@ Most options are largely the same as [Manhattan plot](https://cloufield.github.i
 !!! quote "Calculation of LD r2"
     The calculation is based on [Rogers and Huff r implemented in scikit-alle](https://scikit-allel.readthedocs.io/en/stable/stats/ld.html). Variants in reference vcf file should be biallelic format. Unphased data is acceptable. AF information is not needed. Variant ID is not required. Missing genotype is allowed.
 
+!!! note "LD legend symbol"
+    In regional plots, `x` in the LD legend/markers means no LD data is available for that variant (for example, variant missing in the reference panel, allele mismatch, or LD cannot be computed).
+
 !!! note "LD Link Visualization"
     The `ld_link` option draws straight lines connecting variant pairs with high LD (r²). Key features:
     
