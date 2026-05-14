@@ -1,29 +1,25 @@
 import gc as garbage_collect
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy as sp
 import seaborn as sns
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import matplotlib.ticker as ticker
 from adjustText import adjust_text
+from allel import GenotypeArray, read_vcf, rogers_huff_r_between
+from matplotlib import patches, ticker
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from allel import GenotypeArray
-from allel import read_vcf
-from allel import rogers_huff_r_between
 
 import gwaslab as gl
-from gwaslab.bd.bd_common_data import get_chr_to_number
-from gwaslab.io.io_gtf import get_gtf
-from gwaslab.bd.bd_common_data import get_number_to_chr
-from gwaslab.bd.bd_common_data import get_recombination_rate
-from gwaslab.info.g_Log import Log
+from gwaslab.bd.bd_common_data import get_chr_to_number, get_number_to_chr, get_recombination_rate
 from gwaslab.g_Sumstats import Sumstats
-from gwaslab.io.io_to_pickle import load_data_from_pickle
-from gwaslab.io.io_to_pickle import load_pickle
-from gwaslab.util.util_in_get_sig import _anno_gene
-from gwaslab.util.util_in_get_sig import _get_sig
+from gwaslab.info.g_Log import Log
+from gwaslab.io.io_gtf import get_gtf
+from gwaslab.io.io_to_pickle import load_data_from_pickle, load_pickle
+from gwaslab.qc.qc_normalize_args import _normalize_region
+from gwaslab.util.util_in_filter_value import _filter_region
+from gwaslab.util.util_in_get_sig import _anno_gene, _get_sig
 from gwaslab.viz.viz_aux_annotate_plot import annotate_pair
 from gwaslab.viz.viz_aux_chromatin import _plot_chromatin_state
 from gwaslab.viz.viz_aux_quickfix import (
@@ -40,8 +36,8 @@ from gwaslab.viz.viz_aux_save_figure import save_figure
 from gwaslab.viz.viz_aux_style_options import set_plot_style
 from gwaslab.viz.viz_plot_credible_sets import _plot_cs
 from gwaslab.viz.viz_plot_mqqplot import _mqqplot
-from gwaslab.util.util_in_filter_value import _filter_region
-from gwaslab.qc.qc_normalize_args import _normalize_region
+
+
 def plot_stacked_mqq(   objects,
                         vcfs=None,
                         mode="r",
@@ -66,7 +62,7 @@ def plot_stacked_mqq(   objects,
                         fontsize=9,
                         font_family="Arial",
                         common_ylabel=True,
-                        build="99", 
+                        build="99",
                         save=None,
                         save_kwargs=None,
                         verbose=True,
@@ -111,17 +107,17 @@ def plot_stacked_mqq(   objects,
     - Duplicate legends are removed only when ALL panels with legends share the same lead variant
     - If any panel has a different lead variant, all legends are kept to show the differences
     """
-    
+
     log.write("Start to create stacked mqq plot by iteratively calling plot_mqq:",verbose=verbose)
     # load sumstats
-    log.write(" -Stacked plot mode:{}...".format(mode),verbose=verbose)
+    log.write(f" -Stacked plot mode:{mode}...",verbose=verbose)
 
     ##########################################################################################################################################
     # a list of modes for each panel
     if pm is None:
         pm=[]
 
-    sumstats_list = [] 
+    sumstats_list = []
     for each_object in objects:
         if type(each_object) is Sumstats:
             if "P" in each_object.data.columns or "MLOG10P" in each_object.data.columns:
@@ -148,14 +144,14 @@ def plot_stacked_mqq(   objects,
                 sumstats_list.append(each_object)
                 pm.append("m")
 
-    log.write(" -Panel mode:{}...".format(pm),verbose=verbose)
+    log.write(f" -Panel mode:{pm}...",verbose=verbose)
     ##########################################################################################################################################
 
     if common_ylabel==True:
         rr_ylabel=False
     else:
         rr_ylabel=True
-    
+
     style = set_plot_style(
         plot="plot_stacked_mqq",
         fig_kwargs=fig_kwargs if fig_kwargs is not None else fig_kwargs,
@@ -193,9 +189,8 @@ def plot_stacked_mqq(   objects,
         region_ld_legends = None  # Will be set after we know which panels are mqq
     if not title_kwargs:
         title_kwargs = {"family": font_family}
-    else:
-        if "family" not in title_kwargs.keys():
-            title_kwargs["family"] = font_family
+    elif "family" not in title_kwargs.keys():
+        title_kwargs["family"] = font_family
 
     from gwaslab.viz.viz_aux_style_options import figure_kwargs_for_vector_plot
     fig_kwargs, mqq_kwargs_scatter = figure_kwargs_for_vector_plot(save, fig_kwargs, mqq_kwargs.get("scatter_kwargs"))
@@ -206,13 +201,13 @@ def plot_stacked_mqq(   objects,
     # subplot_height : subplot height
     # figsize : Width, height in inches
     if mode=="r":
-    ##########################################################################################################################################   
+    ##########################################################################################################################################
         if not (len(vcfs)==1 or len(vcfs)==len(sumstats_list)):
             raise ValueError("Please make sure VCFs match Objects!")
-    
+
         if len(vcfs)==1:
             vcfs = vcfs *len(sumstats_list)
-    ##########################################################################################################################################    
+    ##########################################################################################################################################
         height_ratios=[]
         for index, i in enumerate(pm):
             if i =="m":
@@ -221,13 +216,13 @@ def plot_stacked_mqq(   objects,
                 height_ratios.append(cs_height)
                 vcfs[index] = "NA"
 
-        log.write(" -VCFs:{}...".format(vcfs),verbose=verbose)
+        log.write(f" -VCFs:{vcfs}...",verbose=verbose)
 
         # n: sumstats
         # +1 : gene track
         n_plot = len(sumstats_list)
         n_plot_plus_gene_track = n_plot + 1
-        
+
         if len(region_chromatin_files)>0 and mode=="r":
             #height_ratios = [1 for i in range(n_plot_plus_gene_track-1)]+[region_chromatin_height]+[gene_track_height]
             height_ratios += [region_chromatin_height]+[gene_track_height]
@@ -236,21 +231,21 @@ def plot_stacked_mqq(   objects,
         else:
             #height_ratios = [1 for i in range(n_plot_plus_gene_track-1)]+[gene_track_height]
             height_ratios += [gene_track_height]
-        
+
         if "figsize" not in fig_kwargs.keys():
             fig_kwargs["figsize"] = [16,subplot_height*n_plot_plus_gene_track]
 
-        fig, axes = plt.subplots(n_plot_plus_gene_track, 1, sharex=True, 
-                             gridspec_kw={'height_ratios': height_ratios},
+        fig, axes = plt.subplots(n_plot_plus_gene_track, 1, sharex=True,
+                             gridspec_kw={"height_ratios": height_ratios},
                              **fig_kwargs)
-        
+
         plt.subplots_adjust(hspace=region_hspace)
     elif mode=="m":
         n_plot = len(sumstats_list)
         if "figsize" not in fig_kwargs.keys():
             fig_kwargs["figsize"] = [10,subplot_height*n_plot]
-        fig, axes = plt.subplots(n_plot, 1, sharex=True, 
-                             gridspec_kw={'height_ratios': [1 for i in range(n_plot)]},
+        fig, axes = plt.subplots(n_plot, 1, sharex=True,
+                             gridspec_kw={"height_ratios": [1 for i in range(n_plot)]},
                              **fig_kwargs)
         plt.subplots_adjust(hspace=region_hspace)
         vcfs = [None for i in range(n_plot)]
@@ -258,9 +253,9 @@ def plot_stacked_mqq(   objects,
         n_plot = len(objects)
         if "figsize" not in fig_kwargs.keys():
             fig_kwargs["figsize"] = [10,subplot_height*n_plot]
-        fig, axes = plt.subplots(n_plot, 2, sharex=True, 
-                             gridspec_kw={'height_ratios': [1 for i in range(n_plot)],
-                                          'width_ratios':[mqqratio,1]},
+        fig, axes = plt.subplots(n_plot, 2, sharex=True,
+                             gridspec_kw={"height_ratios": [1 for i in range(n_plot)],
+                                          "width_ratios":[mqqratio,1]},
                                           **fig_kwargs)
         plt.subplots_adjust(hspace=region_hspace)
         vcfs = [None for i in range(n_plot)]
@@ -274,7 +269,7 @@ def plot_stacked_mqq(   objects,
     if region_ld_legends is None:
         mqq_panel_indices = [i for i in range(n_plot) if pm[i] == "m"]
         region_ld_legends = mqq_panel_indices if len(mqq_panel_indices) > 0 else [0]
-    
+
     ##########################################################################################################################################
     # get x axis dict
     if mode=="m" or mode=="r":
@@ -282,7 +277,7 @@ def plot_stacked_mqq(   objects,
     else:
         _posdiccul=None
 
-    
+
     ##########################################################################################################################################
     # a dict to store lead variants of each plot
     lead_variants_is={}
@@ -300,8 +295,8 @@ def plot_stacked_mqq(   objects,
             figax = (fig,axes[index],axes[-1])
         elif mode=="mqq":
             figax = (fig,axes[index,0],axes[index,1])
-        
-        
+
+
         if index in region_ld_legends:
             region_ld_legend = True
         else:
@@ -309,7 +304,7 @@ def plot_stacked_mqq(   objects,
         axes_before_panel = set(fig.axes)
         #################################################################
         if index==0:
-            # plot last m and gene track 
+            # plot last m and gene track
             # Remove region_ld_legend and region_lead_grid from kwargs since they're set explicitly
             plot_kwargs = dict(mqq_kwargs_for_each_plot[index])
             plot_kwargs.pop("region_ld_legend", None)
@@ -337,50 +332,49 @@ def plot_stacked_mqq(   objects,
                             verbose=verbose,
                             log=log,
                             **plot_kwargs
-                            )  
+                            )
             lead_variants_is[index] = lead_snp_is
             lead_variants_is_color[index] = lead_snp_is_color
-        else:
-            if pm[index]=="m":
-                # plot only the scatter plot
-                # Remove region_ld_legend and region_lead_grid from kwargs since they're set explicitly
-                plot_kwargs = dict(mqq_kwargs_for_each_plot[index])
-                plot_kwargs.pop("region_ld_legend", None)
-                plot_kwargs.pop("region_lead_grid", None)
-                fig,log,lead_snp_is,lead_snp_is_color = _mqqplot(sumstats,
-                                chrom="CHR",
-                                pos="POS",
-                                p="P",
-                                region=region,
-                                mlog10p="MLOG10P",
-                                snpid="SNPID",
-                                vcf_path=vcfs[index],
-                                region_lead_grid=False,
-                                fontsize=fontsize,
-                                font_family=font_family,
-                                mode=mode,
-                                rr_ylabel=rr_ylabel,
-                                region_ld_legend=region_ld_legend,
-                                gtf_path=None,
-                                figax=figax,
-                                _get_region_lead=True,
-                                _if_quick_qc=False,
-                                _posdiccul=_posdiccul,
-                                build=build,
-                                verbose=verbose,
-                                log=log,
-                                **plot_kwargs
-                                )
-                lead_variants_is[index] = lead_snp_is
-                lead_variants_is_color[index] = lead_snp_is_color
-            elif pm[index]=="pip":
-                fig,log =_plot_cs(sumstats,
-                                  region=region,
-                                  _posdiccul=_posdiccul,
-                                  figax=figax,
-                                  log=log,
-                                  verbose=verbose,
-                                  **mqq_kwargs_for_each_plot[index])
+        elif pm[index]=="m":
+            # plot only the scatter plot
+            # Remove region_ld_legend and region_lead_grid from kwargs since they're set explicitly
+            plot_kwargs = dict(mqq_kwargs_for_each_plot[index])
+            plot_kwargs.pop("region_ld_legend", None)
+            plot_kwargs.pop("region_lead_grid", None)
+            fig,log,lead_snp_is,lead_snp_is_color = _mqqplot(sumstats,
+                            chrom="CHR",
+                            pos="POS",
+                            p="P",
+                            region=region,
+                            mlog10p="MLOG10P",
+                            snpid="SNPID",
+                            vcf_path=vcfs[index],
+                            region_lead_grid=False,
+                            fontsize=fontsize,
+                            font_family=font_family,
+                            mode=mode,
+                            rr_ylabel=rr_ylabel,
+                            region_ld_legend=region_ld_legend,
+                            gtf_path=None,
+                            figax=figax,
+                            _get_region_lead=True,
+                            _if_quick_qc=False,
+                            _posdiccul=_posdiccul,
+                            build=build,
+                            verbose=verbose,
+                            log=log,
+                            **plot_kwargs
+                            )
+            lead_variants_is[index] = lead_snp_is
+            lead_variants_is_color[index] = lead_snp_is_color
+        elif pm[index]=="pip":
+            fig,log =_plot_cs(sumstats,
+                              region=region,
+                              _posdiccul=_posdiccul,
+                              figax=figax,
+                              log=log,
+                              verbose=verbose,
+                              **mqq_kwargs_for_each_plot[index])
         # If legend is enabled for this panel, capture the new inset axis
         # created during this panel's plotting call.
         if mode == "r" and region_ld_legend:
@@ -389,7 +383,7 @@ def plot_stacked_mqq(   objects,
                 panel_ax=axes[index],
                 axes_before_panel=axes_before_panel,
             )
-    
+
     ##########################################################################################################################################
     # Check for duplicate LD legends (cbar) and remove them ONLY when ALL mqq panels share the same legend
     # Only check panels that actually have legends enabled (are in region_ld_legends)
@@ -408,50 +402,49 @@ def plot_stacked_mqq(   objects,
                 log,
                 verbose,
             )
-    
+
     if len(region_chromatin_files)>0 and mode=="r":
         xlim_i = axes[-1].get_xlim()
-        fig = _plot_chromatin_state(     region_chromatin_files = region_chromatin_files, 
+        fig = _plot_chromatin_state(     region_chromatin_files = region_chromatin_files,
                                          region_chromatin_labels = region_chromatin_labels,
-                                         region = region, 
-                                         fig = fig, 
+                                         region = region,
+                                         fig = fig,
                                          ax = axes[-2],
                                          xlim_i=xlim_i,
                                          log=log,
                                          verbose=verbose,
                                          fontsize = fontsize,
-                                         font_family = font_family)    
+                                         font_family = font_family)
     # adjust labels
-    # drop labels for each plot 
+    # drop labels for each plot
     # set a common laebl for all plots
     #if title_box is None:
     #    title_box = dict(boxstyle='square', facecolor='white', alpha=1.0, edgecolor="black")
     #    title_box = {}
 
     #if title_kwargs is None:
-    #    title_kwargs = {}   
-    #if titles is not None and mode=="r":    
+    #    title_kwargs = {}
+    #if titles is not None and mode=="r":
     #    if title_pos is None:
     #        title_pos = [0.01,0.99]
     #    for index,title in enumerate(titles):
-    #        
+    #
     #        current_text = axes[index].text(title_pos[0], title_pos[1] , title, transform=axes[index].transAxes,ha="left", va='top',zorder=999999, **title_kwargs)
     #        r = fig.canvas.get_renderer()
     #        bb = current_text.get_window_extent(renderer=r).transformed(axes[index].transAxes.inverted())
     #        width = bb.width
     #        height = bb.height
-#
     #        rect = patches.Rectangle((0.0,1.0 - height),
     #                        height=height + 0.02*2,
-    #                        width=width + 0.01*2, 
+    #                        width=width + 0.01*2,
     #                        transform=axes[index].transAxes,
-    #                        linewidth=1, 
-    #                        edgecolor='black', 
+    #                        linewidth=1,
+    #                        edgecolor='black',
     #                        facecolor='white',
     #                        alpha=1.0,
     #                        zorder=99998)
     #        axes[index].add_patch(rect)
-    #        rect.set(zorder=99998) 
+    #        rect.set(zorder=99998)
     #else:
     if title_pos is None:
         title_pos = [0.01,0.97]
@@ -467,7 +460,7 @@ def plot_stacked_mqq(   objects,
                 title,
                 transform=axes[index].transAxes,
                 ha="left",
-                va='top',
+                va="top",
                 zorder=999999,
                 **(title_kwargs or {"family": font_family, "fontsize": fontsize})
             )
@@ -477,18 +470,18 @@ def plot_stacked_mqq(   objects,
     # draw the line for lead variants
     region_lead_grid_line = mqq_kwargs.get("region_lead_grid_line", {"alpha":0.5,"linewidth" : 2,"linestyle":"--","color":"#FF0000"})
     _draw_grid_line_for_lead_variants(mode, lead_variants_is,lead_variants_is_color, n_plot, axes, region_lead_grid_line,region_chromatin_files,region_lead_grids)
-    
-    ##########################################################################################################################################  
+
+    ##########################################################################################################################################
     if common_ylabel==True:
         _drop_old_y_labels(axes, n_plot)
-        
+
         _add_new_y_label(mode, fig, gene_track_height,n_plot,subplot_height ,fontsize,font_family)
-    
+
     ##########################################################################################################################################
     save_figure(fig = fig, save = save, keyword= "stacked_" + mode, save_kwargs=save_kwargs, log = log, verbose=verbose)
-    
+
     log.write("Finished creating stacked mqq plot by iteratively calling plot_mqq.",verbose=verbose)
-    
+
     return fig, log
 
 def _remove_duplicate_ld_legends(fig, axes, mqq_panel_indices, lead_variants_is, panel_ld_legend_axes, log, verbose):
@@ -524,11 +517,11 @@ def _remove_duplicate_ld_legends(fig, axes, mqq_panel_indices, lead_variants_is,
             lead_variant_positions[idx] = tuple(sorted(lead_variants_is[idx]))
         else:
             lead_variant_positions[idx] = None
-    
+
     # Step 2: Check if ALL panels have the same lead variant positions
     # Only proceed if ALL panels have valid positions and they are ALL identical
     valid_positions = {k: v for k, v in lead_variant_positions.items() if v is not None}
-    
+
     # Condition 1: All panels must have valid positions
     # Condition 2: All positions must be identical (only one unique value)
     # If ANY panel has a different position, we keep ALL legends
@@ -551,14 +544,12 @@ def _remove_duplicate_ld_legends(fig, axes, mqq_panel_indices, lead_variants_is,
                     log=log,
                     verbose=verbose,
                 )
-        else:
-            # Panels have different legends - keep ALL legends
-            if verbose:
-                log.write(f" -Panels have different lead variant positions. Keeping all legends.", verbose=verbose)
-    else:
-        # Not all panels have valid positions
-        if verbose:
-            log.write(f" -Not all panels have valid lead variant positions. Keeping all legends.", verbose=verbose)
+        # Panels have different legends - keep ALL legends
+        elif verbose:
+            log.write(" -Panels have different lead variant positions. Keeping all legends.", verbose=verbose)
+    # Not all panels have valid positions
+    elif verbose:
+        log.write(" -Not all panels have valid lead variant positions. Keeping all legends.", verbose=verbose)
 
 def _find_panel_ld_legend_axis(fig, panel_ax, axes_before_panel):
     """Find LD legend axis created by a specific panel call."""
@@ -634,7 +625,7 @@ def _draw_grid_line_for_lead_variants(mode, lead_variants_is,lead_variants_is_co
         n_plot_and_track = n_plot+2
     else:
         n_plot_and_track = n_plot+1
-    
+
     plotted=[None]
     if mode=="r":
         for index, sig_is in lead_variants_is.items():
@@ -645,26 +636,26 @@ def _draw_grid_line_for_lead_variants(mode, lead_variants_is,lead_variants_is_co
                     except:
                         pass
                     if sig_i not in plotted:
-                        for each_axis_index in range(n_plot_and_track):  
+                        for each_axis_index in range(n_plot_and_track):
                             axes[each_axis_index].axvline(x=sig_i, zorder=2,**region_lead_grid_line)
 
 def _add_new_y_label(mode, fig, gene_track_height,n_plot,subplot_height ,fontsize,font_family):
     gene_track_height_ratio = gene_track_height/(gene_track_height + n_plot*subplot_height)
     ylabel_height = (1 - gene_track_height_ratio)*0.5 + gene_track_height_ratio
     if mode=="r":
-        fig.text(0.08, ylabel_height , "$\mathregular{-log_{10}(P)}$", va='center', rotation='vertical',
+        fig.text(0.08, ylabel_height , r"$\mathregular{-log_{10}(P)}$", va="center", rotation="vertical",
                  fontsize=fontsize,
                  family=font_family)
-        
-        fig.text(0.93, ylabel_height, "Recombination rate(cM/Mb)", va='center', rotation=-90,fontsize=fontsize,family=font_family)
+
+        fig.text(0.93, ylabel_height, r"Recombination rate(cM/Mb)", va="center", rotation=-90,fontsize=fontsize,family=font_family)
     elif mode=="m":
-        fig.text(0.08, ylabel_height , "$\mathregular{-log_{10}(P)}$", va='center', rotation='vertical',
+        fig.text(0.08, ylabel_height , r"$\mathregular{-log_{10}(P)}$", va="center", rotation="vertical",
                  fontsize=fontsize,
-                 family=font_family)    
+                 family=font_family)
 
 def _sort_kwargs(mqq_kwargs, n_plot):
     mqq_kwargs_for_each_plot={i:{} for i in range(n_plot)}
-    
+
     for key, value in mqq_kwargs.items():
         if key[-1].isnumeric():
             mqq_kwargs_for_each_plot[int(key[-1])-1][key[:-1]]=value
@@ -676,29 +667,27 @@ def _sort_kwargs(mqq_kwargs, n_plot):
 
 def _get_chrom_dic(sumstats_list,chrom="CHR",pos="POS",chrpad=0.02):
     posdiccul = {}
-    max_chr = 0 
+    max_chr = 0
     max_pos = 0
     for sumstats in sumstats_list:
         posdic = sumstats.groupby(chrom)[pos].max()
-        if sumstats[chrom].max() > max_chr:
-            max_chr = sumstats[chrom].max()
+        max_chr = max(max_chr, sumstats[chrom].max())
         if sumstats[pos].max() > max_chr:
             max_pos = sumstats[pos].max()
         # convert to dictionary
         posdic = dict(posdic)
-            
+
         # fill empty chr with 0
         for i in posdic.keys():
             if i in posdiccul.keys():
-                if posdic[i] > posdiccul[i]:
-                    posdiccul[i] = posdic[i]
+                posdiccul[i] = max(posdiccul[i], posdic[i])
             else:
                 posdiccul[i] = posdic[i]
 
     for i in range(0,max_chr+1):
-        if i in posdiccul: 
+        if i in posdiccul:
             continue
-        else: 
+        else:
             posdiccul[i]=0
             # cumulative sum dictionary
     posdiccul_raw = posdiccul.copy()

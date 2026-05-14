@@ -7,7 +7,7 @@ class Chromosomes:
     Class to manage chromosome numbers and sex chromosomes for common species.
     Uses self.chromosomes to store all chromosome identifiers.
     """
-    
+
     # Species chromosome data: (num_autosomes, sex_chromosomes, has_mitochondrial)
     # sex_chromosomes can be empty list, ["X", "Y"], or ["Z", "W"]
     _SPECIES_DATA = {
@@ -37,7 +37,7 @@ class Chromosomes:
         "arabidopsis thaliana": (None, [], True),  # Special case: autosomes are ["1", "2", "3", "4", "5"]
         "arabidopsis": (None, [], True),
     }
-    
+
     def __init__(self, species="homo sapiens"):
         """
         Initialize chromosome information for a given species.
@@ -52,19 +52,19 @@ class Chromosomes:
         self.autosomes = list()
         self.sex_chromosomes = list()
         self.mitochondrial = None
-        
+
         self._initialize_species_data()
-    
+
     def _initialize_species_data(self):
         """Initialize chromosome data based on species."""
         species_key = self.species
-        
+
         # Get species data or use default (human)
         if species_key not in self._SPECIES_DATA:
             species_key = "homo sapiens"
-        
+
         num_autosomes, sex_chr_list, has_mt = self._SPECIES_DATA[species_key]
-        
+
         # Set autosomes
         if num_autosomes is None:
             # Special cases with non-sequential autosomes
@@ -76,20 +76,20 @@ class Chromosomes:
                 self.autosomes = []
         else:
             self.autosomes = [str(i) for i in range(1, num_autosomes + 1)]
-        
+
         # Set sex chromosomes
         self.sex_chromosomes = sex_chr_list.copy()
-        
+
         # Set mitochondrial
         self.mitochondrial = "MT" if has_mt else None
-        
+
         # Build complete chromosome list
         self.chromosomes = self.autosomes.copy()
         if self.sex_chromosomes:
             self.chromosomes.extend(self.sex_chromosomes)
         if self.mitochondrial:
             self.chromosomes.append(self.mitochondrial)
-    
+
     def get_sex_chromosomes_numeric(self, xymt_num=[23, 24, 25]):
         """
         Get sex chromosomes as numeric values (for compatibility with existing code).
@@ -110,7 +110,7 @@ class Chromosomes:
             return [xymt_num[0]]  # Single sex chromosome
         else:
             return []
-    
+
     def get_all_sex_chromosomes_numeric(self, xymt_num=[23, 24, 25]):
         """
         Get all non-autosomal chromosomes (sex + mitochondrial) as numeric values.
@@ -129,7 +129,7 @@ class Chromosomes:
         if self.mitochondrial:
             return sex_chr_numeric + [xymt_num[2]]  # Add MT
         return sex_chr_numeric
-    
+
     def get_chromosome_mappings(self, xymt_num=[23, 24, 25]):
         """
         Get chromosome mappings as tuples (label, numeric_value) for x, y, mt.
@@ -146,28 +146,28 @@ class Chromosomes:
         """
         sex_chr_numeric = self.get_sex_chromosomes_numeric(xymt_num)
         all_sex_chr_numeric = self.get_all_sex_chromosomes_numeric(xymt_num)
-        
+
         # Get x mapping (first sex chromosome)
         if len(self.sex_chromosomes) >= 1:
             x = (self.sex_chromosomes[0], sex_chr_numeric[0] if len(sex_chr_numeric) > 0 else 23)
         else:
             x = ("X", 23)  # Default, won't be used if no sex chromosomes
-        
+
         # Get y mapping (second sex chromosome)
         if len(self.sex_chromosomes) >= 2:
             y = (self.sex_chromosomes[1], sex_chr_numeric[1] if len(sex_chr_numeric) > 1 else 24)
         else:
             y = ("Y", 24)  # Default, won't be used if only one or no sex chromosomes
-        
+
         # Get mt mapping (mitochondrial)
         if self.mitochondrial:
             mt_num = all_sex_chr_numeric[-1] if len(all_sex_chr_numeric) > len(sex_chr_numeric) else 25
             mt = (self.mitochondrial, mt_num)
         else:
             mt = ("MT", 25)  # Default, won't be used if no mitochondrial
-        
+
         return x, y, mt
-    
+
     def get_min_chromosome(self):
         """
         Get the minimum autosome number.
@@ -179,13 +179,13 @@ class Chromosomes:
         """
         if not self.autosomes:
             return 1
-        
+
         try:
             numeric_autosomes = [int(a) for a in self.autosomes if a.isdigit()]
             return min(numeric_autosomes) if numeric_autosomes else 1
         except:
             return 1
-    
+
     def is_sex_chromosome(self, chrom):
         """
         Check if a chromosome identifier is a sex chromosome.
@@ -202,7 +202,7 @@ class Chromosomes:
         """
         chrom_str = str(chrom).upper()
         return chrom_str in [c.upper() for c in self.sex_chromosomes]
-    
+
     def is_autosome(self, chrom):
         """
         Check if a chromosome identifier is an autosome.
@@ -219,7 +219,7 @@ class Chromosomes:
         """
         chrom_str = str(chrom)
         return chrom_str in self.autosomes
-    
+
     def is_mitochondrial(self, chrom):
         """
         Check if a chromosome identifier is mitochondrial.
@@ -236,7 +236,7 @@ class Chromosomes:
         """
         chrom_str = str(chrom).upper()
         return chrom_str == self.mitochondrial.upper() if self.mitochondrial else False
-    
+
     def get_chr_to_number_dict(self, out_chr=False, xymt_num=[23, 24, 25], max_chr=200):
         """
         Create a dictionary mapping chromosome identifiers to numeric representations.
@@ -257,7 +257,7 @@ class Chromosomes:
         """
         sex_chr_numeric = self.get_sex_chromosomes_numeric(xymt_num)
         all_sex_chr_numeric = self.get_all_sex_chromosomes_numeric(xymt_num)
-        
+
         if out_chr:
             dic = {str(i): str(i) for i in range(1, max_chr + 1)}
             # Map sex chromosomes
@@ -282,9 +282,9 @@ class Chromosomes:
                 mt_num = all_sex_chr_numeric[-1] if len(all_sex_chr_numeric) > len(sex_chr_numeric) else 25
                 dic[self.mitochondrial] = mt_num
                 dic["M"] = mt_num  # Also support "M" as alias
-        
+
         return dic
-    
+
     def get_number_to_chr_dict(self, in_chr=False, xymt_num=[23, 24, 25], prefix="", max_chr=200):
         """
         Create a dictionary mapping chromosome numbers to string representations.
@@ -307,7 +307,7 @@ class Chromosomes:
         """
         sex_chr_numeric = self.get_sex_chromosomes_numeric(xymt_num)
         all_sex_chr_numeric = self.get_all_sex_chromosomes_numeric(xymt_num)
-        
+
         if in_chr:
             dic = {str(i): prefix + str(i) for i in range(1, max_chr + 1)}
             # Map sex chromosomes
@@ -330,9 +330,9 @@ class Chromosomes:
             if self.mitochondrial:
                 mt_num = all_sex_chr_numeric[-1] if len(all_sex_chr_numeric) > len(sex_chr_numeric) else 25
                 dic[mt_num] = prefix + self.mitochondrial
-        
+
         return dic
-    
+
     def get_chr_list(self, add_number=False, only_number=False):
         """
         Generate a list of chromosome identifiers for this species.
@@ -353,9 +353,9 @@ class Chromosomes:
             # Return numeric autosomes only
             numeric_autosomes = [int(a) for a in self.autosomes if a.isdigit()]
             return numeric_autosomes if numeric_autosomes else []
-        
+
         chrom_list = self.chromosomes.copy()
-        
+
         if add_number:
             # Add numeric representations for autosomes (1..22 for human)
             numeric_autosomes = [int(a) for a in self.autosomes if a.isdigit()]
@@ -365,12 +365,14 @@ class Chromosomes:
             # sequences are never loaded (only string "X" was listed, not int 23).
             numeric_sex_mt = self.get_all_sex_chromosomes_numeric()
             chrom_list = self.chromosomes.copy() + numeric_autosomes + numeric_sex_mt
-        
+
         return chrom_list
 
 
 from typing import Optional
-def get_sex_chromosomes(species: str = "homo sapiens") -> 'Chromosomes':
+
+
+def get_sex_chromosomes(species: str = "homo sapiens") -> "Chromosomes":
     """
     Convenience function to get chromosome information for a species.
     

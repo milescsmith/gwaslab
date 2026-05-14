@@ -52,7 +52,7 @@ def test_bash_example_offline(
 
     proc = subprocess.run(
         ["bash", str(example_cli_workdir / script)],
-        cwd=str(example_cli_workdir),
+        check=False, cwd=str(example_cli_workdir),
         env=gwaslab_env,
         capture_output=True,
         text=True,
@@ -73,7 +73,7 @@ def test_bash_example_network(
     """Examples that call remote APIs or `formatbook update` / downloads."""
     proc = subprocess.run(
         ["bash", str(example_cli_workdir / script)],
-        cwd=str(example_cli_workdir),
+        check=False, cwd=str(example_cli_workdir),
         env=gwaslab_env,
         capture_output=True,
         text=True,
@@ -88,7 +88,7 @@ def test_gwaslab_module_invocation_matches_entrypoint(gwaslab_env: dict[str, str
     """`python -m gwaslab_cli.main version` should work (used by bash wrapper)."""
     proc = subprocess.run(
         [sys.executable, "-m", "gwaslab_cli.main", "version"],
-        capture_output=True,
+        check=False, capture_output=True,
         text=True,
         timeout=60,
         env=gwaslab_env,
@@ -105,7 +105,7 @@ def test_main_version_matches_subprocess(
     main(["version"])
     p = subprocess.run(
         [sys.executable, "-m", "gwaslab_cli.main", "version"],
-        capture_output=True,
+        check=False, capture_output=True,
         text=True,
         timeout=60,
         env=gwaslab_env,

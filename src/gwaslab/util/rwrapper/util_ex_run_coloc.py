@@ -1,51 +1,52 @@
-from typing import TYPE_CHECKING, Optional, Tuple, List, Any
-import subprocess
-import os
 import gc
-import pandas as pd
+import os
+import subprocess
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+
 import numpy as np
+import pandas as pd
+
+from gwaslab.extension import _check_susie_version, _checking_r_version
 from gwaslab.info.g_Log import Log
-from gwaslab.extension import _checking_r_version
-from gwaslab.extension import _check_susie_version
 
 if TYPE_CHECKING:
     from gwaslab.g_SumstatsPair import SumstatsPair
 
 def _run_coloc_susie(
-    glsp: 'SumstatsPair',
-    filepath: Optional[str],
+    glsp: "SumstatsPair",
+    filepath: str | None,
     r: str = "Rscript",
-    types: Optional[Tuple[str, str]] = None,
-    ns: Optional[Tuple[int, int]] = None,
+    types: tuple[str, str] | None = None,
+    ns: tuple[int, int] | None = None,
     fillldna: bool = True,
     delete: bool = False,
     coloc_kwargs: str = "",
     susie_kwargs: str = "",
-    ncols: Optional[Tuple[int, int]] = None,
+    ncols: tuple[int, int] | None = None,
     d1_kwargs: str = "",
     d2_kwargs: str = "",
-    out: Optional[str] = None,
+    out: str | None = None,
     log: Log = Log(),
     verbose: bool = True
 ) -> pd.DataFrame:
-    
+
     log.write("Start to run coloc.susie from command line:", verbose=verbose)
 
     if filepath is None:
         log.write(" -File path is None.", verbose=verbose)
         log.write("Finished finemapping using SuSieR.", verbose=verbose)
         return pd.DataFrame()
-    
+
     glsp.offload()
 
     if types is None:
         types = ("cc","cc")
-    log.write(" -Phenotype types: {} and {}".format(types[0],types[1]), verbose=verbose)
+    log.write(f" -Phenotype types: {types[0]} and {types[1]}", verbose=verbose)
 
     if ns is None:
         if ncols is not None:
             ns = ncols
-    log.write(" -Ns: {} and {}".format(ns[0],ns[1]), verbose=verbose)
+    log.write(f" -Ns: {ns[0]} and {ns[1]}", verbose=verbose)
 
     filelist = pd.read_csv(filepath,sep="\t")
     r_log=""
@@ -55,7 +56,7 @@ def _run_coloc_susie(
     log = _checking_r_version(r, log)
     #log = _check_susie_version(r,log)
 
-    for index, row in filelist.iterrows(): 
+    for index, row in filelist.iterrows():
         gc.collect()
         study = row["STUDY"]
         ld_r_matrix = row["LD_R_MATRIX"]
@@ -65,13 +66,13 @@ def _run_coloc_susie(
             output_prefix = sumstats.replace(".sumstats.gz","")
         else:
             output_prefix = os.path.join(out, os.path.basename(sumstats.replace(".sumstats.gz","")))
-        
+
         log.write(" -Running for: {} - {}".format(row["SNPID"],row["STUDY"] ), verbose=verbose)
-        log.write("  -Locus sumstats:{}".format(sumstats), verbose=verbose)
-        log.write("  -LD r matrix:{}".format(ld_r_matrix), verbose=verbose)
-        log.write("  -output_prefix:{}".format(output_prefix), verbose=verbose)
-        
-        rscript='''
+        log.write(f"  -Locus sumstats:{sumstats}", verbose=verbose)
+        log.write(f"  -LD r matrix:{ld_r_matrix}", verbose=verbose)
+        log.write(f"  -output_prefix:{output_prefix}", verbose=verbose)
+
+        rscript="""
         library(coloc)
         
         df = read.csv("{sumstats_path}",sep="\t",header=TRUE)
@@ -96,27 +97,27 @@ def _run_coloc_susie(
 
         write.csv(susie.res$summary, "{output_prefix}.coloc.susie", row.names = FALSE)
 
-        '''.format(sumstats_path = sumstats, 
+        """.format(sumstats_path = sumstats,
                    ld_r_matrix_path = ld_r_matrix,
                     fillna_script = "R[is.na(R)] <- 0" if fillldna==True else "",
-                    type1 = types[0], 
+                    type1 = types[0],
                     n1 =ns[0],
                     d1_kwargs = d1_kwargs,
-                    type2= types[1], 
+                    type2= types[1],
                     d2_kwargs = d2_kwargs,
                     n2= ns[1],
                     susie_kwargs = susie_kwargs,
                     coloc_kwargs = coloc_kwargs,
                     output_prefix = output_prefix)
-        
+
         log.write("  -coloc abf script: {}".format("coloc.abf(dataset1=D1,dataset2=D2)"), verbose=verbose)
         log.write("  -coloc susie script: {}".format("coloc.susie(S1,S2)"), verbose=verbose)
-        
+
         with open("_{}_{}_gwaslab_coloc_susie_temp.R".format(study,row["SNPID"]),"w") as file:
                 file.write(rscript)
 
         script_run_r = "{} _{}_{}_gwaslab_coloc_susie_temp.R".format(r, study,row["SNPID"])
-        
+
         try:
             output = subprocess.check_output(script_run_r, stderr=subprocess.STDOUT, shell=True,text=True)
             #plink_process = subprocess.Popen("exec "+script_run_r, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,text=True)
@@ -125,10 +126,10 @@ def _run_coloc_susie(
             #plink_process.kill()
             log.write(" Running coloc.SuSieR from command line...", verbose=verbose)
             r_log+= output + "\n"
-            
-            pip_cs = pd.read_csv("{}.coloc.abf".format(output_prefix))
+
+            pip_cs = pd.read_csv(f"{output_prefix}.coloc.abf")
             if len(pip_cs)==0:
-                 log.write("  -SuSieR result for {} is empty. Please check parameters.".format(output_prefix), verbose=verbose)
+                 log.write(f"  -SuSieR result for {output_prefix} is empty. Please check parameters.", verbose=verbose)
             else:
                 pip_cs["LOCUS"] = row["SNPID"]
                 pip_cs["STUDY"] = row["STUDY"]
@@ -136,28 +137,28 @@ def _run_coloc_susie(
                 pip_cs["METHOD"] = "abf"
                 locus_pip_cs = pd.concat([locus_pip_cs,pip_cs],ignore_index=True)
 
-            pip_cs = pd.read_csv("{}.coloc.susie".format(output_prefix))
+            pip_cs = pd.read_csv(f"{output_prefix}.coloc.susie")
             if len(pip_cs)==0:
-                 log.write("  -SuSieR result for {} is empty. Please check parameters.".format(output_prefix), verbose=verbose)
+                 log.write(f"  -SuSieR result for {output_prefix} is empty. Please check parameters.", verbose=verbose)
             else:
                 pip_cs["LOCUS"] = row["SNPID"]
                 pip_cs["STUDY"] = row["STUDY"]
                 pip_cs["METHOD"] = "susie"
                 locus_pip_cs = pd.concat([locus_pip_cs,pip_cs],ignore_index=True)
-            
+
             os.remove("_{}_{}_gwaslab_coloc_susie_temp.R".format(study,row["SNPID"]))
-            
+
             if delete == True:
-                os.remove("{}.coloc.susie".format(output_prefix))
-                os.remove("{}.coloc.abf".format(output_prefix))
+                os.remove(f"{output_prefix}.coloc.susie")
+                os.remove(f"{output_prefix}.coloc.abf")
             else:
-                log.write("  -coloc-abf result summary to: {}".format("{}.coloc.abf".format(output_prefix)), verbose=verbose)
-                log.write("  -coloc-susie result summary to: {}".format("{}.coloc.susie".format(output_prefix)), verbose=verbose)
-                
+                log.write("  -coloc-abf result summary to: {}".format(f"{output_prefix}.coloc.abf"), verbose=verbose)
+                log.write("  -coloc-susie result summary to: {}".format(f"{output_prefix}.coloc.susie"), verbose=verbose)
+
         except subprocess.CalledProcessError as e:
             log.write(e.output)
             os.remove("_{}_{}_gwaslab_coloc_susie_temp.R".format(study,row["SNPID"]))
-    
+
     log.write("Finished clocalization using coloc and SuSiE.", verbose=verbose)
     glsp.reload()
     return locus_pip_cs

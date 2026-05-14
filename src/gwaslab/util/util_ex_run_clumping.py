@@ -1,13 +1,15 @@
-from typing import TYPE_CHECKING, Optional, Tuple, Any
-import subprocess
-import numpy as np
 import os
-import pandas as pd
-import tempfile
 import shutil
-from gwaslab.info.g_Log import Log
-from gwaslab.io.io_plink import _process_plink_input_files, _match_sumstats_with_ref_bim
+import subprocess
+import tempfile
+from typing import TYPE_CHECKING, Any, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
 from gwaslab.extension import _checking_plink_version
+from gwaslab.info.g_Log import Log
+from gwaslab.io.io_plink import _match_sumstats_with_ref_bim, _process_plink_input_files
 from gwaslab.qc.qc_decorator import with_logging
 
 if TYPE_CHECKING:
@@ -19,27 +21,27 @@ if TYPE_CHECKING:
         start_cols=["SNPID","CHR","POS"],
         start_function=".clump()"
 )
-def _clump(gls: 'Sumstats', 
-           vcf: Optional[str] = None, 
-           scaled: bool = False, 
-           out: Optional[str] = "clumping_plink2", 
+def _clump(gls: "Sumstats",
+           vcf: str | None = None,
+           scaled: bool = False,
+           out: str | None = "clumping_plink2",
            p: str = "P",
-           mlog10p: str = "MLOG10P", 
-           overwrite: bool = False, 
-           study: Optional[str] = None, 
-           bfile: Optional[str] = None, 
-           pfile: Optional[str] = None,
-           threads: int = 1, 
-           memory: Optional[int] = None, 
-           chrom: Optional[Any] = None, 
-           clump_p1: float = 5e-8, 
-           clump_p2: float = 5e-8, 
-           clump_r2: float = 0.01, 
+           mlog10p: str = "MLOG10P",
+           overwrite: bool = False,
+           study: str | None = None,
+           bfile: str | None = None,
+           pfile: str | None = None,
+           threads: int = 1,
+           memory: int | None = None,
+           chrom: Any | None = None,
+           clump_p1: float = 5e-8,
+           clump_p2: float = 5e-8,
+           clump_r2: float = 0.01,
            clump_kb: int = 250,
            log: Log = Log(),
            verbose: bool = True,
            plink: str = "plink",
-           plink2: str = "plink2") -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+           plink2: str = "plink2") -> tuple[pd.DataFrame, pd.DataFrame, str]:
     """
     Perform LD clumping of GWAS summary statistics using PLINK2.
 
@@ -148,16 +150,16 @@ def _clump(gls: 'Sumstats',
     ... )
     """
     ##start function with col checking##########################################################
-    
+
     # Reload data if it has been offloaded
-    if not hasattr(gls, 'data'):
-        if hasattr(gls, 'reload'):
+    if not hasattr(gls, "data"):
+        if hasattr(gls, "reload"):
             gls.reload()
-    
+
     if out is None:
-        out = f"./{study}_clumpping".lstrip('/')
+        out = f"./{study}_clumpping".lstrip("/")
     else:
-        out = out.lstrip('/')
+        out = out.lstrip("/")
     sumstats_id = gls.id
     sumstats = gls.data
     gls.offload()
@@ -166,91 +168,91 @@ def _clump(gls: 'Sumstats',
     ## process reference
     log.write("Start to perform clumping...",verbose=verbose)
     log.write(" -Clumping parameters for PLINK2:",verbose=verbose)
-    log.write("  -clump_p1 : {}...".format(clump_p1),verbose=verbose)
-    log.write("  -clump_p2 : {}...".format(clump_p2),verbose=verbose)
-    log.write("  -clump_kb : {}...".format(clump_kb),verbose=verbose)
-    log.write("  -clump_r2 : {}...".format(clump_r2),verbose=verbose)
+    log.write(f"  -clump_p1 : {clump_p1}...",verbose=verbose)
+    log.write(f"  -clump_p2 : {clump_p2}...",verbose=verbose)
+    log.write(f"  -clump_kb : {clump_kb}...",verbose=verbose)
+    log.write(f"  -clump_r2 : {clump_r2}...",verbose=verbose)
     if scaled == True:
-        log.write(" -Clumping will be performed using {}".format(mlog10p),verbose=verbose)
+        log.write(f" -Clumping will be performed using {mlog10p}",verbose=verbose)
         clump_log10_p1=-np.log10(clump_p1)
         clump_log10_p2=-np.log10(clump_p2)
-        log.write("  -clump_log10_p1 : {}...".format(clump_log10_p1),verbose=verbose)
-        log.write("  -clump_log10_p2 : {}...".format(clump_log10_p2),verbose=verbose)
+        log.write(f"  -clump_log10_p1 : {clump_log10_p1}...",verbose=verbose)
+        log.write(f"  -clump_log10_p2 : {clump_log10_p2}...",verbose=verbose)
         sumstats = sumstats.loc[sumstats[mlog10p]>min(clump_log10_p1,clump_log10_p2),:].copy()
     # extract lead variants
     else:
-        log.write(" -Clumping will be performed using {}".format(p),verbose=verbose)
+        log.write(f" -Clumping will be performed using {p}",verbose=verbose)
         sumstats = sumstats.loc[sumstats[p]<max(clump_p1,clump_p2),:].copy()
 
     if len(sumstats)==0:
         log.write(" -No significant variants after filtering.")
         gls.reload()
         return pd.DataFrame(), pd.DataFrame(), ""
-    
+
     log.write(" -Significant variants on CHR: ",list(sumstats["CHR"].unique()),verbose=verbose)
-    
+
     plink_log=""
 
     # process reference file
-    bfile, plink_log, ref_bim,filetype = _process_plink_input_files(chrlist=sumstats["CHR"].unique(), 
-                                                       bfile=bfile, 
+    bfile, plink_log, ref_bim,filetype = _process_plink_input_files(chrlist=sumstats["CHR"].unique(),
+                                                       bfile=bfile,
                                                        pfile=pfile,
-                                                       vcf=vcf, 
+                                                       vcf=vcf,
                                                        threads=threads,
-                                                       plink_log=plink_log, 
+                                                       plink_log=plink_log,
                                                        log=log,
                                                        load_bim=True,
-                                                       overwrite=overwrite)           
-    
+                                                       overwrite=overwrite)
+
     # Concatenate all ref_bim dataframes into one for matching
     if len(ref_bim) > 0:
         ref_bim_all = pd.concat(ref_bim, ignore_index=True)
         # Convert CHR_bim to match sumstats CHR type (might be int or category)
         ref_bim_all["CHR_bim"] = ref_bim_all["CHR_bim"].astype(str).astype(int)
-        log.write(" -Total variants in reference BIM: {}...".format(len(ref_bim_all)),verbose=verbose)
+        log.write(f" -Total variants in reference BIM: {len(ref_bim_all)}...",verbose=verbose)
     else:
         ref_bim_all = pd.DataFrame()
         log.write(" -Warning: ref_bim is empty. Falling back to SNPID-only matching.",verbose=verbose)
-    
+
     # Match sumstats with ref_bim using helper function
     # Check if EA and NEA columns exist in sumstats for allele-based matching
     has_allele_info = "EA" in sumstats.columns and "NEA" in sumstats.columns
     n_matched = _match_sumstats_with_ref_bim(sumstats, ref_bim_all, has_allele_info, log, verbose)
-    
+
     # Create a temporary directory for all temp files
     temp_dir = tempfile.mkdtemp(prefix="gwaslab_clump_", suffix=f"_{sumstats_id}_")
-    log.write(" -Created temporary directory: {}".format(temp_dir),verbose=verbose)
-    
+    log.write(f" -Created temporary directory: {temp_dir}",verbose=verbose)
+
     ## process sumstats by CHR
     for i in sumstats["CHR"].unique():
-        log.write(" -Processing sumstats for CHR {}...".format(i),verbose=verbose)
-        
+        log.write(f" -Processing sumstats for CHR {i}...",verbose=verbose)
+
         if "@" in bfile:
             bfile_to_use = bfile.replace("@",str(i))
         else:
             bfile_to_use = bfile
-        
+
         # checking # variants
         try:
             if filetype=="bfile":
-                bim = pd.read_csv(bfile_to_use + ".bim",usecols=[1],header=None,sep="\s+")[1]
+                bim = pd.read_csv(bfile_to_use + ".bim",usecols=[1],header=None,sep=r"\s+")[1]
             else:
-                bim = pd.read_csv(bfile_to_use + ".pvar",usecols=[2],header=None,comment="#",sep="\s+")[2]
-            
+                bim = pd.read_csv(bfile_to_use + ".pvar",usecols=[2],header=None,comment="#",sep=r"\s+")[2]
+
             snplist = sumstats.loc[sumstats["CHR"]==i,"SNPID"]
-            
+
             # Use SNPID_bim for matching instead of original SNPID
             is_on_both = sumstats.loc[sumstats["CHR"]==i, "SNPID_bim"].isin(bim)
 
-            log.write(" -Variants in reference file: {}...".format(len(bim)),verbose=verbose)
-            log.write(" -Variants in sumstats: {}...".format(len(snplist)),verbose=verbose)
-            log.write(" -Variants available in both reference and sumstats: {}...".format(sum(is_on_both)),verbose=verbose)
+            log.write(f" -Variants in reference file: {len(bim)}...",verbose=verbose)
+            log.write(f" -Variants in sumstats: {len(snplist)}...",verbose=verbose)
+            log.write(f" -Variants available in both reference and sumstats: {sum(is_on_both)}...",verbose=verbose)
 
             is_avaialable_variant = (sumstats["CHR"]==i) & (sumstats["SNPID_bim"].isin(bim))
 
             # Create temp file in temp directory using tempfile
-            temp_file = os.path.join(temp_dir, "chr{}.SNPIDP".format(i))
-            
+            temp_file = os.path.join(temp_dir, f"chr{i}.SNPIDP")
+
             # Use SNPID_bim in the temp file for PLINK clump
             try:
                 if scaled == True:
@@ -258,13 +260,13 @@ def _clump(gls: 'Sumstats',
                 else:
                     sumstats.loc[is_avaialable_variant,["SNPID_bim",p]].rename(columns={"SNPID_bim":"SNPID"}).to_csv(temp_file,index=False,sep="\t")
             except Exception as e:
-                log.write(" -Error creating temp file for CHR {}: {}".format(i, str(e)),verbose=verbose)
+                log.write(f" -Error creating temp file for CHR {i}: {e!s}",verbose=verbose)
         except Exception as e:
-            log.write(" -Not available for: {}... Error: {}".format(i, str(e)),verbose=verbose)
-        
-    # create a empty dataframe for combining results from each CHR 
+            log.write(f" -Not available for: {i}... Error: {e!s}",verbose=verbose)
+
+    # create a empty dataframe for combining results from each CHR
     results = pd.DataFrame()
-    
+
     # Track clumps files for cleanup after successful reload
     clumps_files = []
 
@@ -273,13 +275,13 @@ def _clump(gls: 'Sumstats',
         for i in sumstats["CHR"].unique():
             chrom = i
             # temp file in temp directory
-            clump = os.path.join(temp_dir, "chr{}.SNPIDP".format(chrom))
+            clump = os.path.join(temp_dir, f"chr{chrom}.SNPIDP")
             # output prefix
-            out_single_chr= out + ".{}".format(chrom)
+            out_single_chr= out + f".{chrom}"
             # Track clumps file
-            clump_result_file = "{}.clumps".format(out_single_chr)
+            clump_result_file = f"{out_single_chr}.clumps"
             clumps_files.append(clump_result_file)
-            
+
             if "@" in bfile:
                 bfile_to_use = bfile.replace("@",str(i))
             else:
@@ -287,84 +289,84 @@ def _clump(gls: 'Sumstats',
 
             # Check if temp file exists before proceeding
             if not os.path.exists(clump):
-                log.write(" -Skipping clumping for CHR {}: temp file not found: {}".format(i, clump),verbose=verbose)
+                log.write(f" -Skipping clumping for CHR {i}: temp file not found: {clump}",verbose=verbose)
                 continue
-            
-            log.write(" -Performing clumping for CHR {}...".format(i),verbose=verbose)
+
+            log.write(f" -Performing clumping for CHR {i}...",verbose=verbose)
             log = _checking_plink_version(plink2=plink2, log=log)
             if memory is not None:
-                memory_flag = "--memory {}".format(memory)
+                memory_flag = f"--memory {memory}"
             else:
                 memory_flag = ""
-            
+
             if filetype=="bfile":
-                file_flag = "--bfile {}".format(bfile_to_use) 
+                file_flag = f"--bfile {bfile_to_use}"
             else:
-                file_flag = "--pfile {}".format(bfile_to_use) 
-        
+                file_flag = f"--pfile {bfile_to_use}"
+
             if scaled == True:
                 # clumping using LOG10P
-                script = """
-                {} \
-                    {}\
-                    --chr {} \
-                    --clump {} \
+                script = f"""
+                {plink2} \
+                    {file_flag}\
+                    --chr {chrom} \
+                    --clump {clump} \
                     --clump-log10 \
-                    --clump-field {} \
+                    --clump-field {mlog10p} \
                     --clump-snp-field SNPID \
-                    --clump-log10-p1 {} \
-                    --clump-log10-p2 {} \
-                    --clump-r2 {} \
-                    --clump-kb {} \
-                    --threads {} {}\
-                    --out {}
-                """.format(plink2, file_flag, chrom, clump, mlog10p,clump_log10_p1, clump_log10_p2, clump_r2, clump_kb, threads, memory_flag, out_single_chr)    
+                    --clump-log10-p1 {clump_log10_p1} \
+                    --clump-log10-p2 {clump_log10_p2} \
+                    --clump-r2 {clump_r2} \
+                    --clump-kb {clump_kb} \
+                    --threads {threads} {memory_flag}\
+                    --out {out_single_chr}
+                """
             else:
                 # clumping using P
-                script = """
-                {} \
-                    {}\
-                    --chr {} \
-                    --clump {} \
-                    --clump-field {} \
+                script = f"""
+                {plink2} \
+                    {file_flag}\
+                    --chr {chrom} \
+                    --clump {clump} \
+                    --clump-field {p} \
                     --clump-snp-field SNPID \
-                    --clump-p1 {} \
-                    --clump-p2 {} \
-                    --clump-r2 {} \
-                    --clump-kb {} \
-                    --threads {} {}\
-                    --out {}
-                """.format(plink2,file_flag, chrom, clump, p, clump_p1, clump_p2, clump_r2, clump_kb, threads, memory_flag, out_single_chr)
-            
+                    --clump-p1 {clump_p1} \
+                    --clump-p2 {clump_p2} \
+                    --clump-r2 {clump_r2} \
+                    --clump-kb {clump_kb} \
+                    --threads {threads} {memory_flag}\
+                    --out {out_single_chr}
+                """
+
             try:
                 output = subprocess.check_output(script, stderr=subprocess.STDOUT, shell=True,text=True)
-                log.write(" -Saved results for CHR {} to : {}".format(i,"{}.clumps".format(out_single_chr)),verbose=verbose)
+                log.write(" -Saved results for CHR {} to : {}".format(i,f"{out_single_chr}.clumps"),verbose=verbose)
                 plink_log +=output + "\n"
             except subprocess.CalledProcessError as e:
-                log.write(" -Error during clumping for CHR {}: {}".format(i, e.output),verbose=verbose)
+                log.write(f" -Error during clumping for CHR {i}: {e.output}",verbose=verbose)
                 plink_log += e.output + "\n"
-            
+
             # Try to read clumping results
             try:
                 if os.path.exists(clump_result_file):
-                    clumped = pd.read_csv(clump_result_file,sep="\s+")
+                    clumped = pd.read_csv(clump_result_file,sep=r"\s+")
                     results = pd.concat([results,clumped],ignore_index=True)
                 else:
-                    log.write(" -Clumping result file not found for CHR {}: {}".format(i, clump_result_file),verbose=verbose)
+                    log.write(f" -Clumping result file not found for CHR {i}: {clump_result_file}",verbose=verbose)
             except Exception as e:
-                log.write(" -Failed to read clumping results for CHR {}: {}".format(i, str(e)),verbose=verbose)
-            
+                log.write(f" -Failed to read clumping results for CHR {i}: {e!s}",verbose=verbose)
+
     finally:
         # Clean up temporary directory
         if os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
-                log.write(" -Cleaned up temporary directory: {}".format(temp_dir),verbose=verbose)
+                log.write(f" -Cleaned up temporary directory: {temp_dir}",verbose=verbose)
             except Exception as e:
-                log.write(" -Warning: Could not remove temporary directory {}: {}".format(temp_dir, str(e)),verbose=verbose)
-    
+                log.write(f" -Warning: Could not remove temporary directory {temp_dir}: {e!s}",verbose=verbose)
+
     results = results.sort_values(by=["#CHROM","POS"]).rename(columns={"#CHROM":"CHR","ID":"SNPID"})
-    
+
     # Map BIM SNPIDs back to original SNPIDs in results
     # Create a mapping from SNPID_bim to original SNPID
     if "SNPID_bim" in sumstats.columns:
@@ -372,16 +374,16 @@ def _clump(gls: 'Sumstats',
         # Update results SNPID column: if BIM SNPID exists in mapping, use original SNPID
         results["SNPID"] = results["SNPID"].map(snpid_mapping).fillna(results["SNPID"])
         log.write(" -Mapped BIM SNPIDs back to original SNPIDs in clumping results...",verbose=verbose)
-    
+
     # Filter sumstats using the mapped SNPIDs
     results_sumstats = sumstats.loc[sumstats["SNPID"].isin(results["SNPID"]),:].copy()
-    
+
     # Reload gls and clean up clumps files if successful
     # Pass clumps_files to reload() to delete them after successful reload
     gls.reload(delete_files=clumps_files)
-    
+
     return results_sumstats, results, plink_log
 
 
 
-       
+

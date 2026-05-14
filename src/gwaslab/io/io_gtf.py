@@ -1,13 +1,15 @@
-import pandas as pd
-import polars as pl
 from os import path
 from os.path import exists
-from gwaslab.info.g_Log import Log
-from gwaslab.bd.bd_download import check_and_download
+
+import pandas as pd
+import polars as pl
+
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.bd.bd_download import check_and_download
+from gwaslab.info.g_Log import Log
 
 # GTF/GFF file suffix definitions
-GTF_GFF_SUFFIXES = ('.gtf.gz', '.gff.gz', '.gtf', '.gff')
+GTF_GFF_SUFFIXES = (".gtf.gz", ".gff.gz", ".gtf", ".gff")
 
 # GTF required columns
 REQUIRED_COLUMNS = [
@@ -78,13 +80,13 @@ def read_gtf(
         DataFrame containing parsed GTF data
     """
     import re
-    
+
     if isinstance(filepath_or_buffer, str) and not exists(filepath_or_buffer):
         raise ValueError("GTF file does not exist: %s" % filepath_or_buffer)
-    
+
     if features is not None:
         features = set(features)
-    
+
     # Determine which attribute columns we need to extract
     restrict_attribute_columns = None
     if usecols is not None:
@@ -92,7 +94,7 @@ def read_gtf(
         restrict_attribute_columns = [c for c in usecols if c not in standard_cols]
         if not restrict_attribute_columns:
             restrict_attribute_columns = None
-    
+
     # Read GTF file with Polars (much faster than pandas)
     # Read all columns as strings first to handle invalid values
     # Use infer_schema_length=0 to prevent type inference and read everything as string
@@ -112,12 +114,12 @@ def read_gtf(
         if usecols is not None:
             return pd.DataFrame(columns=usecols)
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
-    
+
     if len(df) == 0:
         if usecols is not None:
             return pd.DataFrame(columns=usecols)
         return pd.DataFrame(columns=REQUIRED_COLUMNS)
-    
+
     # Convert sex chromosomes to numeric in seqname column using ChromosomeMapper
     # Convert Polars DataFrame to pandas for ChromosomeMapper, then back
     df_pd_temp = df.select("seqname").to_pandas()
@@ -128,7 +130,7 @@ def read_gtf(
     df = df.with_columns(
         pl.Series("seqname", df_pd_temp["seqname"].astype(str))
     )
-    
+
     # Early chromosome filtering for speed (before processing attributes)
     if chrom is not None:
         # Use ChromosomeMapper to normalize chromosome identifier
@@ -137,14 +139,14 @@ def read_gtf(
         mapper.detect_sumstats_format(pd.Series([chrom]))
         chrom_numeric = mapper.to_numeric(chrom)
         chrom_numeric_str = str(chrom_numeric)
-        
+
         # Also get string format for matching
         chrom_str = str(mapper.to_string(chrom_numeric))
-        
+
         # Build list of possible values to match
         # After conversion above, seqname contains numeric values (23, 24, 25 for X, Y, MT)
         chrom_values = [chrom_numeric_str, chrom_str, str(chrom)]
-        
+
         # Add common variations
         if chrom_str.upper() == "X":
             chrom_values.extend(["23", "chrX", "X"])
@@ -152,13 +154,13 @@ def read_gtf(
             chrom_values.extend(["24", "chrY", "Y"])
         elif chrom_str.upper() in ["MT", "M"]:
             chrom_values.extend(["25", "chrMT", "chrM", "MT", "M"])
-        
+
         df = df.filter(pl.col("seqname").is_in(chrom_values))
         if len(df) == 0:
             if usecols is not None:
                 return pd.DataFrame(columns=usecols)
             return pd.DataFrame(columns=REQUIRED_COLUMNS)
-    
+
     # Parse frame column (convert '.' to 0, handle nulls)
     df = df.with_columns(
         pl.col("frame")
@@ -166,7 +168,7 @@ def read_gtf(
         .map_elements(_parse_frame, return_dtype=pl.Int8)
         .alias("frame")
     )
-    
+
     # Convert numeric columns, handling nulls and invalid values
     # Replace invalid values (like 'X') with null before casting
     df = df.with_columns([
@@ -189,7 +191,7 @@ def read_gtf(
         .cast(pl.Float32)
         .alias("score"),
     ])
-    
+
     # Early feature filtering
     if features is not None:
         df = df.filter(pl.col("feature").is_in(list(features)))
@@ -197,7 +199,7 @@ def read_gtf(
             if usecols is not None:
                 return pd.DataFrame(columns=usecols)
             return pd.DataFrame(columns=REQUIRED_COLUMNS)
-    
+
     # Expand attributes if needed
     if expand_attribute_column and "attribute" in df.columns:
         # Fix broken quotes first (handles some Ensembl GTF issues)
@@ -207,33 +209,33 @@ def read_gtf(
             .str.replace_all(";-", "-")
             .alias("attribute")
         )
-        
+
         # Convert to pandas temporarily for attribute parsing (Polars string ops are limited)
         # This is still faster overall because Polars reads the file much faster
         df_pd = df.to_pandas()
-        
+
         # Parse attributes using string operations (faster than regex)
         expanded_dict = {}
         attr_series = df_pd["attribute"]
-        
+
         # Determine which attributes to extract
         if restrict_attribute_columns is None:
             # Find all unique keys in attributes
             all_keys = set()
             for attr_str in attr_series:
                 if attr_str:
-                    pairs = attr_str.split(';')
+                    pairs = attr_str.split(";")
                     for pair in pairs:
                         pair = pair.strip()
                         if pair:
-                            space_idx = pair.find(' ')
+                            space_idx = pair.find(" ")
                             if space_idx > 0:
                                 key = pair[:space_idx].strip()
                                 all_keys.add(key)
             keys_to_extract = list(all_keys)
         else:
             keys_to_extract = list(restrict_attribute_columns)
-        
+
         # Extract each attribute
         for key in keys_to_extract:
             values = []
@@ -241,13 +243,13 @@ def read_gtf(
                 if not attr_str:
                     values.append(None)
                     continue
-                
+
                 # Find all occurrences of this key
                 found_values = []
-                pairs = attr_str.split(';')
+                pairs = attr_str.split(";")
                 for pair in pairs:
                     pair = pair.strip()
-                    if pair.startswith(key + ' '):
+                    if pair.startswith(key + " "):
                         # Extract value
                         value = pair[len(key):].strip()
                         # Remove quotes
@@ -256,22 +258,22 @@ def read_gtf(
                         elif value.startswith('"'):
                             value = value[1:]
                         found_values.append(value)
-                
+
                 if found_values:
-                    values.append(','.join(found_values))
+                    values.append(",".join(found_values))
                 else:
                     values.append(None)
-            
+
             expanded_dict[key] = values
-        
+
         # Drop attribute column and add expanded columns
         df_pd = df_pd.drop("attribute", axis=1)
         for column_name, values in expanded_dict.items():
             df_pd[column_name] = values
-        
+
         # Convert back to Polars
         df = pl.from_pandas(df_pd)
-    
+
     # Infer biotype column if requested
     if infer_biotype_column:
         if "protein_coding" in df["source"].unique().to_list():
@@ -279,12 +281,12 @@ def read_gtf(
                 df = df.with_columns(pl.col("source").alias("gene_biotype"))
             if "transcript_biotype" not in df.columns:
                 df = df.with_columns(pl.col("source").alias("transcript_biotype"))
-    
+
     # Select only requested columns
     if usecols is not None:
         available_cols = [c for c in usecols if c in df.columns]
         df = df.select(available_cols)
-    
+
     # Convert to pandas for compatibility
     result = df.to_pandas()
     # Convert seqname from numeric ("23"/"24"/"25") to "X"/"Y"/"MT" so it matches gtf_chr_dict
@@ -340,17 +342,17 @@ def get_gtf(chrom, build="19", source="ensembl", if_return_path=False):
         If if_return_path is True: tuple of (GTF data, file path)
     """
     cache_key = f"{build}_{source}_{chrom}"
-    
+
     if cache_key in _GTF_CACHE:
         gtf = _GTF_CACHE[cache_key].copy()
         if if_return_path:
             data_path = _GTF_PATH_CACHE.get(cache_key, None)
             return gtf, data_path
         return gtf
-    
+
     gtf = None
     data_path = None
-    
+
     if source == "ensembl":
         if build == "19":
             data_path = check_and_download("ensembl_hg19_gtf")
@@ -389,7 +391,7 @@ def get_gtf(chrom, build="19", source="ensembl", if_return_path=False):
         mapper = ChromosomeMapper(species="homo sapiens", build=build)
         mapper.detect_sumstats_format(pd.Series([chrom]))
         chrom_NC = mapper.to_nc(chrom)
-        
+
         if build == "19":
             data_path = check_and_download("refseq_hg19_gtf")
             # Filter by chromosome early for speed
@@ -445,11 +447,11 @@ def get_gtf(chrom, build="19", source="ensembl", if_return_path=False):
                 "gene_name",
             ]
         )
-    
+
     _GTF_CACHE[cache_key] = gtf.copy()
     if data_path is not None:
         _GTF_PATH_CACHE[cache_key] = data_path
-    
+
     # Return based on if_return_path flag
     if if_return_path:
         return gtf, data_path
@@ -459,7 +461,7 @@ def gtf_to_protein_coding(gtfpath, log=Log(), verbose=True):
     protein_coding_path = gtfpath[:-6] + "protein_coding.gtf.gz"
     if not path.isfile(protein_coding_path):
         log.write(
-            " - Extracting protein_coding genes from {}".format(gtfpath),
+            f" - Extracting protein_coding genes from {gtfpath}",
             verbose=verbose,
         )
         gtf = read_gtf(
@@ -474,7 +476,7 @@ def gtf_to_protein_coding(gtfpath, log=Log(), verbose=True):
             .values
         )
         log.write(
-            " - Loaded {} protein_coding genes.".format(len(gene_list)),
+            f" - Loaded {len(gene_list)} protein_coding genes.",
             verbose=verbose,
         )
         gtf_raw = pd.read_csv(gtfpath, sep="\t", header=None, comment="#", dtype="string")
@@ -482,7 +484,7 @@ def gtf_to_protein_coding(gtfpath, log=Log(), verbose=True):
         gtf_raw = gtf_raw.loc[gtf_raw["_gene_id"].isin(gene_list), :]
         gtf_raw = gtf_raw.drop("_gene_id", axis=1)
         log.write(
-            " - Extracted records are saved to : {} ".format(protein_coding_path),
+            f" - Extracted records are saved to : {protein_coding_path} ",
             verbose=verbose,
         )
         gtf_raw.to_csv(protein_coding_path, header=None, index=None, sep="\t")
@@ -491,19 +493,19 @@ def gtf_to_protein_coding(gtfpath, log=Log(), verbose=True):
 def gtf_to_all_gene(gtfpath, log=Log(), verbose=True):
     all_gene_path = gtfpath[:-6] + "all_genes.gtf.gz"
     if not path.isfile(all_gene_path):
-        log.write(" - Extracting genes from {}".format(gtfpath), verbose=verbose)
+        log.write(f" - Extracting genes from {gtfpath}", verbose=verbose)
         gtf = read_gtf(
             gtfpath,
             usecols=["feature", "gene_biotype", "gene_id", "gene_name"],
         )
         gene_list = gtf.loc[gtf["feature"] == "gene", "gene_id"].values
-        log.write(" - Loaded {} genes.".format(len(gene_list)), verbose=verbose)
+        log.write(f" - Loaded {len(gene_list)} genes.", verbose=verbose)
         gtf_raw = pd.read_csv(gtfpath, sep="\t", header=None, comment="#", dtype="string")
         gtf_raw["_gene_id"] = gtf_raw[8].str.extract(r'gene_id "([\w\.-]+)"')
         gtf_raw = gtf_raw.loc[gtf_raw["_gene_id"].isin(gene_list), :]
         gtf_raw = gtf_raw.drop("_gene_id", axis=1)
         log.write(
-            " - Extracted records are saved to : {} ".format(all_gene_path),
+            f" - Extracted records are saved to : {all_gene_path} ",
             verbose=verbose,
         )
         gtf_raw.to_csv(all_gene_path, header=None, index=None, sep="\t")

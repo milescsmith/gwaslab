@@ -14,25 +14,25 @@ Example usage:
 
 from .gwascatalog import (
     GWASCatalogClient,
-    get_studies,
     get_associations,
+    get_studies,
     get_variants,
-    search_studies,
     search_associations,
-    search_variants,
+    search_studies,
     search_traits,
+    search_variants,
 )
 from .sumstats_download import download_sumstats
 
 __all__ = [
     "GWASCatalogClient",
-    "get_studies",
-    "get_associations",
-    "get_variants",
-    "search_studies",
-    "search_associations",
-    "search_variants",
-    "search_traits",
     "download_sumstats",
+    "get_associations",
+    "get_studies",
+    "get_variants",
+    "search_associations",
+    "search_studies",
+    "search_traits",
+    "search_variants",
 ]
 

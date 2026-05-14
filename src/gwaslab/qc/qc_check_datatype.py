@@ -1,7 +1,9 @@
-from typing import TYPE_CHECKING, Optional, List, Any
 import gc
-import pandas as pd
+from typing import TYPE_CHECKING, Any, List, Optional
+
 import numpy as np
+import pandas as pd
+
 from gwaslab.info.g_Log import Log
 from gwaslab.qc.qc_reserved_headers import dtype_dict
 
@@ -11,7 +13,7 @@ if TYPE_CHECKING:
 # pandas.api.types.is_int64_dtype
 # pandas.api.types.is_categorical_dtype
 
-def _get_preferred_dtype(header: str) -> Optional[str]:
+def _get_preferred_dtype(header: str) -> str | None:
     """
     Get the preferred dtype for a column.
     
@@ -53,7 +55,7 @@ def check_datatype(sumstats: pd.DataFrame, verbose: bool = True, log: Log = Log(
       INFO), warns to use `Sumstats.check_sanity()` only when those columns have
       incompatible dtypes.
     """
-    
+
     try:
         headers = []
         dtypes = []
@@ -62,16 +64,16 @@ def check_datatype(sumstats: pd.DataFrame, verbose: bool = True, log: Log = Log(
 
         for header,dtype in sumstats.dtypes.items():
             width = max(len(header),len(str(dtype)))
-            
+
             header_fix_length = header + " "*(width- len(header) )
-            
+
             dtype_fix_length  = str(dtype) + " "*(width- len(str(dtype)))
-            
+
             verified_str = verify_datatype(header, dtype)
             verified_fix_length  = verified_str + " " *(width- len(verified_str))
-            
+
             headers.append(format(header_fix_length))
-            dtypes.append((str(dtype_fix_length)))
+            dtypes.append(str(dtype_fix_length))
             verified.append(verified_fix_length)
             if verified_str == "F":
                 raw_verified.append(header)
@@ -99,7 +101,7 @@ def check_datatype(sumstats: pd.DataFrame, verbose: bool = True, log: Log = Log(
                 bad_stats = [c for c in present_stats if verify_datatype(c, sumstats.dtypes[c]) == "F"]
                 if len(bad_stats) > 0:
                     for c in bad_stats:
-                        log.warning("Consider using Sumstats.check_sanity() to check {} statistics".format(c), verbose=verbose)
+                        log.warning(f"Consider using Sumstats.check_sanity() to check {c} statistics", verbose=verbose)
             except:
                 pass
     except:
@@ -159,8 +161,8 @@ def quick_convert_datatype(sumstats: pd.DataFrame, log: Log, verbose: bool) -> p
                 datatype = _get_preferred_dtype(col)
                 if datatype is None:
                     datatype = dtype_dict[col][0]  # Fallback to first option
-                
-                log.write(" -Trying to convert datatype for {}: {} -> {}...".format(col, current_dtype, datatype), end="" ,verbose=verbose)
+
+                log.write(f" -Trying to convert datatype for {col}: {current_dtype} -> {datatype}...", end="" ,verbose=verbose)
                 try:
                     sumstats[col] = sumstats[col].astype(datatype)
                     log.write("Success",show_time=False, verbose=verbose)
@@ -173,7 +175,7 @@ def check_dataframe_shape(
     sumstats: pd.DataFrame,
     log: Log,
     verbose: bool,
-    sumstats_obj: Optional['Sumstats'] = None
+    sumstats_obj: Optional["Sumstats"] = None
 ) -> None:
     """
     Log DataFrame shape and estimated memory usage in megabytes.
@@ -193,10 +195,10 @@ def check_dataframe_shape(
     """
     # If sumstats_obj not provided, try to get it from log object
     if sumstats_obj is None:
-        sumstats_obj = getattr(log, '_sumstats_obj', None)
+        sumstats_obj = getattr(log, "_sumstats_obj", None)
     # Use the standardized logging method which handles change detection
     log.log_dataframe_shape(sumstats, verbose=verbose, sumstats_obj=sumstats_obj)
-    
+
 def check_dataframe_memory_usage(sumstats: pd.DataFrame, log: Log, verbose: bool) -> None:
     """
     Log DataFrame memory usage in megabytes.
@@ -212,13 +214,13 @@ def check_dataframe_memory_usage(sumstats: pd.DataFrame, log: Log, verbose: bool
     """
     memory_in_mb = sumstats.memory_usage().sum()/1024/1024
     try:
-        log.write(" -Current Dataframe memory usage: {:.2f} MB".format(memory_in_mb), verbose=verbose)
+        log.write(f" -Current Dataframe memory usage: {memory_in_mb:.2f} MB", verbose=verbose)
     except:
         log.warning("Error: cannot get Memory usage...")
 
 def check_datatype_for_cols(
-    sumstats_obj: 'Sumstats',
-    cols: Optional[List[str]] = None,
+    sumstats_obj: "Sumstats",
+    cols: list[str] | None = None,
     verbose: bool = True,
     log: Log = Log(),
     fix: bool = False,
@@ -271,8 +273,8 @@ def check_datatype_for_cols(
         try:
             if fix is True:
                 try:
-                    from gwaslab.qc.qc_fix_sumstats import _fix_chr, _fix_pos, _fix_allele, _fix_ID
                     from gwaslab.info.g_meta import _update_qc_step
+                    from gwaslab.qc.qc_fix_sumstats import _fix_allele, _fix_chr, _fix_ID, _fix_pos
                 except Exception:
                     _fix_chr = None; _fix_pos = None; _fix_allele = None; _fix_ID = None
                     _update_qc_step = None
@@ -297,7 +299,7 @@ def check_datatype_for_cols(
                     sumstats_obj.data = _fix_ID(sumstats_obj, log=log, verbose=verbose, **id_kwargs)
                     if _update_qc_step is not None:
                         _update_qc_step(sumstats_obj, "id", id_kwargs, True)
-                
+
                 # Update sumstats reference after fixes
                 sumstats = sumstats_obj.data
 
@@ -333,7 +335,7 @@ def check_datatype_for_cols(
             bad_stats = [c for c in present_stats if verify_datatype(c, sumstats.dtypes[c]) == "F"]
             if len(bad_stats) > 0:
                 for c in bad_stats:
-                    log.warning("Consider using Sumstats.check_sanity() to check {} statistics".format(c), verbose=verbose)
+                    log.warning(f"Consider using Sumstats.check_sanity() to check {c} statistics", verbose=verbose)
         except:
             pass
 

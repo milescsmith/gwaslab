@@ -1,16 +1,18 @@
-import pandas as pd
-import numpy as np
-from gwaslab.info.g_Log import Log
-from matplotlib import ticker
-import matplotlib.pyplot as plt
-from gwaslab.bd.bd_common_data import get_chr_to_number
-from gwaslab.bd.bd_common_data import get_number_to_chr
 from math import ceil
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib import ticker
+
+from gwaslab.bd.bd_common_data import get_chr_to_number, get_number_to_chr
+from gwaslab.info.g_Log import Log
+
+
 def _quick_fix(sumstats, chr_dict=get_chr_to_number(), scaled=False, chrom="CHR", pos="POS", p="P", mlog10p="MLOG10P",log=Log(), verbose=True):
-    '''
+    """
     quick sanity check for input sumstats
-    '''
+    """
 
     # quick fix chr
     sumstats[chrom] = _quick_fix_chr(sumstats[chrom], chr_dict=chr_dict, verbose=verbose, log=log)
@@ -28,11 +30,11 @@ def _quick_fix(sumstats, chr_dict=get_chr_to_number(), scaled=False, chrom="CHR"
 
 
 def _quick_fix_p_value(sumstats, p="P", mlog10p="MLOG10P", scaled=False,verbose=True, log=Log()):
-    '''
+    """
     drop variants with bad P values
-    '''
+    """
     if scaled==True:
-        # if scaled, add scaled P and P col 
+        # if scaled, add scaled P and P col
         log.write(" -P values are already scaled...", verbose=verbose)
         log.write(" -Sumstats -log10(P) values are being converted to P...", verbose=verbose)
         sumstats["scaled_P"] = sumstats[mlog10p]
@@ -49,18 +51,18 @@ def _quick_fix_p_value(sumstats, p="P", mlog10p="MLOG10P", scaled=False,verbose=
 
 
 def _quick_fix_mlog10p(insumstats,p="P", mlog10p="MLOG10P", scaled=False, log=Log(), verbose=True):
-    '''
+    """
     drop variants with bad -log10(P) values
-    '''
+    """
     if scaled != True:
         log.write(" -Sumstats P values are being converted to -log10(P)...", verbose=verbose)
         # Use pd.to_numeric for better performance and error handling
-        p_values = pd.to_numeric(insumstats[p], errors='coerce')
+        p_values = pd.to_numeric(insumstats[p], errors="coerce")
         insumstats["scaled_P"] = -np.log10(p_values)
     elif "scaled_P" not in insumstats.columns:
         # If scaled but scaled_P doesn't exist, create it from mlog10p
-        insumstats["scaled_P"] = pd.to_numeric(insumstats[mlog10p], errors='coerce')
-    
+        insumstats["scaled_P"] = pd.to_numeric(insumstats[mlog10p], errors="coerce")
+
     # More efficient: use np.isfinite to check for both inf and nan in one operation
     scaled_P = insumstats["scaled_P"]
     if_inf_na = ~np.isfinite(scaled_P)
@@ -73,9 +75,9 @@ def _quick_fix_mlog10p(insumstats,p="P", mlog10p="MLOG10P", scaled=False, log=Lo
 
 
 def _quick_fix_eaf(seires,log=Log(), verbose=True):
-    '''
+    """
     conversion of eaf to maf
-    '''
+    """
     # Early exit: Check if already numeric
     if pd.api.types.is_numeric_dtype(seires):
         log.write(" -EAF data type is already numeric. Skipping conversion...", verbose=verbose)
@@ -84,37 +86,37 @@ def _quick_fix_eaf(seires,log=Log(), verbose=True):
         seires = seires.copy()
         seires[flipped] = 1 - seires[flipped]
         return seires
-    
-    seires = pd.to_numeric(seires, errors='coerce')
+
+    seires = pd.to_numeric(seires, errors="coerce")
     flipped = seires > 0.5
     seires[flipped] = 1 - seires[flipped]
     return seires
 
 
 def _quick_fix_chr(seires, chr_dict,log=Log(), verbose=True):
-    '''
+    """
     conversion and check for chr
-    '''
+    """
     # Early exit: Check if already numeric
     if pd.api.types.is_numeric_dtype(seires):
-        return seires.astype('Int64')
-    
+        return seires.astype("Int64")
+
     if pd.api.types.is_string_dtype(seires):
         # if chr is string dtype: convert using chr_dict
         seires = seires.map(chr_dict, na_action="ignore")
-    seires = np.floor(pd.to_numeric(seires, errors='coerce')).astype('Int64')
+    seires = np.floor(pd.to_numeric(seires, errors="coerce")).astype("Int64")
     return seires
 
 
 def _quick_fix_pos(seires,log=Log(), verbose=True):
-    '''
+    """
     force conversion for pos
-    '''
+    """
     # Early exit: Check if already numeric
     if pd.api.types.is_numeric_dtype(seires):
-        return np.floor(seires).astype('Int64')
-    
-    seires = np.floor(pd.to_numeric(seires, errors='coerce')).astype('Int64')
+        return np.floor(seires).astype("Int64")
+
+    seires = np.floor(pd.to_numeric(seires, errors="coerce")).astype("Int64")
     return seires
 
 
@@ -122,16 +124,17 @@ def _quick_fix_pos(seires,log=Log(), verbose=True):
 
 from gwaslab.qc.qc_normalize_args import _normalize_region
 
+
 def _dropna_in_cols(sumstats, cols, log=Log(), verbose=True):
     to_drop = sumstats[cols].isna().any(axis=1)
-    log.write(" -Dropping {} variants due to missing values in {}.".format(sum(to_drop),cols))
+    log.write(f" -Dropping {sum(to_drop)} variants due to missing values in {cols}.")
     return sumstats.loc[~to_drop,:]
 
 
 def _get_largenumber(*args,log=Log(), verbose=True):
-    '''
+    """
     get a helper large number, >> max(pos)
-    '''
+    """
     large_number = 1000000000
     max_number = np.nanmax(args)
     for i in range(7):
@@ -146,7 +149,7 @@ def _get_largenumber(*args,log=Log(), verbose=True):
 
 def _quick_add_tchrpos(sumstats, chr="chr", pos="POS", large_number=10000000000, dropchrpos=False,log=Log(), verbose=True):
     sumstats["TCHR+POS"] = sumstats["CHR"]*large_number + sumstats["POS"]
-    sumstats["TCHR+POS"] = sumstats["TCHR+POS"].astype('Int64')
+    sumstats["TCHR+POS"] = sumstats["TCHR+POS"].astype("Int64")
     if dropchrpos == True:
         sumstats = sumstats.drop(labels=["CHR", "POS"], axis=1)
     sumstats = sumstats.dropna()
@@ -154,7 +157,7 @@ def _quick_add_tchrpos(sumstats, chr="chr", pos="POS", large_number=10000000000,
 
 
 def _quick_merge_sumstats(sumstats1, sumstats2, log=Log(), verbose=True):
-    merged_sumstats = pd.merge(sumstats1, sumstats2, on="TCHR+POS", how="outer", suffixes=('_1', '_2'))
+    merged_sumstats = pd.merge(sumstats1, sumstats2, on="TCHR+POS", how="outer", suffixes=("_1", "_2"))
     merged_sumstats["CHR"] = merged_sumstats["CHR_1"]
     merged_sumstats["POS"] = merged_sumstats["POS_1"]
     merged_sumstats.loc[merged_sumstats["CHR_1"].isna(), "CHR"] = merged_sumstats.loc[merged_sumstats["CHR_1"].isna(), "CHR_2"]
@@ -165,37 +168,37 @@ def _quick_merge_sumstats(sumstats1, sumstats2, log=Log(), verbose=True):
 def _quick_assign_i_with_rank(sumstats, chrpad, use_rank=False, chrom="CHR",pos="POS",drop_chr_start=False,_posdiccul=None,log=Log(), verbose=True):
     # align all variants on a single axis (i)
     sumstats = sumstats.sort_values([chrom,pos])
-    
+
     # Optimize for region plots: if all variants are on the same chromosome, just use pos as i
     if sumstats[chrom].nunique() == 1:
         # Region plot: all variants on single chromosome, no need for cumulative offsets
-        if use_rank is True: 
+        if use_rank is True:
             sumstats["_POS_RANK"] = sumstats.groupby(chrom)[pos].rank("dense", ascending=True)
             sumstats["i"] = sumstats["_POS_RANK"]
         else:
             sumstats["i"] = sumstats[pos]
-        
+
         # Set index and compute chrom_df for consistency
         sumstats["_ID"]=range(len(sumstats))
         sumstats=sumstats.set_index("_ID")
-        chrom_df=sumstats.groupby(chrom)['i'].agg(lambda x: (x.min()+x.max())/2)
-        sumstats["i"] = np.floor(pd.to_numeric(sumstats["i"], errors='coerce')).astype('Int64')
+        chrom_df=sumstats.groupby(chrom)["i"].agg(lambda x: (x.min()+x.max())/2)
+        sumstats["i"] = np.floor(pd.to_numeric(sumstats["i"], errors="coerce")).astype("Int64")
         return sumstats, chrom_df
-    
+
     # Standard multi-chromosome case: compute cumulative offsets
-    if use_rank is True: 
+    if use_rank is True:
         sumstats["_POS_RANK"] = sumstats.groupby(chrom)[pos].rank("dense", ascending=True)
         pos="_POS_RANK"
     sumstats["_ID"]=range(len(sumstats))
     sumstats=sumstats.set_index("_ID")
 
     #create a df , groupby by chromosomes , and get the maximum position
-    if use_rank is True: 
+    if use_rank is True:
         posdic = sumstats.groupby(chrom)["_POS_RANK"].max()
     else:
         posdic = sumstats.groupby(chrom)[pos].max()
-    
-    chrom_numeric = pd.to_numeric(sumstats[chrom], errors='coerce')
+
+    chrom_numeric = pd.to_numeric(sumstats[chrom], errors="coerce")
     max_chr = chrom_numeric.max(skipna=True)
     if pd.isna(max_chr):
         raise ValueError("No valid CHR values available for x-axis assignment.")
@@ -204,7 +207,7 @@ def _quick_assign_i_with_rank(sumstats, chrpad, use_rank=False, chrom="CHR",pos=
     if _posdiccul is None:
         # convert to dictionary
         posdiccul = posdic.to_dict()
-        
+
         # fill empty chr with 0
         posdiccul = {i: posdiccul.get(i, 0) for i in range(max_chr + 1)}
 
@@ -218,7 +221,7 @@ def _quick_assign_i_with_rank(sumstats, chrpad, use_rank=False, chrom="CHR",pos=
     chrom_int = chrom_numeric.astype("Int64")
     add_mapping = pd.Series(posdiccul)
     sumstats["_ADD"] = (chrom_int - 1).map(add_mapping)
-    
+
     if drop_chr_start==True:
             posdic_min = sumstats.groupby(chrom)[pos].min()
             posdiccul_min = posdic_min.to_dict()
@@ -227,18 +230,18 @@ def _quick_assign_i_with_rank(sumstats, chrpad, use_rank=False, chrom="CHR",pos=
                 posdiccul_min[i] = posdiccul_min[i-1] + posdiccul_min[i]
             min_mapping = pd.Series(posdiccul_min)
             sumstats["_ADD"] = sumstats["_ADD"] - (chrom_int - 1).map(min_mapping)
-        
-    if use_rank is True: 
+
+    if use_rank is True:
         sumstats["i"]=sumstats["_POS_RANK"]+sumstats["_ADD"]
     else:
         sumstats["i"]=sumstats[pos]+sumstats["_ADD"]
-    
 
-    #for plot, get the chr text tick position      
-    chrom_df=sumstats.groupby(chrom)['i'].agg(lambda x: (x.min()+x.max())/2)
+
+    #for plot, get the chr text tick position
+    chrom_df=sumstats.groupby(chrom)["i"].agg(lambda x: (x.min()+x.max())/2)
     #sumstats["i"] = sumstats["i"]+((sumstats[chrom].map(dict(chrom_df)).astype("int")))*0.02
     #sumstats["i"] = sumstats["i"].astype("Int64")
-    sumstats["i"] = np.floor(pd.to_numeric(sumstats["i"], errors='coerce')).astype('Int64')
+    sumstats["i"] = np.floor(pd.to_numeric(sumstats["i"], errors="coerce")).astype("Int64")
     return sumstats, chrom_df
 
 def _quick_assign_marker_relative_size(series, sig_level = 5e-8, suggestive_sig_level=5e-6, lower_level=5e-4,log=Log(), verbose=True):
@@ -248,7 +251,7 @@ def _quick_assign_marker_relative_size(series, sig_level = 5e-8, suggestive_sig_
     is_lower_level          = series > -np.log10(lower_level)
     is_suggestive_sig_level = series > -np.log10(suggestive_sig_level)
     is_sig_level            = series > -np.log10(sig_level)
-    
+
     size_series[is_lower_level] = 2
     size_series[is_suggestive_sig_level] = 3
     size_series[is_sig_level] = 4
@@ -258,17 +261,17 @@ def _quick_assign_highlight_hue(sumstats,highlight,highlight_windowkb, snpid="SN
     # Initialize HUE column if it doesn't exist
     if "HUE" not in sumstats.columns:
         sumstats["HUE"] = None
-    
+
     # Get highlighted variants
     to_highlight = sumstats.loc[sumstats[snpid].isin(highlight), [chrom, pos]]
-    
+
     if len(to_highlight) == 0:
         return sumstats
-    
+
     # Vectorized approach: create mask for all highlighted regions at once
     highlight_mask = pd.Series(False, index=sumstats.index)
-    
-    for target_chr, target_pos in zip(to_highlight[chrom], to_highlight[pos]):
+
+    for target_chr, target_pos in zip(to_highlight[chrom], to_highlight[pos], strict=False):
         target_chr = int(target_chr)
         target_pos = int(target_pos)
         window = highlight_windowkb * 1000
@@ -277,7 +280,7 @@ def _quick_assign_highlight_hue(sumstats,highlight,highlight_windowkb, snpid="SN
                (sumstats[pos] > target_pos - window) & \
                (sumstats[pos] < target_pos + window)
         highlight_mask |= mask
-    
+
     sumstats.loc[highlight_mask, "HUE"] = "0"
     return sumstats
 
@@ -285,23 +288,23 @@ def _quick_assign_highlight_hue_pair(sumstats, highlight1, highlight2, highlight
     #assign colors: 0 is hightlight color
     to_highlight1 = pd.DataFrame()
     to_highlight2 = pd.DataFrame()
-    
+
     if len(highlight1) > 0:
         to_highlight1 = sumstats.loc[sumstats["TCHR+POS"].isin(highlight1), [chrom, pos]]
     if len(highlight2) > 0:
         to_highlight2 = sumstats.loc[sumstats["TCHR+POS"].isin(highlight2), [chrom, pos]]
-    
+
     # Initialize HUE columns if they don't exist
     if "HUE1" not in sumstats.columns:
         sumstats["HUE1"] = None
     if "HUE2" not in sumstats.columns:
         sumstats["HUE2"] = None
-    
+
     window = highlight_windowkb * 1000
-    
+
     if len(to_highlight1) > 0:
         highlight1_mask = pd.Series(False, index=sumstats.index)
-        for target_chr, target_pos in zip(to_highlight1[chrom], to_highlight1[pos]):
+        for target_chr, target_pos in zip(to_highlight1[chrom], to_highlight1[pos], strict=False):
             target_chr = int(target_chr)
             target_pos = int(target_pos)
             mask = (sumstats["CHR"] == target_chr) & \
@@ -309,10 +312,10 @@ def _quick_assign_highlight_hue_pair(sumstats, highlight1, highlight2, highlight
                    (sumstats["POS"] < target_pos + window)
             highlight1_mask |= mask
         sumstats.loc[highlight1_mask, "HUE1"] = "0"
-    
+
     if len(to_highlight2) > 0:
         highlight2_mask = pd.Series(False, index=sumstats.index)
-        for target_chr, target_pos in zip(to_highlight2[chrom], to_highlight2[pos]):
+        for target_chr, target_pos in zip(to_highlight2[chrom], to_highlight2[pos], strict=False):
             target_chr = int(target_chr)
             target_pos = int(target_pos)
             mask = (sumstats["CHR"] == target_chr) & \
@@ -320,7 +323,7 @@ def _quick_assign_highlight_hue_pair(sumstats, highlight1, highlight2, highlight
                    (sumstats["POS"] < target_pos + window)
             highlight2_mask |= mask
         sumstats.loc[highlight2_mask, "HUE2"] = "0"
-    
+
     return sumstats, to_highlight1, to_highlight2
 
 def _quick_extract_snp_in_region(sumstats, region, chrom="CHR",pos="POS",log=Log(), verbose=True):
@@ -372,24 +375,24 @@ def _cut(series, mode,cutfactor,cut,skip, ylabels, cut_log, verbose, lines_to_pl
         (transformed_series, maxy, maxticker, cut, cutfactor, ylabels, lines_to_plot)
     """
     log.write(" -Converting data above cut line...",verbose=verbose)
-    
+
     # Step 1: Prepare inputs - convert ylabels to Series if provided
     if ylabels is not None:
         ylabels = pd.Series(ylabels)
-    
+
     # Step 2: Create a copy of the series to avoid modifying the original
     series = series.copy()
-    
+
     # Step 3: Find the maximum value in the series for reporting and calculations
     maxy = series.max()
     if "b" not in mode:
         log.write(" -Maximum -log10(P) value is "+str(maxy) +" .", verbose=verbose)
     elif "b" in mode:
         log.write(" -Maximum DENSITY value is "+str(maxy) +" .", verbose=verbose)
-    
+
     # Step 4: Calculate the maximum ticker value (rounded integer for display purposes)
     maxticker=int(np.round(series.max(skipna=True)))
-    
+
     # Step 5: Process cut transformation if cut is specified
     if cut:
         # Step 5a: Auto mode - automatically determine cut threshold and cutfactor
@@ -404,32 +407,32 @@ def _cut(series, mode,cutfactor,cut,skip, ylabels, cut_log, verbose, lines_to_pl
                 # Formula: cutfactor = (maxy - cut) / 8 ensures compressed range fits in ~8 units
                 cut = 20
                 cutfactor = ( maxy - cut )/8
-        
+
         # Step 5b: Apply the cut transformation if cut threshold is still set
         if cut:
             # Step 5b-i: Logarithmic compression mode
             if cut_log==True:
                 # Recalculate maxticker for log mode calculations
                 maxticker=int(np.round(series.max(skipna=True)))
-                
+
                 # Calculate amplitude factor for logarithmic scaling
                 # This factor determines how much the log-compressed range will span
                 # Formula: amp = (cut - skip) / 2 / log2(maxticker/cut)
                 # The division by 2 ensures the compressed range is half the original range
                 amp = (cut - skip)/ 2 / np.log2(maxticker/cut)
-                
+
                 # Transform data values above cut using log2 compression
                 # Formula: new_value = log2(old_value/cut) * amp + cut
                 # This compresses values logarithmically while keeping cut as the baseline
                 series[series>cut] = (np.log2(series[series>cut]/cut)) * amp + cut
-                
+
                 # Transform y-axis labels if provided (same log compression)
                 if ylabels is not None:
-                    ylabels[ylabels>cut] = (np.log2(ylabels[ylabels>cut]/cut)) * amp +cut 
-                
+                    ylabels[ylabels>cut] = (np.log2(ylabels[ylabels>cut]/cut)) * amp +cut
+
                 # Transform additional lines (e.g., significance thresholds) using same compression
-                lines_to_plot[lines_to_plot>cut] = (np.log2(lines_to_plot[lines_to_plot>cut]/cut)) * amp +cut 
-                
+                lines_to_plot[lines_to_plot>cut] = (np.log2(lines_to_plot[lines_to_plot>cut]/cut)) * amp +cut
+
                 # Calculate the new maximum y value after log compression
                 # This represents the compressed maximum value for setting y-axis limits
                 maxy = (np.log2(maxticker) - np.log2(cut)) * amp + cut
@@ -448,14 +451,14 @@ def _cut(series, mode,cutfactor,cut,skip, ylabels, cut_log, verbose, lines_to_pl
                 # This shrinks values by dividing the excess (above cut) by cutfactor
                 # Example: if cut=20, cutfactor=10, value=100 becomes (100-20)/10+20 = 28
                 series[series>cut] = (series[series>cut]-cut)/cutfactor+cut
-                
+
                 # Transform y-axis labels if provided (same linear shrinkage)
                 if ylabels is not None:
                     ylabels[ylabels>cut] = (ylabels[ylabels>cut]-cut)/cutfactor+cut
-                
+
                 # Transform additional lines using same linear shrinkage
                 lines_to_plot[lines_to_plot>cut] = (lines_to_plot[lines_to_plot>cut]-cut)/cutfactor+cut
-                
+
                 # Calculate the new maximum y value after linear shrinkage
                 # Formula: maxy = (maxticker - cut) / cutfactor + cut
                 maxy = (maxticker-cut)/cutfactor + cut
@@ -540,19 +543,19 @@ def _set_yticklabels(cut,
         The modified axes object
     """
     log.write(" -Processing Y tick labels...",verbose=False)
-    
+
     # Step 1: Handle case with no cut transformation
     # If cut==0, no compression was applied, so just set simple y-axis limits
-    if cut == 0: 
+    if cut == 0:
         # Set y-axis limits from skip to maxy with 20% padding at top
         ax1.set_ylim((skip, ceil(maxy*1.2)) )
-    
+
     # Step 2: Handle case with cut transformation
     if cut!=0:
         # Step 2a: Draw a horizontal line at the cut threshold to visually indicate the compression
         # This line shows where the scale changes from normal to compressed
         cutline = ax1.axhline(y=cut, linewidth = sc_linewidth,linestyle="--",color=cut_line_color,zorder=1)
-        
+
         # Step 2b: Determine step size for tick spacing
         # Default step is 2, but can be auto-calculated or user-specified
         step=2
@@ -573,7 +576,7 @@ def _set_yticklabels(cut,
             upper = cut - 1
         else:
             upper = cut
-        
+
         # Step 2d: Generate ticks and labels for the region BELOW the cut threshold (normal scale)
         # ticks1: Regular ticks from skip to upper with step spacing
         ticks1= [x for x in range(skip,upper,step)]
@@ -582,13 +585,13 @@ def _set_yticklabels(cut,
         # Labels are the same as tick positions for the normal scale region
         tickslabel1= [x for x in range(skip,upper,step)]
         tickslabel2= [cut]
-        
+
         # Step 2e: Generate ticks for the region ABOVE the cut threshold (compressed scale)
         if cut_log==True:
             # Logarithmic compression mode: calculate tick spacing based on log scale
             # Step size is determined by log2 of the ratio between max and cut
             # max(..., 1) ensures at least 1 step to avoid division by zero
-            ticks3= [x for x in range(cut,int(maxy),max(int(np.log2(maxticker//(cut-skip))),1))] 
+            ticks3= [x for x in range(cut,int(maxy),max(int(np.log2(maxticker//(cut-skip))),1))]
             ticks4= [int(maxy)]  # Always include the maximum value
         elif ytick3 == True:
             # Linear compression mode with intermediate ticks enabled
@@ -601,14 +604,14 @@ def _set_yticklabels(cut,
             # Only show the compressed maximum, no intermediate ticks
             ticks3= []  # No intermediate ticks
             ticks4= [(maxticker-cut)/cutfactor + cut]  # Only the compressed maximum
-        
+
         # Step 2f: Generate LABELS for the compressed region (reverse-transform to show original values)
         # Labels show the original values, not the compressed positions
         if cut_log==True:
             # Logarithmic mode: reverse the log transformation to get original values
             # Formula: original = 2^((compressed_pos - cut) / amp) * cut
             # amp is the same amplitude factor used in _cut function
-            amp = (cut - skip)/ 2 / np.log2(maxticker/cut) 
+            amp = (cut - skip)/ 2 / np.log2(maxticker/cut)
             # For each compressed tick position, calculate the original value it represents
             tickslabel3 = list(map(lambda x: int(2**((x-cut)/amp)* cut) ,ticks3))
         elif ytick3 == True:
@@ -631,35 +634,35 @@ def _set_yticklabels(cut,
             # If no values above cut, only show ticks for the region below cut
             ax1.set_yticks(ticks1+ticks2)
             ax1.set_yticklabels(tickslabel1+tickslabel2,fontsize=fontsize,family=font_family)
-    
+
     # Step 3: Handle custom y-axis labels if provided
     # Custom labels override the auto-generated labels
-    if ylabels is not None:  
+    if ylabels is not None:
         # Use the converted positions (already transformed) for tick positions
         ax1.set_yticks(ylabels_converted)
         # Use the original labels (user-provided) for tick labels
         ax1.set_yticklabels(ylabels,fontsize=fontsize,family=font_family)
-    
+
     # Step 4: Set final y-axis bounds
     # Get the current top limit (may have been set by previous operations)
     ylim_top = ax1.get_ylim()[1]
     # Set lower bound to skip and keep the existing upper bound
     ax1.set_ybound(lower=skip,upper=ylim_top)
-    
+
     # Step 5: Apply font size to y-axis tick labels
-    ax1.tick_params(axis='y', labelsize=fontsize)
+    ax1.tick_params(axis="y", labelsize=fontsize)
 
     return ax1
 
 def _jagged_y(cut,skip,ax1,mode,mqqratio,jagged_len,jagged_wid, log=Log(), verbose=True):
     log.write(" -Processing jagged Y axis...",verbose=verbose)
     tycut = cut +0.3 #(cut - skip)/ (ax1.get_ylim()[1] - skip) + 0.002
-    dy= jagged_len * (cut - skip) 
+    dy= jagged_len * (cut - skip)
     x0 =  0
     dx= jagged_wid
     if mode>1:
         dx = dx * mqqratio
-    kwargs = dict(transform=ax1.get_yaxis_transform(), color='k', clip_on=False,solid_capstyle="round",linewidth=0.8)
+    kwargs = dict(transform=ax1.get_yaxis_transform(), color="k", clip_on=False,solid_capstyle="round",linewidth=0.8)
     ax1.plot((x0,x0), (tycut,tycut+4*dy), zorder=1000, transform=ax1.get_yaxis_transform(), color="white",clip_on=False,solid_capstyle="butt")
     ax1.plot((x0,-dx), (tycut,tycut+dy), zorder=1001, **kwargs)
     ax1.plot((-dx,+dx), (tycut+dy,tycut+3*dy), zorder=1001, **kwargs)

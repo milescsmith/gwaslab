@@ -59,9 +59,9 @@ Here is a list of all headers (gl.Sumstats.data) used in GWASLab functions. Thes
 
 """
 
-from typing import Dict, List, Optional, Tuple, Any, Union
 import json
 import os
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 """
 Reserved Headers JSON File Structure (qc_researved_header_json)
@@ -121,7 +121,7 @@ This JSON file is used to:
 
 # Load reserved headers JSON from separate file
 _json_file_path = os.path.join(os.path.dirname(__file__), "qc_researved_header.json")
-with open(_json_file_path, 'r') as f:
+with open(_json_file_path) as f:
     researved_header_json = f.read()
 def _build_reserved_header(j: str) -> str:
     d = json.loads(j)
@@ -160,7 +160,7 @@ description_dic = {k: v.get("Description", "").strip() for k, v in _reserved_hea
 # Generate dtype_dict from researved_header_json (single source of truth)
 dtype_dict = {k: v.get("ValidDtypes", []) for k, v in _reserved_headers_dict.items() if v.get("ValidDtypes")}
 
-def get_default_sanity_ranges() -> Dict[str, Optional[Tuple[float, float]]]:
+def get_default_sanity_ranges() -> dict[str, tuple[float, float] | None]:
     """
     Get default sanity check ranges from JSON file.
     
@@ -184,7 +184,7 @@ def get_default_sanity_ranges() -> Dict[str, Optional[Tuple[float, float]]]:
     return ranges
 
 # Generate dtype_dict_polars from researved_header_json (single source of truth)
-def get_dtype_dict_polars() -> Dict[str, List[Any]]:
+def get_dtype_dict_polars() -> dict[str, list[Any]]:
     """
     Generate Polars dtype dictionary from JSON file.
     Converts string identifiers from ValidDtypesPolars to actual Polars type objects.
@@ -200,7 +200,7 @@ def get_dtype_dict_polars() -> Dict[str, List[Any]]:
         "Int64": pl.Int64(),
         "Float64": pl.Float64(),
     }
-    
+
     dtype_dict_polars = {}
     for k, v in _reserved_headers_dict.items():
         polars_types = v.get("ValidDtypesPolars", [])
@@ -208,7 +208,7 @@ def get_dtype_dict_polars() -> Dict[str, List[Any]]:
             dtype_dict_polars[k] = [type_mapping.get(t, pl.String()) for t in polars_types]
     return dtype_dict_polars
 
-def _get_headers(mode: str = "all") -> List[str]:
+def _get_headers(mode: str = "all") -> list[str]:
     if mode=="info":
         return [k for k, v in _reserved_headers_dict.items() if v.get("Category") == "info"]
     elif mode=="stats":

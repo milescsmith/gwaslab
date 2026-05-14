@@ -1,20 +1,21 @@
 import gzip
-from typing import Any, Dict, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import Any, Dict, Optional, Union
 
 import pandas as pd
-from gwaslab.bd.bd_common_data import get_formats_list
+
+from gwaslab.bd.bd_common_data import get_format_dict, get_formats_list
 from gwaslab.info.g_Log import Log
-from gwaslab.bd.bd_common_data import get_format_dict
 
 
 def _pre_rename_dtype_map(
     meta_data: Mapping[str, Any], dtypes: Mapping[str, Any]
-) -> Dict[Union[str, int], Any]:
+) -> dict[Union[str, int], Any]:
     """Map formatbook ``format_datatype`` keys to labels pandas used before rename."""
     if "format_header" in meta_data:
         fh = meta_data["format_header"]
         if fh is None or fh is False:
-            out: Dict[Union[str, int], Any] = {}
+            out: dict[Union[str, int], Any] = {}
             for k, v in dtypes.items():
                 try:
                     out[int(k)] = v
@@ -46,7 +47,7 @@ def _count_leading_lines_with_prefix(path: str, prefix: str) -> int:
 
 def _multiline_header_skiprows(
     meta_data: Mapping[str, Any],
-    load_kwargs_dict: Dict[str, Any],
+    load_kwargs_dict: dict[str, Any],
     user_kwargs: Mapping[str, Any],
 ) -> None:
     """
@@ -70,7 +71,7 @@ def _multiline_header_skiprows(
     if fh is None or fh is False:
         return
 
-    def _header_row_index(skiprows_val: Any) -> Optional[int]:
+    def _header_row_index(skiprows_val: Any) -> int | None:
         if skiprows_val is None:
             return 0
         if isinstance(skiprows_val, int):
@@ -98,21 +99,21 @@ def _multiline_header_skiprows(
 
 
 def _read_tabular(path: str, fmt: str, **kwargs: Any) -> pd.DataFrame:
-    
+
     # default
     load_kwargs_dict = {"sep":"\t",
                       "header":None}
-    
+
     # if specified by user
     if len(kwargs)>0:
         load_kwargs_dict = kwargs
-    
+
     # load format
     meta_data, rename_dictionary = get_format_dict(fmt)
-    
+
     if "format_separator" in meta_data and "sep" not in kwargs:
         load_kwargs_dict["sep"] = meta_data["format_separator"]
-    
+
     # format_comment: single char -> pandas ``comment=``; multi-char -> *line prefix* at file start:
     # count consecutive leading lines starting with that string and set ``skiprows`` (no ``comment=``),
     # since pandas only allows length-1 ``comment`` and "#" would remove the "#CHROM" header row.
@@ -138,7 +139,7 @@ def _read_tabular(path: str, fmt: str, **kwargs: Any) -> pd.DataFrame:
             load_kwargs_dict["header"] = meta_data["format_header"]
 
     if "format_na" in meta_data and "na_values" not in kwargs:
-        if  meta_data["format_na"] is not None:    
+        if  meta_data["format_na"] is not None:
             load_kwargs_dict["na_values"] = meta_data["format_na"]
 
     _multiline_header_skiprows(meta_data, load_kwargs_dict, kwargs)

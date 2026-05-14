@@ -1,6 +1,7 @@
 from os import path
 from pathlib import Path
 
+
 class Options_dic:
     """
     A class to manage and modify configuration paths for gwaslab.
@@ -9,7 +10,7 @@ class Options_dic:
         paths (dict): Current configuration paths
         default (dict): Default paths for reset functionality
     """
-    
+
     def __init__(self, path_dic):
         """
         Initialize with a dictionary of configuration paths.
@@ -19,7 +20,7 @@ class Options_dic:
         """
         self.paths = path_dic
         self.default = path_dic.copy()
-    
+
     def set_option(self, key, path):
         """
         Update a specific configuration path.
@@ -29,7 +30,7 @@ class Options_dic:
             path (str): New path value for the specified key
         """
         self.paths[key] = path
-    
+
     def reset_option(self):
         """
         Reset all paths to their default values.
@@ -53,7 +54,7 @@ default_dic={
     "config": path.join(Path(__file__).parents[1], "data","config.json"),
     "reference": path.join(Path(__file__).parents[1], "data","reference.json"),
     "formatbook": path.join(Path(__file__).parents[1], "data","formatbook.json"),
-    "data_directory": path.expanduser('~') + "/.gwaslab/"
+    "data_directory": path.expanduser("~") + "/.gwaslab/"
 }
 
 

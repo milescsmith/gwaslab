@@ -1,28 +1,23 @@
-from typing import TYPE_CHECKING, Optional, List, Tuple, Union, Callable, Any, Dict
 import gc
-import time
+import inspect
 import os
-import sys
 import shutil
 import subprocess
+import sys
+import time
+from collections.abc import Callable
+from functools import partial, wraps
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
-from functools import partial
-from functools import wraps
-import inspect
 
-from gwaslab.info.g_vchange_status import vchange_status
-from gwaslab.info.g_vchange_status import status_match
-from gwaslab.info.g_vchange_status import change_status
+from gwaslab.extension import _check_tool_availability, _checking_plink_version, _checking_r_version
 from gwaslab.info.g_Log import Log
+from gwaslab.info.g_vchange_status import change_status, status_match, vchange_status
 from gwaslab.info.g_version import _get_version
-
-from gwaslab.qc.qc_check_datatype import check_datatype_for_cols
-from gwaslab.qc.qc_check_datatype import check_dataframe_shape
 from gwaslab.qc.qc_build import _process_build, check_species_compatibility
-from gwaslab.extension import _checking_r_version
-from gwaslab.extension import _check_tool_availability
-from gwaslab.extension import _checking_plink_version
+from gwaslab.qc.qc_check_datatype import check_dataframe_shape, check_datatype_for_cols
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
@@ -31,16 +26,16 @@ if TYPE_CHECKING:
 TOOL_CHECK_TIMEOUT = 5
 SUPPORTED_SPECIAL_TOOLS = ["python", "r", "plink", "plink2", "tabix", "bcftools", "scdrs"]
 
-def with_logging(start_to_msg: str, 
+def with_logging(start_to_msg: str,
                  finished_msg: str,
-                 start_function: Optional[str] = None,
-                 start_cols: Optional[List[Union[str, Tuple[str, ...], List[str]]]] = None,
-                 must_kwargs: Optional[List[str]] = None,
+                 start_function: str | None = None,
+                 start_cols: list[Union[str, tuple[str, ...], list[str]]] | None = None,
+                 must_kwargs: list[str] | None = None,
                  show_shape: bool = True,
                  check_dtype: bool = False,
                  fix: bool = True,
-                 required_species: Optional[Union[str, List[str]]] = None,
-                 check_tools: Optional[List[str]] = None
+                 required_species: Union[str, list[str]] | None = None,
+                 check_tools: list[str] | None = None
                  ) -> Callable:
     """
     Decorator to add standardized logging, argument checks, and optional dtype
@@ -106,14 +101,14 @@ def with_logging(start_to_msg: str,
             sig = inspect.signature(func)
             bound_kwargs = sig.bind(*args, **kwargs)
             bound_kwargs.apply_defaults()
-            log = bound_kwargs.arguments.get('log', Log())
-            verbose = bound_kwargs.arguments.get('verbose', True)
-            
+            log = bound_kwargs.arguments.get("log", Log())
+            verbose = bound_kwargs.arguments.get("verbose", True)
+
             #############################################################################################
 
-            insumstats = bound_kwargs.arguments.get('insumstats', None)
+            insumstats = bound_kwargs.arguments.get("insumstats", None)
             if insumstats is None:
-                sumstats = bound_kwargs.arguments.get('sumstats', None)
+                sumstats = bound_kwargs.arguments.get("sumstats", None)
             else:
                 sumstats = insumstats
             #############################################################################################
@@ -125,30 +120,30 @@ def with_logging(start_to_msg: str,
 
             # Record start time for timing
             start_time = time.time()
-            
+
             # Log start message first
             log.log_operation_start(start_to_msg, version=_get_version(), verbose=verbose)
-            
+
             # Log thread information after operation start
-            threads = bound_kwargs.arguments.get('threads', None)
+            threads = bound_kwargs.arguments.get("threads", None)
             if threads is not None:
                 log.log_threads(threads, verbose=verbose)
-            
+
             # Log reference paths after operation start
-            ref_vcf = bound_kwargs.arguments.get('ref_vcf', None)
-            ref_fasta = bound_kwargs.arguments.get('ref_fasta', None)
-            ref_tsv = bound_kwargs.arguments.get('ref_tsv', None)
+            ref_vcf = bound_kwargs.arguments.get("ref_vcf", None)
+            ref_fasta = bound_kwargs.arguments.get("ref_fasta", None)
+            ref_tsv = bound_kwargs.arguments.get("ref_tsv", None)
             if ref_vcf is not None:
                 log.log_reference_path("VCF", ref_vcf, verbose=verbose)
             if ref_fasta is not None:
                 log.log_reference_path("FASTA", ref_fasta, verbose=verbose)
             if ref_tsv is not None:
                 log.log_reference_path("TSV", ref_tsv, verbose=verbose)
-            
+
             # Check tools if specified
             if check_tools:
                 check_tools_availability(check_tools, bound_kwargs, log, verbose)
-            
+
             # must_arg can not be None
             #############################################################################################
             is_kwargs_valid = True
@@ -156,7 +151,7 @@ def with_logging(start_to_msg: str,
                 value = bound_kwargs.arguments.get(key,None)
                 is_kwargs_valid = is_kwargs_valid & check_arg(log, verbose, key, value, start_function)
             if is_kwargs_valid==False:
-                raise ValueError("{} must be provided.".format(must_kwargs))
+                raise ValueError(f"{must_kwargs} must be provided.")
 
             #############################################################################################
             # Try to find Sumstats object instance for shape/memory tracking
@@ -169,7 +164,7 @@ def with_logging(start_to_msg: str,
                     sumstats_obj = args[0]
                 # Fallback: check if log has a reference to Sumstats object
                 if sumstats_obj is None:
-                    sumstats_obj = getattr(log, '_sumstats_obj', None)
+                    sumstats_obj = getattr(log, "_sumstats_obj", None)
                 # Fallback: check if any kwarg is a Sumstats instance
                 if sumstats_obj is None:
                     for value in bound_kwargs.arguments.values():
@@ -179,23 +174,23 @@ def with_logging(start_to_msg: str,
             except:
                 # If import fails, try log reference as fallback
                 if sumstats_obj is None:
-                    sumstats_obj = getattr(log, '_sumstats_obj', None)
-            
+                    sumstats_obj = getattr(log, "_sumstats_obj", None)
+
             # Check species compatibility if required_species is specified
             if required_species is not None:
                 # Try to extract species from various sources
-                species = bound_kwargs.arguments.get('species', None)
-                
+                species = bound_kwargs.arguments.get("species", None)
+
                 # If species not in kwargs, try to get from Sumstats object
                 if species is None and sumstats_obj is not None:
                     try:
                         species = sumstats_obj.meta.get("gwaslab", {}).get("species", None)
                     except (AttributeError, KeyError):
                         pass
-                
+
                 # Use function name as operation name if start_function not provided
                 operation_name = start_function if start_function is not None else func.__name__
-                
+
                 # Check species compatibility
                 check_species_compatibility(
                     species=species,
@@ -204,28 +199,28 @@ def with_logging(start_to_msg: str,
                     log=log,
                     verbose=verbose
                 )
-            
+
             # Extract sumstats DataFrame from sumstats_obj if sumstats is None
             if sumstats is None and sumstats_obj is not None:
                 try:
                     sumstats = sumstats_obj.data
                 except:
                     pass
-            
+
             if sumstats is not None:
                 # check sumstats shape, columns
                 initial_shape = None
                 if show_shape:
                     initial_shape = (len(sumstats), len(sumstats.columns))
-                    check_dataframe_shape(sumstats=sumstats, 
-                                        log=log, 
+                    check_dataframe_shape(sumstats=sumstats,
+                                        log=log,
                                         verbose=verbose,
-                                        sumstats_obj=sumstats_obj)  
-                
-                is_enough_col = check_col(sumstats.columns, 
-                                        verbose=verbose, 
-                                        log=log, 
-                                        cols=start_cols, 
+                                        sumstats_obj=sumstats_obj)
+
+                is_enough_col = check_col(sumstats.columns,
+                                        verbose=verbose,
+                                        log=log,
+                                        cols=start_cols,
                                         function=start_function)
                 if check_dtype:
                     if sumstats_obj is not None:
@@ -250,14 +245,14 @@ def with_logging(start_to_msg: str,
                 final_shape = (len(sumstats), len(sumstats.columns))
                 if initial_shape != final_shape:
                     check_dataframe_shape(sumstats=sumstats, log=log, verbose=verbose, sumstats_obj=sumstats_obj)
-            
+
             # Calculate elapsed time
             elapsed_time = time.time() - start_time
-            
+
             # Log finish message with timing
             log.write(f" -Time taken: {elapsed_time:.3f}s", verbose=verbose)
             log.log_operation_finish(finished_msg, verbose=verbose)
-            
+
             return result
         return wrapper
     return decorator
@@ -269,8 +264,8 @@ def check_col(
     df_col_names: Any,
     verbose: bool = True,
     log: Log = Log(),
-    cols: Optional[List[Union[str, Tuple[str, ...], List[str]]]] = None,
-    function: Optional[str] = None
+    cols: list[Union[str, tuple[str, ...], list[str]]] | None = None,
+    function: str | None = None
 ) -> bool:
     """
     Verify presence of required columns prior to executing a processing step.
@@ -295,7 +290,7 @@ def check_col(
     """
     if not cols:
         return True
-    
+
     not_in_df = []
     for col_spec in cols:
         if isinstance(col_spec, str):
@@ -315,7 +310,7 @@ def check_col(
             verbose=verbose
         )
         return False
-    
+
     return True
 
 def check_arg(
@@ -326,10 +321,10 @@ def check_arg(
     start_function: str
 ) -> bool:
     if value is None:
-        log.warning("{} requires non-None argument: {}".format(start_function, key), verbose=verbose)
+        log.warning(f"{start_function} requires non-None argument: {key}", verbose=verbose)
         return False
     if isinstance(value, (str, bytes)) and str(value).strip() == "":
-        log.warning("{} requires non-empty argument: {}".format(start_function, key), verbose=verbose)
+        log.warning(f"{start_function} requires non-empty argument: {key}", verbose=verbose)
         return False
     return True
 
@@ -338,7 +333,7 @@ def check_arg(
 # Tool Checking Functions
 ###############################################################################################################
 
-def check_tools_availability(check_tools: List[str], bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> Dict[str, Dict[str, Optional[str]]]:
+def check_tools_availability(check_tools: list[str], bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> dict[str, dict[str, str | None]]:
     """
     Check availability and version of required tools for downstream analysis.
     
@@ -362,7 +357,7 @@ def check_tools_availability(check_tools: List[str], bound_kwargs: inspect.Bound
     """
     results = {}
     generic_tools = []
-    
+
     for tool in check_tools:
         # Check if this is an R package specification (format: "r:PackageName")
         if tool.lower().startswith("r:") and ":" in tool:
@@ -371,7 +366,7 @@ def check_tools_availability(check_tools: List[str], bound_kwargs: inspect.Bound
             results[tool] = result
         else:
             tool_lower = tool.lower()
-            
+
             if tool_lower in SUPPORTED_SPECIAL_TOOLS:
                 # Handle special tools with custom logic
                 result = _check_special_tool(tool_lower, bound_kwargs, log, verbose)
@@ -379,16 +374,16 @@ def check_tools_availability(check_tools: List[str], bound_kwargs: inspect.Bound
             else:
                 # Generic tools - check in batch later
                 generic_tools.append(tool)
-    
+
     # Check generic tools using existing function
     if generic_tools:
         generic_results = _check_generic_tools(generic_tools, log, verbose)
         results.update(generic_results)
-    
+
     return results
 
 
-def _check_special_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> Dict[str, Optional[str]]:
+def _check_special_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> dict[str, str | None]:
     """Check a special tool (python, r, plink, etc.) with custom logic."""
     tool_checkers = {
         "python": _check_python_tool,
@@ -399,56 +394,56 @@ def _check_special_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, lo
         "bcftools": lambda kwargs, log, verbose: _check_generic_path_tool("bcftools", kwargs, log, verbose),
         "scdrs": lambda kwargs, log, verbose: _check_generic_path_tool("scdrs", kwargs, log, verbose),
     }
-    
+
     checker = tool_checkers.get(tool_name)
     if checker:
         return checker(bound_kwargs, log, verbose)
-    
+
     # Fallback to generic check
     return _check_generic_path_tool(tool_name, bound_kwargs, log, verbose)
 
 
-def _check_python_tool(bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> Dict[str, Optional[str]]:
+def _check_python_tool(bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> dict[str, str | None]:
     """Check Python availability and version."""
     result = {"available": False, "path": None, "version": None}
-    
+
     # Try to get Python path from arguments, sys.executable, or PATH
     python_path = bound_kwargs.arguments.get("python", None)
     if python_path is None:
         python_path = sys.executable
     if python_path is None:
         python_path = shutil.which("python3") or shutil.which("python")
-    
+
     if not python_path:
         log.warning(" -Python not found in PATH and 'python' argument not provided", verbose=verbose)
         return result
-    
+
     result["path"] = python_path
     result["available"] = True
-    
+
     # Get version
     version = _get_tool_version(python_path, log, verbose, "Python")
     result["version"] = version
-    
+
     return result
 
 
-def _check_r_tool(bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> Dict[str, Optional[str]]:
+def _check_r_tool(bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> dict[str, str | None]:
     """Check R availability and version."""
     result = {"available": False, "path": None, "version": None}
-    
+
     # Try to get R path from arguments or PATH
     r_path = bound_kwargs.arguments.get("r", None)
     if r_path is None:
         r_path = shutil.which("R") or shutil.which("Rscript")
-    
+
     if not r_path:
         log.warning(" -R not found in PATH and 'r' argument not provided", verbose=verbose)
         return result
-    
+
     result["path"] = r_path
     result["available"] = True
-    
+
     # Use existing R version checking function
     try:
         _checking_r_version(r_path, log=log, verbose=verbose)
@@ -457,11 +452,11 @@ def _check_r_tool(bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool)
         result["version"] = version
     except Exception as e:
         log.warning(f" -R found at {r_path} but version check failed: {e}", verbose=verbose)
-    
+
     return result
 
 
-def _check_r_package(package_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> Dict[str, Optional[str]]:
+def _check_r_package(package_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> dict[str, str | None]:
     """
     Check if an R package is installed and get its version.
     
@@ -482,38 +477,38 @@ def _check_r_package(package_name: str, bound_kwargs: inspect.BoundArguments, lo
         Dictionary with "available", "path" (R path), and "version" keys.
     """
     result = {"available": False, "path": None, "version": None}
-    
+
     # First, get R path (required for checking packages)
     r_path = bound_kwargs.arguments.get("r", None)
     if r_path is None:
         r_path = shutil.which("R") or shutil.which("Rscript")
-    
+
     if not r_path:
         log.warning(
             f" -R package '{package_name}' cannot be checked: R not found in PATH and 'r' argument not provided",
             verbose=verbose
         )
         return result
-    
+
     result["path"] = r_path
-    
+
     # Create temporary R script to check package version
     temp_r = None
     try:
         # Create a unique temporary file
         temp_r = f"_gwaslab_r_pkg_check_{package_name}_{np.random.randint(1, 99999999)}.R"
-        
+
         # Write R script to check package version
-        rscript = f'''if (!requireNamespace("{package_name}", quietly = TRUE)) {{
+        rscript = f"""if (!requireNamespace("{package_name}", quietly = TRUE)) {{
     cat("PACKAGE_NOT_INSTALLED")
     quit(status=1)
 }} else {{
     cat(as.character(packageVersion("{package_name}")))
-}}'''
-        
+}}"""
+
         with open(temp_r, "w") as f:
             f.write(rscript)
-        
+
         # Run R script
         try:
             output = subprocess.check_output(
@@ -524,7 +519,7 @@ def _check_r_package(package_name: str, bound_kwargs: inspect.BoundArguments, lo
                 timeout=TOOL_CHECK_TIMEOUT
             )
             version = output.strip()
-            
+
             if version and version != "PACKAGE_NOT_INSTALLED":
                 result["available"] = True
                 result["version"] = version
@@ -537,7 +532,7 @@ def _check_r_package(package_name: str, bound_kwargs: inspect.BoundArguments, lo
             log.warning(f" -R package '{package_name}' version check timed out", verbose=verbose)
         except Exception as e:
             log.warning(f" -R package '{package_name}' check failed: {e}", verbose=verbose)
-    
+
     finally:
         # Clean up temporary file
         if temp_r and os.path.exists(temp_r):
@@ -545,29 +540,29 @@ def _check_r_package(package_name: str, bound_kwargs: inspect.BoundArguments, lo
                 os.remove(temp_r)
             except Exception:
                 pass  # Ignore cleanup errors
-    
+
     return result
 
 
-def _check_plink_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> Dict[str, Optional[str]]:
+def _check_plink_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> dict[str, str | None]:
     """Check PLINK or PLINK2 availability and version."""
     result = {"available": False, "path": None, "version": None}
-    
+
     # Get PLINK path from arguments or PATH
     plink_path = bound_kwargs.arguments.get(tool_name, None)
     if plink_path is None:
         plink_path = shutil.which(tool_name)
-    
+
     if not plink_path:
         log.warning(
-            f" -{tool_name.upper()} not found in PATH and '{tool_name}' argument not provided", 
+            f" -{tool_name.upper()} not found in PATH and '{tool_name}' argument not provided",
             verbose=verbose
         )
         return result
-    
+
     result["path"] = plink_path
     result["available"] = True
-    
+
     # Use existing PLINK version checking function
     try:
         if tool_name == "plink":
@@ -579,40 +574,40 @@ def _check_plink_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, log:
         result["version"] = version
     except Exception as e:
         log.warning(
-            f" -{tool_name.upper()} found at {plink_path} but version check failed: {e}", 
+            f" -{tool_name.upper()} found at {plink_path} but version check failed: {e}",
             verbose=verbose
         )
-    
+
     return result
 
 
-def _check_generic_path_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> Dict[str, Optional[str]]:
+def _check_generic_path_tool(tool_name: str, bound_kwargs: inspect.BoundArguments, log: Log, verbose: bool) -> dict[str, str | None]:
     """Check a generic tool that may have a parameter or fall back to PATH."""
     result = {"available": False, "path": None, "version": None}
-    
+
     # Try to get tool path from arguments or PATH
     tool_path = bound_kwargs.arguments.get(tool_name, None)
     if tool_path is None:
         tool_path = shutil.which(tool_name)
-    
+
     if not tool_path:
         log.warning(
-            f" -{tool_name} not found in PATH and '{tool_name}' argument not provided", 
+            f" -{tool_name} not found in PATH and '{tool_name}' argument not provided",
             verbose=verbose
         )
         return result
-    
+
     result["path"] = tool_path
     result["available"] = True
-    
+
     # Get version
     version = _get_tool_version(tool_path, log, verbose, tool_name)
     result["version"] = version
-    
+
     return result
 
 
-def _check_generic_tools(tool_names: List[str], log: Log, verbose: bool) -> Dict[str, Dict[str, Optional[str]]]:
+def _check_generic_tools(tool_names: list[str], log: Log, verbose: bool) -> dict[str, dict[str, str | None]]:
     """Check generic tools using the existing batch checking function."""
     try:
         return _check_tool_availability(tools=tuple(tool_names), log=log, verbose=verbose)
@@ -625,7 +620,7 @@ def _check_generic_tools(tool_names: List[str], log: Log, verbose: bool) -> Dict
         }
 
 
-def _get_tool_version(tool_path: str, log: Log, verbose: bool, tool_display_name: str, silent: bool = False) -> Optional[str]:
+def _get_tool_version(tool_path: str, log: Log, verbose: bool, tool_display_name: str, silent: bool = False) -> str | None:
     """
     Get version information for a tool by running --version command.
     
@@ -656,22 +651,22 @@ def _get_tool_version(tool_path: str, log: Log, verbose: bool, tool_display_name
             timeout=TOOL_CHECK_TIMEOUT
         )
         version_line = output.strip().splitlines()[0] if output else ""
-        
+
         if not silent:
             log.write(f" -{tool_display_name} version: {version_line}", verbose=verbose)
-        
+
         return version_line
     except subprocess.TimeoutExpired:
         if not silent:
             log.warning(
-                f" -{tool_display_name} version check timed out", 
+                f" -{tool_display_name} version check timed out",
                 verbose=verbose
             )
         return None
     except Exception as e:
         if not silent:
             log.warning(
-                f" -{tool_display_name} found at {tool_path} but version check failed: {e}", 
+                f" -{tool_display_name} found at {tool_path} but version check failed: {e}",
                 verbose=verbose
             )
         return None

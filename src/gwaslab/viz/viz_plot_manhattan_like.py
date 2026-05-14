@@ -1,10 +1,10 @@
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 from gwaslab.info.g_Log import Log
-from gwaslab.viz.viz_aux_quickfix import _quick_fix_p_value, _quick_fix_mlog10p
-from gwaslab.util.util_in_get_sig import _get_sig, _get_top, _anno_gene
+from gwaslab.util.util_in_get_sig import _anno_gene, _get_sig, _get_top
+from gwaslab.viz.viz_aux_quickfix import _quick_fix_mlog10p, _quick_fix_p_value
 
 
 def _configure_fig_save_kwargs(mode="m",
@@ -55,16 +55,16 @@ def _add_pad_to_x_axis(ax1, xpad, xpadl, xpadr, sumstats, pos, chrpad, xtight, l
             xmin = sumstats["i"].min()
             length = xmax - xmin
             if xpad is not None:
-                log.write(" -Adjusting X padding on both side: {}".format(xpad), verbose=verbose)
+                log.write(f" -Adjusting X padding on both side: {xpad}", verbose=verbose)
                 pad = xpad * length
                 ax1.set_xlim([xmin - pad + chrpad_to_remove, xmax + pad - chrpad_to_remove])
             if xpad is None and xpadl is not None:
-                log.write(" -Adjusting X padding on left side: {}".format(xpadl), verbose=verbose)
+                log.write(f" -Adjusting X padding on left side: {xpadl}", verbose=verbose)
                 xmax = ax1.get_xlim()[1]
                 pad = xpadl * length
                 ax1.set_xlim([xmin - pad + chrpad_to_remove, xmax])
             if xpad is None and xpadr is not None:
-                log.write(" -Adjusting X padding on right side: {}".format(xpadr), verbose=verbose)
+                log.write(f" -Adjusting X padding on right side: {xpadr}", verbose=verbose)
                 xmin = ax1.get_xlim()[0]
                 pad = xpadr * length
                 ax1.set_xlim([xmin, xmax + pad - chrpad_to_remove])
@@ -97,7 +97,7 @@ def _configure_cols_to_use(insumstats, snpid, chrom, pos, ea, nea, eaf, p, mlog1
             usecols.append(ea)
             usecols.append(nea)
         except:
-            raise ValueError("Please make sure {} and {} columns are in input sumstats.".format(nea, ea))
+            raise ValueError(f"Please make sure {nea} and {ea} columns are in input sumstats.")
 
     if len(highlight) > 0 or len(pinpoint) > 0 or (snpid is not None):
         if snpid in insumstats.columns:
@@ -141,7 +141,7 @@ def _sanity_check(sumstats, mode, chrom, pos, stratified, _if_quick_qc, log, ver
         log.write(" -Removed " + str(removed_count) + " variants with nan in CHR or POS column ...", verbose=verbose if removed_count > 0 else False)
         out_of_range_chr = sumstats[chrom] <= 0
         removed_chr_count = sum(out_of_range_chr)
-        log.write(" -Removed {} variants with CHR <=0...".format(removed_chr_count), verbose=verbose if removed_chr_count > 0 else False)
+        log.write(f" -Removed {removed_chr_count} variants with CHR <=0...", verbose=verbose if removed_chr_count > 0 else False)
         sumstats = sumstats.loc[~out_of_range_chr, :]
 
     if stratified is True and _if_quick_qc:
@@ -247,9 +247,9 @@ def _process_line(ax1, sig_line, suggestive_sig_line, additional_line, lines_to_
     if "b" in mode:
         bmean = lines_to_plot.iat[-2]
         bmedian = lines_to_plot.iat[-1]
-        log.write(" -Plotting horizontal line (  mean DENISTY): y = {}".format(bmean), verbose=verbose)
+        log.write(f" -Plotting horizontal line (  mean DENISTY): y = {bmean}", verbose=verbose)
         ax1.axhline(y=bmean, linewidth=sc_linewidth, linestyle="-", color=sig_line_color, zorder=1000)
-        log.write(" -Plotting horizontal line ( median DENISTY): y = {}".format(bmedian), verbose=verbose)
+        log.write(f" -Plotting horizontal line ( median DENISTY): y = {bmedian}", verbose=verbose)
         ax1.axhline(y=bmedian, linewidth=sc_linewidth, linestyle="--", color=sig_line_color, zorder=1000)
     return ax1
 
@@ -270,15 +270,15 @@ def _process_xtick(ax1, mode, chrom_df, xtick_chr_dict, fontsize, font_family="A
         ax1.set_xticks(chrom_df.astype("float64"))
         ax1.set_xticklabels(chrom_df.index.astype("Int64").map(xtick_chr_dict), fontsize=fontsize, family=font_family)
     if ax3 is not None:
-        ax3.tick_params(axis='x', labelsize=fontsize, labelfontfamily=font_family)
+        ax3.tick_params(axis="x", labelsize=fontsize, labelfontfamily=font_family)
     return ax1, ax3
 
 
 def _process_ytick(ax1, fontsize, font_family, ax4, log=Log(), verbose=True):
     log.write(" -Processing Y labels...", verbose=False)
-    ax1.tick_params(axis='y', labelsize=fontsize, labelfontfamily=font_family)
+    ax1.tick_params(axis="y", labelsize=fontsize, labelfontfamily=font_family)
     if ax4 is not None:
-        ax4.tick_params(axis='y', labelsize=fontsize, labelfontfamily=font_family)
+        ax4.tick_params(axis="y", labelsize=fontsize, labelfontfamily=font_family)
     return ax1, ax4
 
 
@@ -310,16 +310,16 @@ def _adjust_spacing_for_ax3_labels(fig, ax3, ax_pos, ax_ld_block, log=Log(), ver
     """
     if ax_pos is None or ax_ld_block is None:
         return
-    
+
     log.write("Adjusting spacing for ax3 tick labels...", verbose=verbose)
-    
+
     # Get ax3 tick labels to calculate required space
     ax3_tick_labels = ax3.get_xticklabels()
     if len(ax3_tick_labels) > 0:
         # Get the bounding boxes of all tick labels in figure coordinates
         fig_height = fig.get_figheight()
         pos3 = ax3.get_position()
-        
+
         # Find the lowest point of any tick label below ax3
         max_bottom = pos3.y0  # Start with ax3 bottom
         renderer = fig.canvas.get_renderer()
@@ -340,48 +340,48 @@ def _adjust_spacing_for_ax3_labels(fig, ax3, ax_pos, ax_ld_block, log=Log(), ver
                     # Check if this label extends below ax3
                     if bbox_fig.y0 < pos3.y0:
                         max_bottom = min(max_bottom, bbox_fig.y0)
-            
+
             # Calculate required space: distance from ax3 bottom to lowest label
             required_space = (pos3.y0 - max_bottom)*1.3 + 0.01  # Add small padding
     else:
         # Fallback if no labels
         required_space = 0.05
-    
+
     # Get current positions
     pos3 = ax3.get_position()
     pos_pos = ax_pos.get_position()
     pos_ld = ax_ld_block.get_position()
-    
+
     # Calculate current gap between ax3 and ax_pos
     current_gap = pos_pos.y1 - pos3.y0
-    
+
     # Only adjust if current gap is less than required
     if current_gap < required_space:
         log.write(f"Current gap: {current_gap:.4f}, Required: {required_space:.4f}, Adjusting...", verbose=verbose)
-        
+
         # Calculate how much to move ax_pos down
         extra_space_needed = required_space - current_gap
-        
+
         # Store original positions before moving
         original_pos_y0 = pos_pos.y0
         original_ld_y0 = pos_ld.y0
-        
+
         # Move ax_pos down to create the required gap
         new_pos_bottom = pos3.y0 - required_space - pos_pos.height
         ax_pos.set_position([pos_pos.x0, new_pos_bottom, pos_pos.width, pos_pos.height])
-        
+
         # Calculate how much ax_pos moved down
         pos_change = original_pos_y0 - new_pos_bottom
-        
+
         # Add a small gap between ax_pos and ax_ld_block (e.g., 0.01 of figure height)
         fig_height = fig.get_figheight()
         gap_between_pos_ld = 0.1 / fig_height  # Small gap in figure coordinates
-        
+
         # Move ax_ld_block down by the same amount plus a small gap to create space between ax_pos and ax_ld_block
         # This ensures ax_ld_block stays the same distance below ax_pos with a slight increase
         new_ld_bottom = original_ld_y0 - pos_change - gap_between_pos_ld
         ax_ld_block.set_position([pos_ld.x0, new_ld_bottom, pos_ld.width, pos_ld.height])
-        
+
         log.write(f"Adjusted spacing: ax_pos moved down by {pos_change:.4f}, ax_ld_block moved down by {pos_change:.4f}", verbose=verbose)
     else:
         log.write(f"Current gap: {current_gap:.4f} >= Required: {required_space:.4f}, No adjustment needed", verbose=verbose)
@@ -448,7 +448,7 @@ def _extract_to_annotate(sumstats,
     log.write("Start to extract variants for annotation...", verbose=verbose)
     # Initialize empty DataFrame to store variants to annotate
     to_annotate = pd.DataFrame()
-    
+
     # Check if annotation is enabled (anno is a string/column name) or if specific annotation set is provided
     if (anno and anno != True) or (len(anno_set) > 0):
         # Case 1: User provided a specific set of variants to annotate
@@ -560,7 +560,7 @@ def _process_layout(mode, figax, fig_kwargs, mqqratio, region_hspace, ld_block=F
     explicit = {"gridspec_kw"}
     fig_kwargs = {k: v for k, v in fig_kwargs.items() if k not in explicit}
     if mode == "qqm":
-        fig, (ax2, ax1) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [1, mqqratio]}, **fig_kwargs)
+        fig, (ax2, ax1) = plt.subplots(1, 2, gridspec_kw={"width_ratios": [1, mqqratio]}, **fig_kwargs)
         ax3 = None
     elif mode == "mqq":
         if figax is not None:
@@ -568,7 +568,7 @@ def _process_layout(mode, figax, fig_kwargs, mqqratio, region_hspace, ld_block=F
             ax1 = figax[1]
             ax2 = figax[2]
         else:
-            fig, (ax1, ax2) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [mqqratio, 1]}, **fig_kwargs)
+            fig, (ax1, ax2) = plt.subplots(1, 2, gridspec_kw={"width_ratios": [mqqratio, 1]}, **fig_kwargs)
         ax3 = None
     elif mode == "m":
         if figax is not None:
@@ -602,7 +602,7 @@ def _process_layout(mode, figax, fig_kwargs, mqqratio, region_hspace, ld_block=F
             base_figsize = fig_kwargs.get("figsize", (15, 15))
             base_fig_width = base_figsize[0]
             base_fig_height = base_figsize[1]
-            
+
             if ld_block:
                 # Create 4 subplots: main plot, gene track, position bar, and LD block
                 # Position bar on top of LD block, both share x-axis with regional plot
@@ -612,19 +612,19 @@ def _process_layout(mode, figax, fig_kwargs, mqqratio, region_hspace, ld_block=F
                 # So ld_block_height ≈ base_fig_width / 1.92 ≈ base_fig_width * 0.52
                 # Position bar is small: ~1/15 of LD block height
                 # Total LD height = ld_block_height * (1 + 1/15) ≈ base_fig_width * 0.55
-                
+
                 # Calculate based on entire figure: add LD components to base height
                 # This keeps ax1 and ax3 at their original sizes, and adds ax_pos + ax_ld_block below
                 # Limit the additional height to prevent oversized figures
                 # Maximum figure height should be reasonable (e.g., 30 inches max at 200 DPI = 6000 pixels)
                 ld_block_required_height = min(base_fig_width * 0.55, 8.0)  # Cap at 8 inches
                 new_fig_height = min(base_fig_height + ld_block_required_height, 30.0)  # Cap total at 30 inches
-                
+
                 # Calculate height ratios based on entire figure
                 # Position bar:LD block = 1:14
                 pos_bar_ratio = 1
                 ld_block_height_ratio = 14
-                
+
                 # Calculate the fraction of total figure height for LD components
                 ld_height_fraction = ld_block_required_height / new_fig_height
                 if ld_height_fraction < 1.0:
@@ -636,30 +636,30 @@ def _process_layout(mode, figax, fig_kwargs, mqqratio, region_hspace, ld_block=F
                     # Fallback: use reasonable defaults
                     pos_bar_ratio = max(0.5, mqqratio * 0.05)
                     ld_block_height_ratio = max(7.0, mqqratio * 0.35)
-                
+
                 # Update figsize based on entire figure (with caps to prevent oversized figures)
                 fig_kwargs["figsize"] = (base_fig_width, new_fig_height)
-                
+
                 # Create subplots: ax1, ax3, ax_pos do not share x-axis, ax_ld_block does not
                 fig = plt.figure(**fig_kwargs)
                 # Start with default hspace, will be adjusted after plotting
                 gs = fig.add_gridspec(4, 1, height_ratios=[mqqratio, 1, pos_bar_ratio, ld_block_height_ratio], hspace=region_hspace)
-                
+
                 # ax1, ax3, ax_pos do not share x-axis
                 ax1 = fig.add_subplot(gs[0])
                 ax3 = fig.add_subplot(gs[1])
                 ax_pos = fig.add_subplot(gs[2])
                 # ax_ld_block does NOT share x-axis (uses its own rank-based coordinate system)
                 ax_ld_block = fig.add_subplot(gs[3])
-                
+
                 # Note: Don't hide ticks here - they will be hidden after _plot_regional sets ticks on ax3
                 # Hide x-axis ticks/labels on ax_ld_block (doesn't share x-axis)
-                ax_ld_block.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False, labeltop=False)
-                
+                ax_ld_block.tick_params(axis="x", which="both", bottom=False, top=False, labelbottom=False, labeltop=False)
+
                 # Note: Spacing will be adjusted after plotting to ensure ax3 has room for tick labels
             else:
-                fig, (ax1, ax3) = plt.subplots(2, 1, sharex=False, 
-                    gridspec_kw={'height_ratios': [mqqratio, 1]}, **fig_kwargs)
+                fig, (ax1, ax3) = plt.subplots(2, 1, sharex=False,
+                    gridspec_kw={"height_ratios": [mqqratio, 1]}, **fig_kwargs)
                 ax_ld_block = None
             ax2 = None
             if not ld_block:

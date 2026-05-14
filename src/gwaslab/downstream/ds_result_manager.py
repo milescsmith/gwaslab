@@ -10,8 +10,9 @@ Key Features:
 - Support for LDSC, finemapping, clumping, and PIPCS results
 """
 
+from typing import Any, Dict, Optional, Union
+
 import pandas as pd
-from typing import Optional, Dict, Any, Union
 
 
 class DownstreamResultManager:
@@ -52,7 +53,7 @@ class DownstreamResultManager:
     True
     >>> manager.clear_ldsc()
     """
-    
+
     def __init__(self):
         """Initialize the downstream result manager with default empty values."""
         # LDSC results
@@ -62,45 +63,45 @@ class DownstreamResultManager:
         self._ldsc_h2_cts = None
         self._ldsc_partitioned_h2_summary = None
         self._ldsc_partitioned_h2_results = None
-        
+
         # Finemapping results
         self._finemapping = {}
-        
+
         # Clumping results
         self._clumps = {}
-        
+
         # PIPCS results
         self._pipcs = pd.DataFrame()
-    
+
     # ============================================================================
     # LDSC Properties and Methods
     # ============================================================================
-    
+
     @property
-    def ldsc_h2(self) -> Optional[Any]:
+    def ldsc_h2(self) -> Any | None:
         """LDSC heritability estimate."""
         return self._ldsc_h2
-    
+
     @ldsc_h2.setter
-    def ldsc_h2(self, value: Optional[Any]):
+    def ldsc_h2(self, value: Any | None):
         """Set LDSC heritability estimate."""
         self._ldsc_h2 = value
-    
+
     @property
-    def ldsc_h2_results(self) -> Optional[pd.DataFrame]:
+    def ldsc_h2_results(self) -> pd.DataFrame | None:
         """Detailed LDSC heritability results."""
         return self._ldsc_h2_results
-    
+
     @ldsc_h2_results.setter
-    def ldsc_h2_results(self, value: Optional[pd.DataFrame]):
+    def ldsc_h2_results(self, value: pd.DataFrame | None):
         """Set detailed LDSC heritability results."""
         self._ldsc_h2_results = value
-    
+
     @property
     def ldsc_rg(self) -> pd.DataFrame:
         """LDSC genetic correlation results."""
         return self._ldsc_rg
-    
+
     @ldsc_rg.setter
     def ldsc_rg(self, value: Union[pd.DataFrame, None]):
         """Set LDSC genetic correlation results."""
@@ -108,59 +109,59 @@ class DownstreamResultManager:
             self._ldsc_rg = pd.DataFrame()
         else:
             self._ldsc_rg = value
-    
+
     @property
-    def ldsc_h2_cts(self) -> Optional[Any]:
+    def ldsc_h2_cts(self) -> Any | None:
         """LDSC cell-type-specific heritability results."""
         return self._ldsc_h2_cts
-    
+
     @ldsc_h2_cts.setter
-    def ldsc_h2_cts(self, value: Optional[Any]):
+    def ldsc_h2_cts(self, value: Any | None):
         """Set LDSC cell-type-specific heritability results."""
         self._ldsc_h2_cts = value
-    
+
     @property
-    def ldsc_partitioned_h2_summary(self) -> Optional[Any]:
+    def ldsc_partitioned_h2_summary(self) -> Any | None:
         """LDSC partitioned heritability summary."""
         return self._ldsc_partitioned_h2_summary
-    
+
     @ldsc_partitioned_h2_summary.setter
-    def ldsc_partitioned_h2_summary(self, value: Optional[Any]):
+    def ldsc_partitioned_h2_summary(self, value: Any | None):
         """Set LDSC partitioned heritability summary."""
         self._ldsc_partitioned_h2_summary = value
-    
+
     @property
-    def ldsc_partitioned_h2_results(self) -> Optional[pd.DataFrame]:
+    def ldsc_partitioned_h2_results(self) -> pd.DataFrame | None:
         """Detailed LDSC partitioned heritability results."""
         return self._ldsc_partitioned_h2_results
-    
+
     @ldsc_partitioned_h2_results.setter
-    def ldsc_partitioned_h2_results(self, value: Optional[pd.DataFrame]):
+    def ldsc_partitioned_h2_results(self, value: pd.DataFrame | None):
         """Set detailed LDSC partitioned heritability results."""
         self._ldsc_partitioned_h2_results = value
-    
+
     def has_ldsc_h2(self) -> bool:
         """Check if LDSC heritability estimate exists."""
         return self._ldsc_h2 is not None
-    
+
     def has_ldsc_h2_results(self) -> bool:
         """Check if detailed LDSC heritability results exist."""
         return self._ldsc_h2_results is not None and not self._ldsc_h2_results.empty
-    
+
     def has_ldsc_rg(self) -> bool:
         """Check if LDSC genetic correlation results exist."""
         return not self._ldsc_rg.empty
-    
+
     def has_ldsc_h2_cts(self) -> bool:
         """Check if LDSC cell-type-specific heritability results exist."""
         return self._ldsc_h2_cts is not None
-    
+
     def has_ldsc_partitioned_h2(self) -> bool:
         """Check if LDSC partitioned heritability results exist."""
-        return (self._ldsc_partitioned_h2_summary is not None or 
-                (self._ldsc_partitioned_h2_results is not None and 
+        return (self._ldsc_partitioned_h2_summary is not None or
+                (self._ldsc_partitioned_h2_results is not None and
                  not self._ldsc_partitioned_h2_results.empty))
-    
+
     def clear_ldsc(self):
         """Clear all LDSC results."""
         self._ldsc_h2 = None
@@ -169,24 +170,24 @@ class DownstreamResultManager:
         self._ldsc_h2_cts = None
         self._ldsc_partitioned_h2_summary = None
         self._ldsc_partitioned_h2_results = None
-    
+
     # ============================================================================
     # Finemapping Properties and Methods
     # ============================================================================
-    
+
     @property
-    def finemapping(self) -> Dict[str, Any]:
+    def finemapping(self) -> dict[str, Any]:
         """Finemapping results dictionary."""
         return self._finemapping
-    
+
     @finemapping.setter
-    def finemapping(self, value: Dict[str, Any]):
+    def finemapping(self, value: dict[str, Any]):
         """Set finemapping results dictionary."""
         if value is None:
             self._finemapping = {}
         else:
             self._finemapping = value
-    
+
     def get_finemapping(self, key: str, default: Any = None) -> Any:
         """Get a specific finemapping result by key.
         
@@ -203,7 +204,7 @@ class DownstreamResultManager:
             The value associated with the key, or default if not found.
         """
         return self._finemapping.get(key, default)
-    
+
     def set_finemapping(self, key: str, value: Any):
         """Set a specific finemapping result.
         
@@ -215,8 +216,8 @@ class DownstreamResultManager:
             Value to store.
         """
         self._finemapping[key] = value
-    
-    def has_finemapping(self, key: Optional[str] = None) -> bool:
+
+    def has_finemapping(self, key: str | None = None) -> bool:
         """Check if finemapping results exist.
         
         Parameters
@@ -232,28 +233,28 @@ class DownstreamResultManager:
         if key is None:
             return len(self._finemapping) > 0
         return key in self._finemapping
-    
+
     def clear_finemapping(self):
         """Clear all finemapping results."""
         self._finemapping = {}
-    
+
     # ============================================================================
     # Clumping Properties and Methods
     # ============================================================================
-    
+
     @property
-    def clumps(self) -> Dict[str, Any]:
+    def clumps(self) -> dict[str, Any]:
         """Clumping results dictionary."""
         return self._clumps
-    
+
     @clumps.setter
-    def clumps(self, value: Dict[str, Any]):
+    def clumps(self, value: dict[str, Any]):
         """Set clumping results dictionary."""
         if value is None:
             self._clumps = {}
         else:
             self._clumps = value
-    
+
     def get_clumps(self, key: str, default: Any = None) -> Any:
         """Get a specific clumping result by key.
         
@@ -270,7 +271,7 @@ class DownstreamResultManager:
             The value associated with the key, or default if not found.
         """
         return self._clumps.get(key, default)
-    
+
     def set_clumps(self, key: str, value: Any):
         """Set a specific clumping result.
         
@@ -282,8 +283,8 @@ class DownstreamResultManager:
             Value to store.
         """
         self._clumps[key] = value
-    
-    def has_clumps(self, key: Optional[str] = None) -> bool:
+
+    def has_clumps(self, key: str | None = None) -> bool:
         """Check if clumping results exist.
         
         Parameters
@@ -299,20 +300,20 @@ class DownstreamResultManager:
         if key is None:
             return len(self._clumps) > 0
         return key in self._clumps
-    
+
     def clear_clumps(self):
         """Clear all clumping results."""
         self._clumps = {}
-    
+
     # ============================================================================
     # PIPCS Properties and Methods
     # ============================================================================
-    
+
     @property
     def pipcs(self) -> pd.DataFrame:
         """PIPCS (Posterior Inclusion Probabilities for Credible Sets) results."""
         return self._pipcs
-    
+
     @pipcs.setter
     def pipcs(self, value: Union[pd.DataFrame, None]):
         """Set PIPCS results."""
@@ -320,27 +321,27 @@ class DownstreamResultManager:
             self._pipcs = pd.DataFrame()
         else:
             self._pipcs = value
-    
+
     def has_pipcs(self) -> bool:
         """Check if PIPCS results exist."""
         return not self._pipcs.empty
-    
+
     def clear_pipcs(self):
         """Clear PIPCS results."""
         self._pipcs = pd.DataFrame()
-    
+
     # ============================================================================
     # General Management Methods
     # ============================================================================
-    
+
     def clear_all(self):
         """Clear all downstream analysis results."""
         self.clear_ldsc()
         self.clear_finemapping()
         self.clear_clumps()
         self.clear_pipcs()
-    
-    def get_summary(self) -> Dict[str, Any]:
+
+    def get_summary(self) -> dict[str, Any]:
         """Get a summary of available downstream analysis results.
         
         Returns
@@ -358,7 +359,7 @@ class DownstreamResultManager:
             "clumps": self.has_clumps(),
             "pipcs": self.has_pipcs(),
         }
-    
+
     def __repr__(self) -> str:
         """String representation of the manager."""
         summary = self.get_summary()

@@ -1,8 +1,8 @@
 import os
-import sys
-import unittest
-import tempfile
 import shutil
+import sys
+import tempfile
+import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "src")
@@ -117,12 +117,12 @@ class TestSumstatsPair(unittest.TestCase):
         """Test filter_value with more complex expressions"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
         original_len = len(sp.data)
-        
+
         # Filter with multiple conditions
         sp2 = sp.filter_value("P_1 < 0.1 & P_2 < 0.1", inplace=False)
         self.assertIsInstance(sp2, SumstatsPair)
         self.assertLessEqual(len(sp2.data), original_len)
-        
+
         # Original should be unchanged
         self.assertEqual(len(sp.data), original_len)
 
@@ -132,7 +132,7 @@ class TestSumstatsPair(unittest.TestCase):
         # clump requires external tools, but we can check the structure exists
         self.assertIsInstance(sp.clumps, dict)
         # The method will fail without PLINK/bfile, but we can test the structure
-        self.assertTrue(hasattr(sp, 'clump'))
+        self.assertTrue(hasattr(sp, "clump"))
         self.assertTrue(callable(sp.clump))
 
     def test_to_coloc_structure(self):
@@ -140,7 +140,7 @@ class TestSumstatsPair(unittest.TestCase):
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
         # to_coloc requires external tools, but we can check the structure exists
         self.assertIsInstance(sp.coloc, dict)
-        self.assertTrue(hasattr(sp, 'to_coloc'))
+        self.assertTrue(hasattr(sp, "to_coloc"))
         self.assertTrue(callable(sp.to_coloc))
 
     def test_to_mesusie_structure(self):
@@ -148,13 +148,13 @@ class TestSumstatsPair(unittest.TestCase):
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
         # to_mesusie requires external tools, but we can check the structure exists
         self.assertIsInstance(sp.mesusie, dict)
-        self.assertTrue(hasattr(sp, 'to_mesusie'))
+        self.assertTrue(hasattr(sp, "to_mesusie"))
         self.assertTrue(callable(sp.to_mesusie))
 
     def test_run_mesusie_structure(self):
         """Test that run_mesusie method exists and sets up results"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        self.assertTrue(hasattr(sp, 'run_mesusie'))
+        self.assertTrue(hasattr(sp, "run_mesusie"))
         self.assertTrue(callable(sp.run_mesusie))
         # Check that mesusie_res is initialized
         self.assertIsInstance(sp.mesusie_res, pd.DataFrame)
@@ -162,13 +162,13 @@ class TestSumstatsPair(unittest.TestCase):
     def test_run_ccgwas_structure(self):
         """Test that run_ccgwas method exists"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        self.assertTrue(hasattr(sp, 'run_ccgwas'))
+        self.assertTrue(hasattr(sp, "run_ccgwas"))
         self.assertTrue(callable(sp.run_ccgwas))
 
     def test_read_pipcs_structure(self):
         """Test that read_pipcs method exists"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        self.assertTrue(hasattr(sp, 'read_pipcs'))
+        self.assertTrue(hasattr(sp, "read_pipcs"))
         self.assertTrue(callable(sp.read_pipcs))
         # Check that mesusie_res is initialized
         self.assertIsInstance(sp.mesusie_res, pd.DataFrame)
@@ -176,7 +176,7 @@ class TestSumstatsPair(unittest.TestCase):
     def test_run_coloc_susie_structure(self):
         """Test that run_coloc_susie method exists"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        self.assertTrue(hasattr(sp, 'run_coloc_susie'))
+        self.assertTrue(hasattr(sp, "run_coloc_susie"))
         self.assertTrue(callable(sp.run_coloc_susie))
         # Check that coloc_susie_res is initialized
         self.assertIsInstance(sp.coloc_susie_res, pd.DataFrame)
@@ -184,7 +184,7 @@ class TestSumstatsPair(unittest.TestCase):
     def test_run_two_sample_mr_structure(self):
         """Test that run_two_sample_mr method exists"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        self.assertTrue(hasattr(sp, 'run_two_sample_mr'))
+        self.assertTrue(hasattr(sp, "run_two_sample_mr"))
         self.assertTrue(callable(sp.run_two_sample_mr))
         # Check that mr dictionary is initialized
         self.assertIsInstance(sp.mr, dict)
@@ -192,7 +192,7 @@ class TestSumstatsPair(unittest.TestCase):
     def test_extract_with_ld_proxy_structure(self):
         """Test that extract_with_ld_proxy method exists"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        self.assertTrue(hasattr(sp, 'extract_with_ld_proxy'))
+        self.assertTrue(hasattr(sp, "extract_with_ld_proxy"))
         self.assertTrue(callable(sp.extract_with_ld_proxy))
 
     def test_offload_and_reload(self):
@@ -201,22 +201,22 @@ class TestSumstatsPair(unittest.TestCase):
         original_data = sp.data.copy()
         original_len = len(original_data)
         original_cols = list(sp.data.columns)
-        
+
         # Offload data
         sp.offload()
-        
+
         # Data should be deleted (check by trying to access it)
         try:
             _ = sp.data
             data_exists = True
         except AttributeError:
             data_exists = False
-        
+
         self.assertFalse(data_exists, "Data should be deleted after offload")
-        
+
         # Reload data
         sp.reload()
-        
+
         # Data should be restored
         self.assertIsInstance(sp.data, pd.DataFrame)
         self.assertEqual(len(sp.data), original_len)
@@ -234,7 +234,7 @@ class TestSumstatsPair(unittest.TestCase):
             sp.data["EAF_1"] = [0.2, 0.3, 0.4]
         if "EAF_2" not in sp.data.columns:
             sp.data["EAF_2"] = [0.25, 0.35, 0.45]
-        
+
         # compare_af should be callable
         # It may return a figure or None depending on save parameter
         try:
@@ -263,19 +263,19 @@ class TestSumstatsPair(unittest.TestCase):
     def test_data_structure_after_merge(self):
         """Test that merged data has correct structure"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        
+
         # Check that both study columns are present
         self.assertIn("BETA_1", sp.data.columns)
         self.assertIn("BETA_2", sp.data.columns)
         self.assertIn("SE_1", sp.data.columns)
         self.assertIn("SE_2", sp.data.columns)
-        
+
         # Check that info columns are not duplicated
         self.assertIn("CHR", sp.data.columns)
         self.assertIn("POS", sp.data.columns)
         self.assertIn("EA", sp.data.columns)
         self.assertIn("NEA", sp.data.columns)
-        
+
         # Check that EA and NEA don't have suffixes
         self.assertNotIn("EA_1", sp.data.columns)
         self.assertNotIn("EA_2", sp.data.columns)
@@ -283,13 +283,13 @@ class TestSumstatsPair(unittest.TestCase):
     def test_meta_structure(self):
         """Test that meta dictionary is properly structured"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        
+
         # Check meta structure
         self.assertIn("gwaslab", sp.meta)
         self.assertIn("group_name", sp.meta["gwaslab"])
         self.assertIn("objects", sp.meta["gwaslab"])
         self.assertEqual(len(sp.meta["gwaslab"]["objects"]), 2)
-        
+
         # Check study names
         self.assertEqual(len(sp.study_names), 2)
         self.assertEqual(sp.study_names[0], "StudyA")
@@ -298,11 +298,11 @@ class TestSumstatsPair(unittest.TestCase):
     def test_sumstats1_and_sumstats2_attributes(self):
         """Test that sumstats1 and sumstats2 attributes are set"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        
+
         # Check that sumstats1 and sumstats2 are DataFrames
         self.assertIsInstance(sp.sumstats1, pd.DataFrame)
         self.assertIsInstance(sp.sumstats2, pd.DataFrame)
-        
+
         # They may be empty if return_not_matched_mold=True returns only matched variants
         # Just check they are DataFrames (they might be empty)
         self.assertGreaterEqual(len(sp.sumstats1), 0)
@@ -312,7 +312,7 @@ class TestSumstatsPair(unittest.TestCase):
         """Test that suffixes attribute is correctly set"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
         self.assertEqual(sp.suffixes, ("_1", "_2"))
-        
+
         # Test with custom suffixes (may have limitations with EA/NEA handling)
         try:
             sp_custom = SumstatsPair(self.s1, self.s2, suffixes=("_A", "_B"), verbose=False)
@@ -338,19 +338,19 @@ class TestSumstatsPair(unittest.TestCase):
     def test_viz_params_attribute(self):
         """Test that viz_params attribute is initialized"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
-        self.assertTrue(hasattr(sp, 'viz_params'))
+        self.assertTrue(hasattr(sp, "viz_params"))
         self.assertIsNotNone(sp.viz_params)
 
     def test_filter_value_preserves_structure(self):
         """Test that filter_value preserves SumstatsPair structure"""
         sp = SumstatsPair(self.s1, self.s2, verbose=False)
         sp2 = sp.filter_value("P_1 < 0.1", inplace=False)
-        
+
         # Check that all attributes are preserved
         self.assertEqual(sp2.suffixes, sp.suffixes)
         self.assertEqual(sp2.study_names, sp.study_names)
         self.assertEqual(sp2.meta["gwaslab"]["group_name"], sp.meta["gwaslab"]["group_name"])
-        
+
         # Check that data is filtered
         self.assertLessEqual(len(sp2.data), len(sp.data))
 
@@ -378,7 +378,7 @@ class TestSumstatsPair(unittest.TestCase):
             "SE": [0.06, 0.11],
             "N": [3000, 3000],  # Different N
         })
-        
+
         # Create sumstats with N column specified
         s1 = Sumstats(
             sumstats=df1,
@@ -406,9 +406,9 @@ class TestSumstatsPair(unittest.TestCase):
             study="StudyB",
             verbose=False,
         )
-        
+
         sp = SumstatsPair(s1, s2, verbose=False)
-        
+
         # Check that ns is calculated correctly
         self.assertIsNotNone(sp.ns)
         self.assertEqual(len(sp.ns), 2)
@@ -431,7 +431,7 @@ class TestSumstatsPair(unittest.TestCase):
             "P": [0.78, 0.95],
             "N": [150000, 150000],
         })
-        
+
         # sumstats2: one variant at position 1:3367351 (matches second variant from sumstats1, flipped)
         df2 = pd.DataFrame({
             "SNPID": ["1:3367351_T_TTACTTCAGCCCTTCACCTAGGAC"],
@@ -446,44 +446,44 @@ class TestSumstatsPair(unittest.TestCase):
             "P": [0.8726],
             "N": [50000],
         })
-        
+
         s1 = make_sumstats(df1, study_name="Study1")
         s2 = make_sumstats(df2, study_name="Study2")
-        
+
         # Test with keep_all_variants=True
         sp = SumstatsPair(s1, s2, keep_all_variants=True, verbose=False)
-        
+
         # Should have:
         # 1. The matched variant (sumstats1 variant 2 with sumstats2 variant - flipped match)
         # 2. The unmatched variant from sumstats1 (variant 1 - C/T)
         # 3. The unmatched variant from sumstats2 should be represented in the matched row
         # So we expect at least 2 rows (matched + unmatched from sumstats1)
-        
+
         # After merging, EA_1/NEA_1 are renamed to EA/NEA, and EA/NEA from sumstats2 are dropped
         # Check that we have the matched variant (EA should be from sumstats1, BETA_2 from sumstats2)
         matched = sp.data[
-            (sp.data["CHR"] == 1) & 
+            (sp.data["CHR"] == 1) &
             (sp.data["POS"] == 3367351) &
             (sp.data["EA"] == "TTACTTCAGCCCTTCACCTAGGAC") &
             (sp.data["NEA"] == "T") &
             (sp.data["BETA_2"].notna())  # Should have data from sumstats2
         ]
         self.assertGreater(len(matched), 0, "Should have matched variant")
-        
+
         # Check that unmatched variant from sumstats1 is present (should have NA for sumstats2 columns)
         unmatched = sp.data[
-            (sp.data["CHR"] == 1) & 
+            (sp.data["CHR"] == 1) &
             (sp.data["POS"] == 3367351) &
             (sp.data["EA"] == "C") &
             (sp.data["NEA"] == "T")
         ]
         self.assertGreater(len(unmatched), 0, "Should have unmatched variant from sumstats1")
-        
+
         # Verify no cartesian product - should not have C/T from sumstats1 incorrectly matched with T/TTACTTCAGCCCTTCACCTAGGAC from sumstats2
         # (that would be an incorrect match - alleles don't match)
         # The unmatched C/T variant should have NA for all sumstats2 columns
         incorrect_match = sp.data[
-            (sp.data["CHR"] == 1) & 
+            (sp.data["CHR"] == 1) &
             (sp.data["POS"] == 3367351) &
             (sp.data["EA"] == "C") &
             (sp.data["NEA"] == "T") &

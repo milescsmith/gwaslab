@@ -1,12 +1,15 @@
-from typing import Optional, Union
-import requests
 import json
+import os
+from datetime import datetime
+from typing import Optional, Union
+
 import pandas as pd
+import requests
+
 import gwaslab as gl
 from gwaslab.info.g_Log import Log
 from gwaslab.qc.qc_decorator import with_logging
-from datetime import datetime
-import os
+
 
 def find_efo_cache(efo: str, path: str) -> Union[str, bool]:
     for root, dirs, files in os.walk(path):
@@ -37,19 +40,19 @@ def gwascatalog_trait(efo: str,
                       cache_dir: str = "./",
                       verbose: bool = True,
                       log: Log = Log()) -> pd.DataFrame:
-    
+
     #https://www.ebi.ac.uk/gwas/rest/docs/api
-    
+
     base_url = "https://www.ebi.ac.uk/gwas/rest/api/efoTraits/"+efo
-    
-    
+
+
     if use_cache==True:
-        log.write("searching cache in : {}".format(cache_dir))
+        log.write(f"searching cache in : {cache_dir}")
         cache = find_efo_cache_with_child(efo, cache_dir, show_child_traits)
         if cache is False:
             cache = find_efo_cache(efo, cache_dir)  # backward compat: no suffix
         if cache is False:
-            log.write(" -Cache not found for {}... Downloading from GWASCatalog...".format(efo), verbose=verbose)
+            log.write(f" -Cache not found for {efo}... Downloading from GWASCatalog...", verbose=verbose)
     else:
         cache = False
 
@@ -59,29 +62,29 @@ def gwascatalog_trait(efo: str,
         log.write(" -EFO trait api: "+ base_url, verbose=verbose)
         text = requests.get(base_url)
 
-        log.write(" -Status code: {}".format(text.status_code), verbose=verbose) 
+        log.write(f" -Status code: {text.status_code}", verbose=verbose)
         if text.status_code!=200:
-            log.write(" -Status code is not 200. Access failed. Please check your internet or the GWAS Catalog sever status.", verbose=verbose) 
-            log.write(" -Message:{}".format(text.text), verbose=verbose) 
+            log.write(" -Status code is not 200. Access failed. Please check your internet or the GWAS Catalog sever status.", verbose=verbose)
+            log.write(f" -Message:{text.text}", verbose=verbose)
             return 0
 
         api_response = json.loads(text.text)
         log.write(" -Trait Name:",api_response["trait"], verbose=verbose)
-        log.write(" -Trait URL:",api_response["uri"], verbose=verbose) 
-            
+        log.write(" -Trait URL:",api_response["uri"], verbose=verbose)
+
         child_param = "true" if show_child_traits else "false"
         base_url = "https://www.ebi.ac.uk/gwas/rest/api/efoTraits/"+efo+"/associations?projection=associationByEfoTrait&show_child_traits="+child_param
         log.write(" -Requesting (GET) GWAS associations through the GWASCatalog API...", verbose=verbose)
-        log.write(" -associationsByTraitSummary API: "+ base_url, verbose=verbose)   
-        log.write(" -Note: this step might take a while...", verbose=verbose)   
-        
+        log.write(" -associationsByTraitSummary API: "+ base_url, verbose=verbose)
+        log.write(" -Note: this step might take a while...", verbose=verbose)
+
         # get request and check status code of response
         raw_data = requests.get(base_url)
-        
+
         # whether to proceed based on status code
         is_proceed = check_request_status_code(raw_data.status_code,verbose=verbose,log=log)
         if is_proceed is False: return False
-        
+
 
         log.write(" -Loading json ...", verbose=verbose)
         # Transform API response from JSON into Python dictionary
@@ -90,32 +93,32 @@ def gwascatalog_trait(efo: str,
         now = datetime.now() # current date and time
         datestring = now.strftime("%Y%m%d")
         child_suffix = "childTrue" if show_child_traits else "childFalse"
-        json_path = cache_dir + "GWASCatalog_{}_associationsByTraitSummary_text_{}_{}.json".format(efo, datestring, child_suffix)
-        
+        json_path = cache_dir + f"GWASCatalog_{efo}_associationsByTraitSummary_text_{datestring}_{child_suffix}.json"
+
         try:
-            log.write(" -Saving json to: {} ...".format(json_path), verbose=verbose) 
-            with open(json_path, 'w', encoding='utf-8') as f:
+            log.write(f" -Saving json to: {json_path} ...", verbose=verbose)
+            with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(api_response, f, ensure_ascii=False, indent=4)
         except:
             pass
     else:
-        log.write(" -Loading cache for {}: {} ...".format(efo, cache), verbose=verbose) 
+        log.write(f" -Loading cache for {efo}: {cache} ...", verbose=verbose)
         with open(cache) as f:
             api_response = json.load(f)
-        
-    log.write(" -Parsing json ...", verbose=verbose)        
-    # An 
+
+    log.write(" -Parsing json ...", verbose=verbose)
+    # An
     records=list()
     log.write(" -Number of reported associations for "+ efo +" in GWASCatalog:",len( api_response["_embedded"]["associations"]), verbose=verbose)
-   
+
     for association in api_response["_embedded"]["associations"]:
-        #association statistics:       
-        p=float(association["pvalue"])    
+        #association statistics:
+        p=float(association["pvalue"])
         # filter association by p value
         if p < sig_level:
             # obtain statistics
             try:
-                function_class=association["functionalClass"] 
+                function_class=association["functionalClass"]
             except:
                 function_class=None
             try:
@@ -123,9 +126,9 @@ def gwascatalog_trait(efo: str,
             except:
                 eaf= None
             try:
-                study=association["study"]['publicationInfo']["title"]
-                pubmedid=association["study"]['publicationInfo']["pubmedId"]
-                author=association["study"]['publicationInfo']["author"]["fullname"]
+                study=association["study"]["publicationInfo"]["title"]
+                pubmedid=association["study"]["publicationInfo"]["pubmedId"]
+                author=association["study"]["publicationInfo"]["author"]["fullname"]
             except:
                 study= None
                 pubmedid = None
@@ -143,7 +146,7 @@ def gwascatalog_trait(efo: str,
                 se=association["standardError"]
             except:
                 beta=None
-                se=None    
+                se=None
             #########################################################
             #obtain snp information
             for snp in association["snps"]:
@@ -189,8 +192,8 @@ def gwascatalog_trait(efo: str,
                                 records.append(row)
             #rsid locations
     gwascatalog_lead_snps = pd.DataFrame(records,columns=["SNPID","CHR","POS","REPORT_GENENAME","CLOSEST_GENENAMES","FUNCTION_CLASS","OR","BETA","SE","P","TRAIT","STUDY","PUBMEDID","AUTHOR"])
-    log.write(" -Loading retrieved data into gwaslab Sumstats object ...", verbose=verbose)  
-    sigs = gl.Sumstats(gwascatalog_lead_snps.copy(),fmt="gwaslab",other=['REPORT_GENENAME', 'CLOSEST_GENENAMES','TRAIT', 'STUDY', 'PUBMEDID','AUTHOR'],verbose=False)
+    log.write(" -Loading retrieved data into gwaslab Sumstats object ...", verbose=verbose)
+    sigs = gl.Sumstats(gwascatalog_lead_snps.copy(),fmt="gwaslab",other=["REPORT_GENENAME", "CLOSEST_GENENAMES","TRAIT", "STUDY", "PUBMEDID","AUTHOR"],verbose=False)
     sigs.fix_pos(verbose=False)
     sigs.fix_chr(verbose=False)
     sigs.sort_coordinate(verbose=False)
@@ -205,9 +208,9 @@ def check_request_status_code(
     verbose: bool = True,
     log: Log = Log()
 ) -> bool:
-    
+
     is_proceed=False
-    
+
     if request_code == 200:
         log.write(" -Status code 200 OK: Retrieved data from GWASCatalog successffully ...", verbose=verbose)
         is_proceed=True
@@ -217,6 +220,6 @@ def check_request_status_code(
         log.write(" -Status code 301 Moved Permanently: The requested resource did not exist ...", verbose=verbose)
     elif request_code == 400:
         log.write(" -Status code 400 Bad Request: The requested resource did not exist ...", verbose=verbose)
-    
+
     return is_proceed
 

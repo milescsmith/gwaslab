@@ -1,7 +1,8 @@
-from typing import TYPE_CHECKING, Dict, Any, Optional
-import pandas as pd
 import time
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
 import numpy as np
+import pandas as pd
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
@@ -13,7 +14,7 @@ status_dic_12={
 "97":"Unmapped",
 "98":"Unknown",
 "99":"Unchecked"
-    }  
+    }
 status_dic_3={
 "0":"rsid valid & SNPID valid",
 "1":"rsid valid & SNPID invalid",
@@ -25,7 +26,7 @@ status_dic_3={
 "7":"rsid invalid & SNPID unknown",
 "8":"rsid unknown & SNPID invalid",
 "9":"Unchecked"
-    }  
+    }
 status_dic_4={
 "0":"CHR valid & POS valid",
 "2":"CHR invalid & POS invalid",
@@ -36,7 +37,7 @@ status_dic_4={
 "7":"CHR invalid & POS unknown",
 "8":"CHR unknown & POS invalid",
 "9":"Unchecked"
-    }  
+    }
 status_dic_5={
 "0":"standardized SNP",
 "1":"standardized & normalized insertion",
@@ -47,7 +48,7 @@ status_dic_5={
 "6":"invalid allele notation",
 "7":"Unknown",
 "9":"Unchecked"
-    }  
+    }
 status_dic_6={
 "0":"Match: NEA=REF",
 "1":"Flipped_fixed",
@@ -58,7 +59,7 @@ status_dic_6={
 "6":"Both_alleles_on_ref+indistinguishable",
 "8":"Not_on_reference_genome",
 "9":"Unchecked"
-    }  
+    }
 status_dic_7={
 "0":"Not_palindromic_SNPs",
 "1":"Palindromic+strand",
@@ -70,10 +71,10 @@ status_dic_7={
 "7":"Indistinguishable",
 "8":"No_matching_or_no_info",
 "9":"Unchecked"
-    }   
+    }
 
 def summarize(
-    self: 'Sumstats',
+    self: "Sumstats",
     chrom: str = "CHR",
     snpid: str = "SNPID",
     rsid: str = "rsID",
@@ -82,7 +83,7 @@ def summarize(
     beta: str = "BETA",
     n: str = "N",
     status: str = "STATUS",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate a structured quality-control summary for GWAS summary statistics.
 
@@ -330,9 +331,8 @@ def summarize(
 
 
 
-from typing import Any, Union, List, Dict
-import numpy as np
-import pandas as pd
+from typing import Any, List, Union
+
 
 def to_python(obj: Any) -> Any:
     # Dict
@@ -372,10 +372,10 @@ def sum_status(id_to_use: str, sumstats: pd.DataFrame) -> pd.DataFrame:
         results = results.loc[results[id_to_use]>0,:].sort_values(id_to_use,ascending=False)
         return results
 
-def _explain_status(i: str) -> Dict[str, str]:
+def _explain_status(i: str) -> dict[str, str]:
     title = ["Genome_Build","rsID&SNPID","CHR&POS","Stadardize&Normalize","Align","Panlidromic_SNP&Indel"]
     value = [status_dic_12[i[:2]] , status_dic_3[i[2]] , status_dic_4[i[3]], status_dic_5[i[4]], status_dic_6[i[5]], status_dic_7[i[6]]]
-    explanation = {i:j for i,j in zip(title, value)}
+    explanation = {i:j for i,j in zip(title, value, strict=False)}
     return explanation
 
 def lookupstatus(status: pd.Series) -> pd.DataFrame:
@@ -496,7 +496,7 @@ def lookupstatus(status: pd.Series) -> pd.DataFrame:
         status codes that appear in the input Series are included in the output.
     """
     uniq_status = status.unique()
- 
+
     status_dic={}
     for i in uniq_status:
         count = sum(status==i)
@@ -505,8 +505,8 @@ def lookupstatus(status: pd.Series) -> pd.DataFrame:
         i_str = str(int(i)).zfill(7)  # Ensure 7 digits
         description = [status_dic_12[i_str[:2]] , status_dic_3[i_str[2]] , status_dic_4[i_str[3]], status_dic_5[i_str[4]], status_dic_6[i_str[5]], status_dic_7[i_str[6]],count,percentage]
         status_dic[i] = description
-    df = pd.DataFrame.from_dict({i: status_dic[i] 
+    df = pd.DataFrame.from_dict({i: status_dic[i]
                            for i in status_dic.keys()},
-                           orient='index',columns=["Genome_Build","rsID&SNPID","CHR&POS","Stadardize&Normalize","Align","Panlidromic_SNP&Indel","Count","Percentage(%)"], dtype="string")
+                           orient="index",columns=["Genome_Build","rsID&SNPID","CHR&POS","Stadardize&Normalize","Align","Panlidromic_SNP&Indel","Count","Percentage(%)"], dtype="string")
     df = df.sort_index()
     return df

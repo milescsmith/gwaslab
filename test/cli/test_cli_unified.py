@@ -1,16 +1,16 @@
 import os
-import sys
-import unittest
-import tempfile
 import shutil
+import sys
+import tempfile
+import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from gwaslab_cli.main import main
 from gwaslab.g_Sumstats import Sumstats
+from gwaslab_cli.main import main
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "raw")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
@@ -296,7 +296,7 @@ class TestCLIUnifiedInterface(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        self.assertTrue(os.path.exists(self.output_path + ".gwaslab.tsv"), 
+        self.assertTrue(os.path.exists(self.output_path + ".gwaslab.tsv"),
                         f"Expected file not found: {self.output_path + '.gwaslab.tsv'}")
 
     def test_format_with_bgzip(self):
@@ -314,7 +314,7 @@ class TestCLIUnifiedInterface(unittest.TestCase):
         except SystemExit:
             pass
         # Check for bgzipped file (format: path.fmt.tab_fmt.gz)
-        self.assertTrue(os.path.exists(self.output_path + ".gwaslab.tsv.gz") or 
+        self.assertTrue(os.path.exists(self.output_path + ".gwaslab.tsv.gz") or
                        os.path.exists(self.output_path + ".gwaslab.tsv.bgz"),
                        f"Expected bgzipped file not found for: {self.output_path}")
 
@@ -542,7 +542,7 @@ class TestCLIUnifiedInterface(unittest.TestCase):
 
 class TestCLIFullWorkflowCoverage(unittest.TestCase):
     """Comprehensive tests for full CLI workflow coverage"""
-    
+
     def setUp(self):
         self.test_input = os.path.join(RAW_DIR, "dirty_sumstats.tsv")
         self.test_input_harmonize = os.path.join(RAW_DIR, "to_harmonize.tsv")
@@ -573,13 +573,13 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         # Verify output file exists and is valid
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file), f"Expected file not found: {output_file}")
-        
+
         # Verify it's a valid sumstats file
         s = Sumstats(output_file, fmt="gwaslab", verbose=False)
         self.assertGreater(len(s.data), 0)
@@ -603,13 +603,13 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv1)
         except SystemExit:
             pass
-        
+
         # Verify first output
         output_file1 = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file1):
             output_file1 = self.output_path + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file1), f"First output file not found: {output_file1}")
-        
+
         # Convert to different format
         argv2 = [
             "--input", output_file1,
@@ -624,11 +624,11 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv2)
         except SystemExit:
             pass
-        
+
         # Verify second output
         output_file2 = self.output_path2 + ".gwaslab.csv"
         self.assertTrue(os.path.exists(output_file2), f"Second output file not found: {output_file2}")
-        
+
         # Verify both files are valid
         s1 = Sumstats(output_file1, fmt="gwaslab", verbose=False)
         s2 = Sumstats(output_file2, fmt="gwaslab", verbose=False)
@@ -654,12 +654,12 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file), f"Expected file not found: {output_file}")
-        
+
         s = Sumstats(output_file, fmt="gwaslab", verbose=False)
         self.assertGreater(len(s.data), 0)
 
@@ -685,13 +685,13 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         # exclude_hla adds "noMHC." prefix
         output_file = self.output_path + ".noMHC.gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".noMHC.gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file), f"Expected file not found: {output_file}")
-        
+
         s = Sumstats(output_file, fmt="gwaslab", verbose=False)
         self.assertGreater(len(s.data), 0)
         # Verify N column was added
@@ -713,7 +713,7 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         # Parquet files may be written as directories or single files
         # Check for all possibilities:
         # 1. Single file: output.gwaslab.parquet
@@ -722,30 +722,30 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
         output_file = self.output_path + ".gwaslab.parquet"
         output_dir_with_ext = self.output_path + ".gwaslab.parquet"
         output_dir_no_ext = self.output_path + ".gwaslab"
-        
+
         parquet_exists = False
         parquet_path = None
-        
+
         # Check for single file
         if os.path.exists(output_file) and os.path.isfile(output_file):
             parquet_exists = True
             parquet_path = output_file
         # Check for directory with .parquet extension
         elif os.path.exists(output_dir_with_ext) and os.path.isdir(output_dir_with_ext):
-            parquet_files = [f for f in os.listdir(output_dir_with_ext) if f.endswith('.parquet')]
+            parquet_files = [f for f in os.listdir(output_dir_with_ext) if f.endswith(".parquet")]
             if parquet_files:
                 parquet_exists = True
                 parquet_path = output_dir_with_ext
         # Check for directory without .parquet extension (if extension was removed)
         elif os.path.exists(output_dir_no_ext) and os.path.isdir(output_dir_no_ext):
-            parquet_files = [f for f in os.listdir(output_dir_no_ext) if f.endswith('.parquet')]
+            parquet_files = [f for f in os.listdir(output_dir_no_ext) if f.endswith(".parquet")]
             if parquet_files:
                 parquet_exists = True
                 parquet_path = output_dir_no_ext
-        
-        self.assertTrue(parquet_exists, 
+
+        self.assertTrue(parquet_exists,
                        f"Expected parquet file/directory not found. Checked: {output_file}, {output_dir_with_ext}, {output_dir_no_ext}")
-        
+
         # Load parquet file with explicit tab_fmt
         s = Sumstats(parquet_path, fmt="gwaslab", tab_fmt="parquet", verbose=False)
         self.assertGreater(len(s.data), 0)
@@ -764,12 +764,12 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv1)
         except SystemExit:
             pass
-        
+
         output_file1 = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file1):
             output_file1 = self.output_path + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file1), "Step 1 output not found")
-        
+
         # Step 2: QC on converted file
         argv2 = [
             "--input", output_file1,
@@ -784,12 +784,12 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv2)
         except SystemExit:
             pass
-        
+
         output_file2 = self.output_path2 + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file2):
             output_file2 = self.output_path2 + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file2), "Step 2 output not found")
-        
+
         # Step 3: Final format conversion
         argv3 = [
             "--input", output_file2,
@@ -804,10 +804,10 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv3)
         except SystemExit:
             pass
-        
+
         output_file3 = self.output_path3 + ".gwaslab.csv"
         self.assertTrue(os.path.exists(output_file3), "Step 3 output not found")
-        
+
         # Verify all files are valid
         s1 = Sumstats(output_file1, fmt="gwaslab", verbose=False)
         s2 = Sumstats(output_file2, fmt="gwaslab", verbose=False)
@@ -832,12 +832,12 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file), f"Expected file not found: {output_file}")
-        
+
         s = Sumstats(output_file, fmt="gwaslab", verbose=False)
         self.assertLessEqual(len(s.data), 10, "Should have at most 10 rows")
 
@@ -858,12 +858,12 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file), f"Expected file not found: {output_file}")
-        
+
         s = Sumstats(output_file, fmt="gwaslab", verbose=False)
         self.assertGreater(len(s.data), 0)
 
@@ -883,13 +883,13 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         # Check for bgzipped file
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv.bgz"
         self.assertTrue(os.path.exists(output_file), f"Expected bgzipped file not found: {output_file}")
-        
+
         # Check for tabix index
         tbi_file = output_file + ".tbi"
         # Tabix index may or may not be created depending on system setup
@@ -932,13 +932,13 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         # exclude_hla adds "noMHC." prefix
         output_file = self.output_path + ".noMHC.gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".noMHC.gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file), f"Expected file not found: {output_file}")
-        
+
         s = Sumstats(output_file, fmt="gwaslab", verbose=False)
         self.assertGreater(len(s.data), 0)
 
@@ -957,7 +957,7 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv"
@@ -977,12 +977,12 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv"
         self.assertTrue(os.path.exists(output_file), f"Expected file not found: {output_file}")
-        
+
         s = Sumstats(output_file, fmt="gwaslab", verbose=False)
         self.assertGreater(len(s.data), 0)
 
@@ -1016,7 +1016,7 @@ class TestCLIFullWorkflowCoverage(unittest.TestCase):
             main(argv)
         except SystemExit:
             pass
-        
+
         output_file = self.output_path + ".gwaslab.tsv.gz"
         if not os.path.exists(output_file):
             output_file = self.output_path + ".gwaslab.tsv"

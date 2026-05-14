@@ -1,10 +1,13 @@
-from typing import Any, Optional, List
 import gc
+from typing import Any, List, Optional
+
+import numpy as np
 import pandas as pd
 import polars as pl
-import numpy as np
+
 from gwaslab.info.g_Log import Log
 from gwaslab.qc.qc_reserved_headers import get_dtype_dict_polars
+
 # pandas.api.types.is_int64_dtype
 # pandas.api.types.is_categorical_dtype
 
@@ -12,7 +15,7 @@ from gwaslab.qc.qc_reserved_headers import get_dtype_dict_polars
 dtype_dict = get_dtype_dict_polars()
 
 def check_datatype_polars(sumstats: pl.DataFrame, verbose: bool = True, log: Log = Log()) -> None:
-    
+
     #try:
     headers = []
     dtypes = []
@@ -20,16 +23,16 @@ def check_datatype_polars(sumstats: pl.DataFrame, verbose: bool = True, log: Log
     raw_verified =[]
     for header,dtype in  sumstats.schema.items():
         width = max(len(header),len(str(dtype)))
-        
+
         header_fix_length = header + " "*(width- len(header) )
-        
+
         dtype_fix_length  = str(dtype) + " "*(width- len(str(dtype)))
-        
+
         verified_str = verify_datatype(header, dtype)
         verified_fix_length  = verified_str + " " *(width- len(verified_str))
-        
+
         headers.append(format(header_fix_length))
-        dtypes.append((str(dtype_fix_length)))
+        dtypes.append(str(dtype_fix_length))
         verified.append(verified_fix_length)
         if verified_str == "F":
             raw_verified.append(header)
@@ -57,7 +60,7 @@ def check_datatype_polars(sumstats: pl.DataFrame, verbose: bool = True, log: Log
             bad_stats = [c for c in present_stats if verify_datatype(c, sumstats.schema[c]) == "F"]
             if len(bad_stats) > 0:
                 for c in bad_stats:
-                    log.warning("Consider using Sumstatsp.check_sanity() to check {} statistics".format(c), verbose=verbose)
+                    log.warning(f"Consider using Sumstatsp.check_sanity() to check {c} statistics", verbose=verbose)
         except:
             pass
     #except:
@@ -97,7 +100,7 @@ def quick_convert_datatype(sumstats: pl.DataFrame, log: Log, verbose: bool) -> p
         if col in dtype_dict.keys():
             if sumstats[col].dtype not in dtype_dict[col]:
                 datatype=dtype_dict[col][0]
-                log.write(" -Trying to convert datatype for {}: {} -> {}...".format(col, str(sumstats[col].dtype), datatype), end="" ,verbose=verbose)
+                log.write(f" -Trying to convert datatype for {col}: {sumstats[col].dtype!s} -> {datatype}...", end="" ,verbose=verbose)
                 try:
                     sumstats = sumstats.cast({col: datatype})
                     log.write("Success",show_time=False, verbose=verbose)
@@ -107,27 +110,27 @@ def quick_convert_datatype(sumstats: pl.DataFrame, log: Log, verbose: bool) -> p
     return sumstats
 
 def check_dataframe_shape_polars(sumstats: pl.DataFrame, log: Log, verbose: bool) -> None:
-    memory_in_mb = sumstats.estimated_size(unit="mb") 
+    memory_in_mb = sumstats.estimated_size(unit="mb")
     try:
-        log.write(" -Current Dataframe shape : {} x {} ; Memory usage: {:.2f} MB".format(len(sumstats),len(sumstats.columns),memory_in_mb), verbose=verbose)
+        log.write(f" -Current Dataframe shape : {len(sumstats)} x {len(sumstats.columns)} ; Memory usage: {memory_in_mb:.2f} MB", verbose=verbose)
     except:
         log.warning("Error: cannot get Dataframe shape...")
-    
+
 def check_dataframe_memory_usage(sumstats: pl.DataFrame, log: Log, verbose: bool) -> None:
-    memory_in_mb = sumstats.estimated_size(unit="mb") 
+    memory_in_mb = sumstats.estimated_size(unit="mb")
     try:
-        log.write(" -Current Dataframe memory usage: {:.2f} MB".format(memory_in_mb), verbose=verbose)
+        log.write(f" -Current Dataframe memory usage: {memory_in_mb:.2f} MB", verbose=verbose)
     except:
         log.warning("Error: cannot get Memory usage...")
 
 def check_datatype_for_cols_polars(
     sumstats_obj: Any,
-    cols: Optional[List[str]] = None,
+    cols: list[str] | None = None,
     verbose: bool = True,
     log: Log = Log(),
     fix: bool = False,
     **fix_kwargs: Any
-) -> Optional[pl.DataFrame]:
+) -> pl.DataFrame | None:
     """
     Verify dtypes for a specified subset of columns and optionally fix them.
 
@@ -158,10 +161,10 @@ def check_datatype_for_cols_polars(
     else:
         sumstats = sumstats_obj.data
         is_dataframe = False
-    
+
     if cols is None:
         cols = []
-    
+
     try:
         failed = []
 
@@ -178,8 +181,8 @@ def check_datatype_for_cols_polars(
         try:
             if fix is True:
                 try:
-                    from gwaslab.qc.qc_fix_sumstats_polars import _fix_chrp, _fix_posp
                     from gwaslab.info.g_meta import _update_qc_step
+                    from gwaslab.qc.qc_fix_sumstats_polars import _fix_chrp, _fix_posp
                 except Exception:
                     _fix_chrp = None
                     _fix_posp = None
@@ -194,7 +197,7 @@ def check_datatype_for_cols_polars(
                         sumstats = sumstats_obj.data
                         if _update_qc_step is not None:
                             _update_qc_step(sumstats_obj, "chr", chr_kwargs, True)
-                
+
                 if "POS" in failed and _fix_posp is not None:
                     pos_kwargs = {k: v for k, v in fix_kwargs.items() if k in ["remove", "lower_limit", "upper_limit", "limit"]}
                     if is_dataframe:
@@ -237,7 +240,7 @@ def check_datatype_for_cols_polars(
             bad_stats = [c for c in present_stats if verify_datatype(c, sumstats.schema[c]) == "F"]
             if len(bad_stats) > 0:
                 for c in bad_stats:
-                    log.warning("Consider using Sumstatsp.check_sanity() to check {} statistics".format(c), verbose=verbose)
+                    log.warning(f"Consider using Sumstatsp.check_sanity() to check {c} statistics", verbose=verbose)
         except:
             pass
 
@@ -245,5 +248,5 @@ def check_datatype_for_cols_polars(
             raise ValueError("Failed to fix dtypes for requested columns: {}".format(",".join(failed)))
         else:
             raise ValueError("Please fix dtypes using Sumstatsp methods (fix_chr, fix_pos, fix_allele, fix_id) for: {}. If statistics columns are present, consider Sumstatsp.check_sanity().".format(",".join(failed)))
-    
+
     return None

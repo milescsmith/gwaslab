@@ -1,7 +1,9 @@
-from typing import TYPE_CHECKING, Union, Optional
+from typing import TYPE_CHECKING, Optional, Union
+
 import pandas as pd
-from gwaslab.info.g_Log import Log
+
 from gwaslab.bd.bd_download import get_path
+from gwaslab.info.g_Log import Log
 from gwaslab.qc.qc_decorator import with_logging
 
 if TYPE_CHECKING:
@@ -15,9 +17,9 @@ if TYPE_CHECKING:
         must_kwargs=["build"]
 )
 def _infer_ancestry(
-    sumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
+    sumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
     ancestry_af: str,
-    build: Optional[str] = None,
+    build: str | None = None,
     log: Log = Log(),
     verbose: bool = True
 ) -> str:
@@ -63,7 +65,7 @@ def _infer_ancestry(
     elif ancestry_af == "1kg_hm3_hg38_eaf":
         original_keyword = "1kg_hm3_hg38_eaf"
         ancestry_af = get_path("1kg_hm3_hg38_eaf", log=log, verbose=verbose)
-    
+
     if ancestry_af is None or ancestry_af is False:
         if original_keyword:
             raise ValueError(
@@ -72,32 +74,32 @@ def _infer_ancestry(
             )
         else:
             raise ValueError("Please pass valid allele frequency table by ancestry file!")
-    
+
     ##start function with col checking##########################################################
 
     ############################################################################################
 
     ref_af = pd.read_csv(ancestry_af, sep="\t")
-    
-    data_af = pd.merge(sumstats[["CHR","POS","EA","NEA","EAF"]] ,ref_af,on=["CHR","POS"],how="inner") 
+
+    data_af = pd.merge(sumstats[["CHR","POS","EA","NEA","EAF"]] ,ref_af,on=["CHR","POS"],how="inner")
 
     log.write(f"  -Estimating Fst using {len(data_af)} variants...", verbose=verbose)
 
     is_filp = data_af["EA"] == data_af["ALT"]
     data_af.loc[is_filp, ["EA","NEA"]] = data_af.loc[is_filp, ["NEA","EA"]]
     data_af.loc[is_filp, "EAF"] = 1 - data_af.loc[is_filp, "EAF"]
-    
+
     headers = []
-    for i in ['GBR', 'FIN', 'CHS', 'PUR', 'CDX',
-        'CLM', 'IBS', 'PEL', 'PJL', 'KHV', 'ACB', 'GWD', 'ESN', 'BEB', 'MSL',
-        'STU', 'ITU', 'CEU', 'YRI', 'CHB', 'JPT', 'LWK', 'ASW', 'MXL', 'TSI',
-        'GIH', 'EUR', 'EAS', 'AMR', 'SAS', 'AFR']:
+    for i in ["GBR", "FIN", "CHS", "PUR", "CDX",
+        "CLM", "IBS", "PEL", "PJL", "KHV", "ACB", "GWD", "ESN", "BEB", "MSL",
+        "STU", "ITU", "CEU", "YRI", "CHB", "JPT", "LWK", "ASW", "MXL", "TSI",
+        "GIH", "EUR", "EAS", "AMR", "SAS", "AFR"]:
         headers.append(f"FST_{i}")
         data_af[f"FST_{i}"] = data_af.apply(lambda x: calculate_fst(x["EAF"], x[i]), axis=1)
-    
+
     for i,value in data_af[headers].mean().sort_values().items():
         log.write( f"  -{i} : {value}", verbose=verbose)
-        
+
         closest_ancestry = data_af[headers].mean().sort_values().idxmin()
 
     log.write(f"  -Closest Ancestry: {closest_ancestry.split('_')[1]}", verbose=verbose)

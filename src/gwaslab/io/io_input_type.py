@@ -5,12 +5,13 @@ Provides helpers to handle both DataFrame and Sumstats object inputs.
 """
 
 from typing import TYPE_CHECKING, Union
+
 import pandas as pd
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
 
-def _get_id_column(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame]) -> str:
+def _get_id_column(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame]) -> str:
     """
     Internal helper function to select the appropriate ID column (SNPID or rsID).
     
@@ -34,7 +35,7 @@ def _get_id_column(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame]) -> st
         except AttributeError:
             # Not a Sumstats object, pass through as-is
             data = sumstats_or_dataframe
-    
+
     if "SNPID" in data.columns:
         return "SNPID"
     else:

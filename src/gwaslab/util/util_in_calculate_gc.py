@@ -1,19 +1,21 @@
-from typing import TYPE_CHECKING, Union, Optional
-import pandas as pd
+from typing import TYPE_CHECKING, Optional, Union
+
 import numpy as np
+import pandas as pd
 import scipy as sp
+
 from gwaslab.info.g_Log import Log
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
 
 #20220312
-def _lambda_GC(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
-                include_chrXYMT: bool = True, 
+def _lambda_GC(insumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
+                include_chrXYMT: bool = True,
                 x: Union[int, str] = 23,
-                y: Union[int, str] = 24, 
-                mt: Union[int, str] = 25, 
-                mode: Optional[str] = None,
+                y: Union[int, str] = 24,
+                mt: Union[int, str] = 25,
+                mode: str | None = None,
                 level: float = 0.5,
                 verbose: bool = True,
                 log: Log = Log()) -> float:
@@ -76,36 +78,36 @@ def _lambda_GC(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
 
     mode=mode.upper()
     sumstats=insumstats.loc[:,["CHR",mode]]
-    
+
     if include_chrXYMT is False:
         log.write(" -Excluding chrX, chrY, chrMT from lambda GC calculation.", verbose=verbose)
         xymt= [x,y,mt,"chrx","chry","chrmt","chrX","chrY","chrMT","chrM","M","x","y","mt","X","Y","MT"]
         sumstats = sumstats.loc[~sumstats["CHR"].isin(xymt),:]
 
     indata = sumstats[mode].values
-    if len(indata) == 0: 
+    if len(indata) == 0:
         log.write("  -No available variants to use for calculation.", verbose=verbose)
-        return np.nan   
+        return np.nan
     if mode=="p" or mode=="P":
         observedMedianChi2 = sp.stats.chi2.isf(np.nanmedian(indata),1)
         expectedMedianChi2 = sp.stats.chi2.ppf(level,1)
         lambdagc=observedMedianChi2/expectedMedianChi2
-        log.write(" -Lambda GC (P mode) at "+ str(1 - level)+ " is"," ","{:.5f}".format(lambdagc), verbose=verbose)
+        log.write(" -Lambda GC (P mode) at "+ str(1 - level)+ " is"," ",f"{lambdagc:.5f}", verbose=verbose)
     elif mode=="mlog10p" or mode=="MLOG10P":
         observedMedianChi2 = sp.stats.chi2.isf( np.nanmedian(np.power(10,-indata)) ,1)
         expectedMedianChi2 = sp.stats.chi2.ppf(level,1)
         lambdagc=observedMedianChi2/expectedMedianChi2
-        log.write(" -Lambda GC (MLOG10P mode) at "+ str(1- level)+ " is"," ","{:.5f}".format(lambdagc), verbose=verbose)
+        log.write(" -Lambda GC (MLOG10P mode) at "+ str(1- level)+ " is"," ",f"{lambdagc:.5f}", verbose=verbose)
     elif mode=="z" or mode=="Z":
         observedMedianChi2 = np.median((indata)**2)
         expectedMedianChi2 = sp.stats.chi2.ppf(level,1)
         lambdagc=observedMedianChi2/expectedMedianChi2
-        if verbose:log.write(" -Lambda GC (Z mode) at "+ str(1- level)+ " is"," ","{:.5f}".format(lambdagc), verbose=verbose)
+        if verbose:log.write(" -Lambda GC (Z mode) at "+ str(1- level)+ " is"," ",f"{lambdagc:.5f}", verbose=verbose)
     elif mode=="chi2" or mode=="CHISQ":
         observedMedianChi2 = np.median(indata)
         expectedMedianChi2 = sp.stats.chi2.ppf(level,1)
         lambdagc=observedMedianChi2/expectedMedianChi2
-        log.write(" -Lambda GC (CHISQ mode) at "+ str(1- level)+ " is"," ","{:.5f}".format(lambdagc), verbose=verbose)
+        log.write(" -Lambda GC (CHISQ mode) at "+ str(1- level)+ " is"," ",f"{lambdagc:.5f}", verbose=verbose)
     else:
         return np.nan
     return lambdagc

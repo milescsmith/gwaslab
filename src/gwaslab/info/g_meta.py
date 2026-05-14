@@ -1,45 +1,47 @@
-from typing import TYPE_CHECKING, Dict, Any, Optional
-from gwaslab.info.g_version import gwaslab_info
-from datetime import datetime
-import numpy as np
-from gwaslab.util.util_in_filter_value import _infer_build
-from gwaslab.info.g_Log import Log
 import time
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+import numpy as np
 import pandas as pd
+
+from gwaslab.info.g_Log import Log
+from gwaslab.info.g_version import gwaslab_info
+from gwaslab.util.util_in_filter_value import _infer_build
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
 
-def _init_meta(object: str = "Sumstats") -> Dict[str, Any]:
+def _init_meta(object: str = "Sumstats") -> dict[str, Any]:
     """
     Initialize the meta information of the Sumstats Object. 
     """
     metadata_ssf ={
-                        "genotyping_technology":"Unknown", 
-                        "gwas_id":"Unknown", 
+                        "genotyping_technology":"Unknown",
+                        "gwas_id":"Unknown",
                         "samples":{
-                            "sample_size":"Unknown", 
-                            "sample_ancestry":"Unknown", 
-                            "ancestry_method":"self-reported|genetically determined", 
+                            "sample_size":"Unknown",
+                            "sample_ancestry":"Unknown",
+                            "ancestry_method":"self-reported|genetically determined",
                         } ,
-                        "trait_description":"Unknown", 
-                        "minor_allele_freq_lower_limit":"Unknown", 
-                        "data_file_name":"Unknown", 
-                        "file_type":"Unknown", 
-                        "data_file_md5sum":"Unknown", 
-                        "is_harmonised":"Unchecked", 
-                        "is_sorted":"Unchecked", 
+                        "trait_description":"Unknown",
+                        "minor_allele_freq_lower_limit":"Unknown",
+                        "data_file_name":"Unknown",
+                        "file_type":"Unknown",
+                        "data_file_md5sum":"Unknown",
+                        "is_harmonised":"Unchecked",
+                        "is_sorted":"Unchecked",
                         "genome_assembly":"Unknown",
-                        "date_last_modified":"Unknown", 
+                        "date_last_modified":"Unknown",
                         "coordinate_system":"1-based",
                         "sex": "M|F|combined"
                     }
     metadata_multi ={
                         "genome_assembly":"Unknown",
-                        "date_last_modified":"Unknown", 
+                        "date_last_modified":"Unknown",
                         "coordinate_system":"1-based"
                     }
-   
+
     # Sumstats
     if object=="Sumstats":
         metadata = {"gwaslab":{
@@ -107,7 +109,7 @@ def _init_meta(object: str = "Sumstats") -> Dict[str, Any]:
                     }
                     }}
         metadata |= metadata_ssf
-    
+
     # SumstatsPair
     elif object=="SumstatsPair":
         metadata = {"gwaslab":{
@@ -137,10 +139,10 @@ def _init_meta(object: str = "Sumstats") -> Dict[str, Any]:
                                         "ref_infer_daf":"Unknown",
                                         "ref_rsid_to_chrpos_tsv":"Unknown",
                                         "ref_rsid_to_chrpos_vcf":"Unknown"
-                                    }                             
+                                    }
                                     }}
         metadata |= metadata_multi
-    
+
     # SumstatsMulti
     elif object=="SumstatsMulti":
         metadata = {"gwaslab":{
@@ -178,9 +180,9 @@ def _append_meta_record(old: str, new: str) -> str:
     if old == "Unknown" or old== "Unchecked":
         return new
     else:
-        return "{}, {}".format(old, new)
+        return f"{old}, {new}"
 
-def _update_step_status(status_section: Optional[Dict[str, Any]], step_name: str, now: str, performed: bool, params: Dict[str, Any]) -> None:
+def _update_step_status(status_section: dict[str, Any] | None, step_name: str, now: str, performed: bool, params: dict[str, Any]) -> None:
     if status_section is None:
         return
     step = status_section.get(step_name)
@@ -191,17 +193,17 @@ def _update_step_status(status_section: Optional[Dict[str, Any]], step_name: str
         step["last_executed"] = now
     step["parameters_used"] = params if params is not None else {}
 
-def _update_qc_step(self: 'Sumstats', step_name: str, params: Dict[str, Any], performed: bool = True) -> None:
+def _update_qc_step(self: "Sumstats", step_name: str, params: dict[str, Any], performed: bool = True) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     qc_status = self.meta["gwaslab"].get("qc_and_harmonization_status", {}).get("qc", {})
     _update_step_status(qc_status, step_name, now, performed, params)
 
-def _update_harmonize_step(self: 'Sumstats', step_name: str, params: Dict[str, Any], performed: bool = True) -> None:
+def _update_harmonize_step(self: "Sumstats", step_name: str, params: dict[str, Any], performed: bool = True) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     harm_status = self.meta["gwaslab"].get("qc_and_harmonization_status", {}).get("harmonize", {})
     _update_step_status(harm_status, step_name, now, performed, params)
 
-def _check_sumstats_qc_status(self: 'Sumstats') -> Dict[str, Any]:
+def _check_sumstats_qc_status(self: "Sumstats") -> dict[str, Any]:
     """
     Check the QC and harmonization status of the sumstats.
     
@@ -219,7 +221,7 @@ def _check_sumstats_qc_status(self: 'Sumstats') -> Dict[str, Any]:
         "qc_and_harmonization_status": self.meta["gwaslab"].get("qc_and_harmonization_status", {})
     }
 
-def _set_qc_status(self: 'Sumstats', args: Dict[str, Any]) -> None:
+def _set_qc_status(self: "Sumstats", args: dict[str, Any]) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     self.meta["gwaslab"]["basic_check"]["performed"] = True
     self.meta["gwaslab"]["basic_check"]["last_executed"] = now
@@ -239,7 +241,7 @@ def _set_qc_status(self: 'Sumstats', args: Dict[str, Any]) -> None:
         _update_step_status(qc_status, "sort_coord", now, True, {})
         _update_step_status(qc_status, "sort_column", now, True, {})
 
-def _set_harmonization_status(self: 'Sumstats', args: Dict[str, Any]) -> None:
+def _set_harmonization_status(self: "Sumstats", args: dict[str, Any]) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     self.meta["gwaslab"]["harmonize"]["performed"]= True
     self.meta["gwaslab"]["harmonize"]["last_executed"] = now
@@ -260,17 +262,17 @@ def _set_harmonization_status(self: 'Sumstats', args: Dict[str, Any]) -> None:
 
         _update_step_status(harm_status, "liftover", now, False, args_to_save.get("liftover_kwargs", {}))
 
-def _update_meta(meta: Dict[str, Any], sumstats: pd.DataFrame, object: str = "Sumstats", log: Log = Log(), verbose: bool = True) -> Dict[str, Any]:  
+def _update_meta(meta: dict[str, Any], sumstats: pd.DataFrame, object: str = "Sumstats", log: Log = Log(), verbose: bool = True) -> dict[str, Any]:
     """
     Update Sumstats Object meta info based on the statistics of the current sumstats.
     Including information on variants, samples.
     """
     meta["gwaslab"]["variants"]["variant_number"] = len(sumstats)
-    
+
     if "CHR" in sumstats.columns:
         meta["gwaslab"]["variants"]["number_of_chromosomes"] = len(sumstats["CHR"].unique())
-    
-    if  meta["gwaslab"]["gwaslab_object"]=="gwaslab.Sumstats":      
+
+    if  meta["gwaslab"]["gwaslab_object"]=="gwaslab.Sumstats":
         if "P" in sumstats.columns:
             meta["gwaslab"]["variants"]["min_P"]=np.nanmin(sumstats["P"])
         if "EAF" in sumstats.columns:
@@ -279,30 +281,30 @@ def _update_meta(meta: Dict[str, Any], sumstats: pd.DataFrame, object: str = "Su
             meta["gwaslab"]["samples"]["sample_size"] = int(sumstats["N"].max())
             meta["gwaslab"]["samples"]["sample_size_median"] = sumstats["N"].median()
             meta["gwaslab"]["samples"]["sample_size_min"] = int(sumstats["N"].min())
-    
-    if  meta["gwaslab"]["gwaslab_object"]=="gwaslab.SumstatsMulti" or meta["gwaslab"]["gwaslab_object"]=="gwaslab.SumstatsPair":   
-        nstudy = meta["gwaslab"]['number_of_studies']
+
+    if  meta["gwaslab"]["gwaslab_object"]=="gwaslab.SumstatsMulti" or meta["gwaslab"]["gwaslab_object"]=="gwaslab.SumstatsPair":
+        nstudy = meta["gwaslab"]["number_of_studies"]
         for i in range(nstudy):
             i_form_1 = i + 1
             meta["gwaslab"]["variants"][i_form_1]=dict()
             meta["gwaslab"]["samples"][i_form_1] =dict()
 
-            if "P_{}".format(i_form_1) in sumstats.columns:
-                p = "P_{}".format(i_form_1)
-                
+            if f"P_{i_form_1}" in sumstats.columns:
+                p = f"P_{i_form_1}"
+
                 meta["gwaslab"]["variants"][i_form_1]["min_P"]= np.nanmin(sumstats[p])
-            if "N_{}".format(i_form_1) in sumstats.columns:
-                n = "N_{}".format(i_form_1)
+            if f"N_{i_form_1}" in sumstats.columns:
+                n = f"N_{i_form_1}"
                 meta["gwaslab"]["samples"][i_form_1]["sample_size"] = int(sumstats[n].max())
                 meta["gwaslab"]["samples"][i_form_1]["sample_size_median"] = sumstats[n].median()
                 meta["gwaslab"]["samples"][i_form_1]["sample_size_min"] = int(sumstats[n].min())
-            if "EAF_{}".format(i_form_1) in sumstats.columns:
-                eaf="EAF_{}".format(i_form_1)
+            if f"EAF_{i_form_1}" in sumstats.columns:
+                eaf=f"EAF_{i_form_1}"
                 meta["gwaslab"]["variants"][i_form_1]["min_minor_allele_freq"]=min (np.min(sumstats[eaf]) , 1- np.max(sumstats[eaf]))
 
     if meta["gwaslab"]["genome_build"] == "99":
         _, meta["gwaslab"]["genome_build"] = _infer_build(sumstats, change_status=False, log=log, verbose=verbose)
-    
-    meta["date_last_modified"] = str(time.strftime('%Y/%m/%d'))
-    
+
+    meta["date_last_modified"] = str(time.strftime("%Y/%m/%d"))
+
     return meta

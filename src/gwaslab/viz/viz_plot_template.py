@@ -1,15 +1,16 @@
-from typing import TYPE_CHECKING, Optional, Dict, Any, Union, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
 import matplotlib.pyplot as plt
 import seaborn as sns
+
 from gwaslab.info.g_Log import Log
-from gwaslab.io.io_process_kwargs import _update_arg
-from gwaslab.io.io_process_kwargs import _update_kwargs
+from gwaslab.io.io_process_kwargs import _update_arg, _update_kwargs
 from gwaslab.viz.viz_aux_save_figure import save_figure
 from gwaslab.viz.viz_aux_style_options import set_plot_style
 
 if TYPE_CHECKING:
-    from matplotlib.figure import Figure
     from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
 
 def _plot(
     associations: Any,
@@ -18,36 +19,36 @@ def _plot(
     mode: str = "gwaslab",
     fontsize: float = 12,
     font_family: str = "Arial",
-    cmap: Optional[Any] = None,
+    cmap: Any | None = None,
     ylabel: str = "Y",
     xlabel: str = "X",
-    xlim: Optional[Tuple[float, float]] = None,
-    ylim: Optional[Tuple[float, float]] = None,
-    yticks: Optional[List[float]] = None,
-    xticks: Optional[List[float]] = None,
-    ytick_labels: Optional[List[str]] = None,
-    xtick_labels: Optional[List[str]] = None,
+    xlim: tuple[float, float] | None = None,
+    ylim: tuple[float, float] | None = None,
+    yticks: list[float] | None = None,
+    xticks: list[float] | None = None,
+    ytick_labels: list[str] | None = None,
+    xtick_labels: list[str] | None = None,
     title: str = "Title",
     title_pad: float = 1.08,
     title_fontsize: float = 13,
-    title_kwargs: Optional[Dict[str, Any]] = None,
-    linewidth: Optional[float] = None,
-    linestyle: Optional[str] = None,
-    linecolor: Optional[str] = None,
+    title_kwargs: dict[str, Any] | None = None,
+    linewidth: float | None = None,
+    linestyle: str | None = None,
+    linecolor: str | None = None,
     dpi: int = 200,
-    anno_kwargs: Optional[Dict[str, Any]] = None,
-    err_kwargs: Optional[Dict[str, Any]] = None,
-    fig_kwargs: Optional[Dict[str, Any]] = None,
-    scatter_kwargs: Optional[Dict[str, Any]] = None,
-    save: Optional[Union[bool, str]] = None,
-    save_kwargs: Optional[Dict[str, Any]] = None,
+    anno_kwargs: dict[str, Any] | None = None,
+    err_kwargs: dict[str, Any] | None = None,
+    fig_kwargs: dict[str, Any] | None = None,
+    scatter_kwargs: dict[str, Any] | None = None,
+    save: Union[bool, str] | None = None,
+    save_kwargs: dict[str, Any] | None = None,
     log: Log = Log(),
     verbose: bool = True,
     **args: Any
-) -> Tuple['Figure', 'Axes']:
-    
+) -> tuple["Figure", "Axes"]:
+
     # update args
-    
+
     cmap = _update_arg(cmap, "RdBu")
 
     style = set_plot_style(
@@ -74,36 +75,36 @@ def _plot(
         ax.set_xticks(xticks)
         ax.set_xticklabels(xticks,
                             fontsize=fontsize,
-                            family=font_family)    
-    
+                            family=font_family)
+
     if yticks is not None:
         ax.set_xticks(yticks)
         ax.set_xticklabels(yticks,
                             fontsize=fontsize,
-                            family=font_family)    
+                            family=font_family)
 
     # labels
     ax.set_xlabel(xlabel,
-                  fontsize=fontsize, 
+                  fontsize=fontsize,
                   fontfamily=font_family)
     ax.set_ylabel(ylabel,
-                  fontsize=fontsize, 
+                  fontsize=fontsize,
                   fontfamily=font_family)
 
-    ax.tick_params(axis='x', 
+    ax.tick_params(axis="x",
                     labelsize=fontsize,
                     labelfontfamily=font_family)
-    ax.tick_params(axis='y', 
+    ax.tick_params(axis="y",
                     labelsize=fontsize,
                     labelfontfamily=font_family)
-    
+
     # title
     title_pad = title_pad -0.05
-    fig.suptitle(title , 
-                 fontsize = title_fontsize, 
+    fig.suptitle(title ,
+                 fontsize = title_fontsize,
                  x=0.5,
                  y=title_pad)
-    
+
     # spines
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)

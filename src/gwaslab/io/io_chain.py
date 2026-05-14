@@ -5,5 +5,5 @@ This module provides utilities for working with chain files used in liftover ope
 """
 
 # Chain file suffix definitions
-CHAIN_SUFFIXES = ('.chain.gz', '.chain')
+CHAIN_SUFFIXES = (".chain.gz", ".chain")
 

@@ -53,17 +53,17 @@ This priority order ensures harmonised files are preferred whenever available,
 while still providing robust fallback behavior across GWAS Catalog endpoints.
 """
 
+import hashlib
 import os
 import re
-import hashlib
 from typing import Any, List, Optional
-
-import requests
 from urllib.parse import urljoin, urlparse
 
-from gwaslab.info.g_Log import Log
+import requests
+
 from gwaslab.bd.bd_config import options
 from gwaslab.bd.bd_download import update_description
+from gwaslab.info.g_Log import Log
 
 
 def _looks_like_sumstats_url(url: str, gcst_id: str) -> bool:
@@ -86,9 +86,9 @@ def _looks_like_sumstats_url(url: str, gcst_id: str) -> bool:
     )
 
 
-def _collect_urls(payload: Any) -> List[str]:
+def _collect_urls(payload: Any) -> list[str]:
     """Recursively collect URL-like strings from nested JSON objects."""
-    urls: List[str] = []
+    urls: list[str] = []
     if isinstance(payload, dict):
         for value in payload.values():
             urls.extend(_collect_urls(value))
@@ -124,11 +124,11 @@ def _build_ftp_gcst_dir(gcst_id: str) -> str:
     )
     return (
         "https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/"
-        "{block}/{gcst}/".format(block=block_label, gcst=gcst_id)
+        f"{block_label}/{gcst_id}/"
     )
 
 
-def _list_directory_entries(url: str, timeout: int) -> List[str]:
+def _list_directory_entries(url: str, timeout: int) -> list[str]:
     """List href targets from an EBI FTP directory index page."""
     response = requests.get(url, timeout=timeout)
     response.raise_for_status()
@@ -136,7 +136,7 @@ def _list_directory_entries(url: str, timeout: int) -> List[str]:
     return [h for h in hrefs if h not in ("../",)]
 
 
-def _list_directory_entries_safe(url: str, timeout: int) -> List[str]:
+def _list_directory_entries_safe(url: str, timeout: int) -> list[str]:
     """List href targets and return an empty list on request errors."""
     try:
         return _list_directory_entries(url, timeout=timeout)
@@ -154,7 +154,7 @@ def _is_likely_sumstats_file(name: str) -> bool:
     return lowered.endswith((".tsv.gz", ".txt.gz", ".vcf.gz", ".tsv", ".txt", ".vcf"))
 
 
-def _pick_best_sumstats_entry(entries: List[str], gcst_id: str, prefer_harmonised: bool) -> Optional[str]:
+def _pick_best_sumstats_entry(entries: list[str], gcst_id: str, prefer_harmonised: bool) -> str | None:
     """Pick the best sumstats filename from directory entries."""
     candidates = [entry for entry in entries if _is_likely_sumstats_file(entry)]
     if not candidates:
@@ -165,12 +165,12 @@ def _pick_best_sumstats_entry(entries: List[str], gcst_id: str, prefer_harmonise
 
     if prefer_harmonised:
         preferred_patterns = [
-            "{}.h.tsv.gz".format(gcst_lower),
-            "{}.h.txt.gz".format(gcst_lower),
-            "{}.h.vcf.gz".format(gcst_lower),
-            "{}.h.tsv".format(gcst_lower),
-            "{}.h.txt".format(gcst_lower),
-            "{}.h.vcf".format(gcst_lower),
+            f"{gcst_lower}.h.tsv.gz",
+            f"{gcst_lower}.h.txt.gz",
+            f"{gcst_lower}.h.vcf.gz",
+            f"{gcst_lower}.h.tsv",
+            f"{gcst_lower}.h.txt",
+            f"{gcst_lower}.h.vcf",
         ]
         for pattern in preferred_patterns:
             for idx, name in enumerate(lowered):
@@ -181,12 +181,12 @@ def _pick_best_sumstats_entry(entries: List[str], gcst_id: str, prefer_harmonise
                 return candidates[idx]
     else:
         preferred_patterns = [
-            "{}.tsv.gz".format(gcst_lower),
-            "{}.txt.gz".format(gcst_lower),
-            "{}.vcf.gz".format(gcst_lower),
-            "{}.tsv".format(gcst_lower),
-            "{}.txt".format(gcst_lower),
-            "{}.vcf".format(gcst_lower),
+            f"{gcst_lower}.tsv.gz",
+            f"{gcst_lower}.txt.gz",
+            f"{gcst_lower}.vcf.gz",
+            f"{gcst_lower}.tsv",
+            f"{gcst_lower}.txt",
+            f"{gcst_lower}.vcf",
         ]
         for pattern in preferred_patterns:
             for idx, name in enumerate(lowered):
@@ -208,7 +208,7 @@ def _compute_md5(path: str, chunk_size: int = 1024 * 1024) -> str:
     return md5.hexdigest()
 
 
-def _parse_md5sum_for_file(md5_text: str, target_name: str) -> Optional[str]:
+def _parse_md5sum_for_file(md5_text: str, target_name: str) -> str | None:
     """Parse md5sum.txt content and return checksum for target filename."""
     target_name = target_name.strip()
     lines = [line.strip() for line in md5_text.splitlines() if line.strip()]
@@ -245,7 +245,7 @@ def _download_if_exists(
     overwrite: bool,
     log: Log,
     verbose: bool
-) -> Optional[str]:
+) -> str | None:
     """Download a sidecar file from directory index if present."""
     entries = _list_directory_entries_safe(base_url, timeout=timeout)
     if entry_name not in entries:
@@ -254,10 +254,10 @@ def _download_if_exists(
     target_url = _normalize_download_url(urljoin(base_url, entry_name))
     target_path = os.path.abspath(os.path.join(output_dir, entry_name))
     if os.path.exists(target_path) and not overwrite:
-        log.write(" -Auxiliary file exists: {} (overwrite=False)".format(target_path), verbose=verbose)
+        log.write(f" -Auxiliary file exists: {target_path} (overwrite=False)", verbose=verbose)
         return target_path
 
-    log.write(" -Downloading auxiliary file: {}".format(target_url), verbose=verbose)
+    log.write(f" -Downloading auxiliary file: {target_url}", verbose=verbose)
     _stream_download(target_url, target_path, timeout=timeout, chunk_size=chunk_size)
     return target_path
 
@@ -268,7 +268,7 @@ def _prepare_gcst_output_dir(base_output_dir: str, gcst_id: str, log: Log, verbo
     if os.path.exists(gcst_output_dir) and not os.path.isdir(gcst_output_dir):
         fallback_dir = gcst_output_dir + "_files"
         log.warning(
-            " -Path exists as a file, using fallback directory instead: {}".format(fallback_dir),
+            f" -Path exists as a file, using fallback directory instead: {fallback_dir}",
             verbose=verbose,
         )
         gcst_output_dir = fallback_dir
@@ -283,11 +283,11 @@ def _discover_ftp_sumstats_url(
     log: Log,
     verbose: bool,
     harmonised: bool = True
-) -> Optional[str]:
+) -> str | None:
     """Discover sumstats URL from FTP index, with optional harmonised preference."""
     study_dir_url = _build_ftp_gcst_dir(gcst_id)
     try:
-        log.write(" -Trying FTP directory: {}".format(study_dir_url), verbose=verbose)
+        log.write(f" -Trying FTP directory: {study_dir_url}", verbose=verbose)
         root_entries = _list_directory_entries(study_dir_url, timeout=timeout)
     except requests.exceptions.RequestException:
         return None
@@ -318,7 +318,7 @@ def _discover_ftp_sumstats_url(
     return None
 
 
-def _discover_sumstats_url(gcst_id: str, timeout: int, log: Log, verbose: bool) -> Optional[str]:
+def _discover_sumstats_url(gcst_id: str, timeout: int, log: Log, verbose: bool) -> str | None:
     """Try several metadata endpoints and extract a downloadable sumstats URL."""
     metadata_endpoints = [
         f"https://www.ebi.ac.uk/gwas/summary-statistics/api/studies/{gcst_id}",
@@ -330,7 +330,7 @@ def _discover_sumstats_url(gcst_id: str, timeout: int, log: Log, verbose: bool) 
 
     for endpoint in metadata_endpoints:
         try:
-            log.write(" -Trying metadata endpoint: {}".format(endpoint), verbose=verbose)
+            log.write(f" -Trying metadata endpoint: {endpoint}", verbose=verbose)
             response = requests.get(endpoint, headers=headers, timeout=timeout)
             if response.status_code != 200:
                 continue
@@ -361,14 +361,14 @@ def _stream_download(url: str, output_path: str, timeout: int, chunk_size: int) 
 
 def download_sumstats(
     gcst_id: str,
-    output_dir: Optional[str] = None,
-    filename: Optional[str] = None,
+    output_dir: str | None = None,
+    filename: str | None = None,
     harmonised: bool = True,
     timeout: int = 60,
     chunk_size: int = 1024 * 1024,
     overwrite: bool = False,
     verbose: bool = True,
-    log: Optional[Log] = None,
+    log: Log | None = None,
 ) -> str:
     """
     Download GWAS Catalog summary statistics for a given GCST accession.
@@ -416,14 +416,14 @@ def download_sumstats(
 
     gcst_id = gcst_id.strip().upper()
     if not re.match(r"^GCST\d+$", gcst_id):
-        raise ValueError("Invalid GCST ID: {}. Expected format like GCST90002446.".format(gcst_id))
+        raise ValueError(f"Invalid GCST ID: {gcst_id}. Expected format like GCST90002446.")
 
     if output_dir is None:
         output_dir = options.paths["data_directory"]
     gcst_output_dir = _prepare_gcst_output_dir(output_dir, gcst_id, log=logger, verbose=verbose)
 
-    logger.write(" -Searching GWAS Catalog summary statistics for {}".format(gcst_id), verbose=verbose)
-    selected_url: Optional[str] = None
+    logger.write(f" -Searching GWAS Catalog summary statistics for {gcst_id}", verbose=verbose)
+    selected_url: str | None = None
 
     # Prefer FTP-organized study directory and optionally harmonised files.
     selected_url = _discover_ftp_sumstats_url(
@@ -439,11 +439,11 @@ def download_sumstats(
         f"https://www.ebi.ac.uk/gwas/summary-statistics/api/studies/{gcst_id}/downloads",
     ]
 
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     if selected_url is None:
         for endpoint in direct_download_endpoints:
             try:
-                logger.write(" -Trying direct download endpoint: {}".format(endpoint), verbose=verbose)
+                logger.write(f" -Trying direct download endpoint: {endpoint}", verbose=verbose)
                 # Probe endpoint first so we can still pick filename from URL if needed.
                 response = requests.get(endpoint, stream=True, timeout=timeout)
                 response.raise_for_status()
@@ -460,27 +460,27 @@ def download_sumstats(
     if selected_url is None:
         if last_error is not None:
             raise RuntimeError(
-                "Unable to locate downloadable summary statistics for {}. "
-                "Tried direct endpoints and metadata discovery; last error: {}".format(gcst_id, str(last_error))
+                f"Unable to locate downloadable summary statistics for {gcst_id}. "
+                f"Tried direct endpoints and metadata discovery; last error: {last_error!s}"
             )
         raise RuntimeError(
-            "Unable to locate downloadable summary statistics for {}. "
-            "Tried direct endpoints and metadata discovery.".format(gcst_id)
+            f"Unable to locate downloadable summary statistics for {gcst_id}. "
+            "Tried direct endpoints and metadata discovery."
         )
 
     selected_url = _normalize_download_url(selected_url)
     inferred_name = os.path.basename(urlparse(selected_url).path.rstrip("/"))
     if not inferred_name:
-        inferred_name = "{}_sumstats.tsv.gz".format(gcst_id)
+        inferred_name = f"{gcst_id}_sumstats.tsv.gz"
 
     resolved_filename = filename if filename is not None else inferred_name
     output_path = os.path.abspath(os.path.join(gcst_output_dir, resolved_filename))
     if os.path.exists(output_path) and not overwrite:
-        logger.write(" -File already exists: {} (overwrite=False)".format(output_path), verbose=verbose)
+        logger.write(f" -File already exists: {output_path} (overwrite=False)", verbose=verbose)
     else:
-        logger.write(" -Using discovered download URL: {}".format(selected_url), verbose=verbose)
+        logger.write(f" -Using discovered download URL: {selected_url}", verbose=verbose)
         _stream_download(selected_url, output_path, timeout=timeout, chunk_size=chunk_size)
-        logger.write(" -Downloaded summary statistics to {}".format(output_path), verbose=verbose)
+        logger.write(f" -Downloaded summary statistics to {output_path}", verbose=verbose)
 
     # Download optional sidecar files and perform MD5 verification when possible.
     selected_dir_url = selected_url.rsplit("/", 1)[0] + "/"
@@ -491,10 +491,10 @@ def download_sumstats(
         candidate_dirs.append(parent_url)
 
     yaml_downloaded = False
-    yaml_path: Optional[str] = None
-    md5_path: Optional[str] = None
+    yaml_path: str | None = None
+    md5_path: str | None = None
     for base_dir in candidate_dirs:
-        yaml_name = "{}-meta.yaml".format(inferred_name)
+        yaml_name = f"{inferred_name}-meta.yaml"
         yaml_path = _download_if_exists(
             base_url=base_dir,
             entry_name=yaml_name,
@@ -525,10 +525,10 @@ def download_sumstats(
     if not yaml_downloaded:
         logger.write(" -No metadata YAML found next to selected file", verbose=verbose)
 
-    expected_md5: Optional[str] = None
-    md5_verified: Optional[bool] = None
+    expected_md5: str | None = None
+    md5_verified: bool | None = None
     if md5_path is not None:
-        with open(md5_path, "r", encoding="utf-8") as handle:
+        with open(md5_path, encoding="utf-8") as handle:
             md5_text = handle.read()
         expected_md5 = _parse_md5sum_for_file(md5_text, inferred_name)
         if expected_md5 is not None:
@@ -536,16 +536,12 @@ def download_sumstats(
             if observed_md5.lower() != expected_md5.lower():
                 md5_verified = False
                 raise RuntimeError(
-                    "MD5 mismatch for {}: expected {}, observed {}".format(
-                        os.path.basename(output_path),
-                        expected_md5,
-                        observed_md5,
-                    )
+                    f"MD5 mismatch for {os.path.basename(output_path)}: expected {expected_md5}, observed {observed_md5}"
                 )
             md5_verified = True
-            logger.write(" -MD5 check passed for {}".format(os.path.basename(output_path)), verbose=verbose)
+            logger.write(f" -MD5 check passed for {os.path.basename(output_path)}", verbose=verbose)
         else:
-            logger.write(" -md5sum.txt found but no checksum entry for {}".format(inferred_name), verbose=verbose)
+            logger.write(f" -md5sum.txt found but no checksum entry for {inferred_name}", verbose=verbose)
     else:
         logger.write(" -No md5sum.txt found for checksum validation", verbose=verbose)
 
@@ -566,7 +562,7 @@ def download_sumstats(
 
         record = {
             "local_path": output_path,
-            "description": "GWAS Catalog summary statistics for {}".format(gcst_id),
+            "description": f"GWAS Catalog summary statistics for {gcst_id}",
             "suggested_use": "Use as external GWAS summary statistics for downstream analyses.",
             "source": "GWAS Catalog",
             "url": selected_url,
@@ -587,7 +583,7 @@ def download_sumstats(
         update_description(gcst_id, record, log=logger)
     except Exception as e:
         logger.warning(
-            " -Downloaded file but failed to update local record: {}".format(str(e)),
+            f" -Downloaded file but failed to update local record: {e!s}",
             verbose=verbose,
         )
 

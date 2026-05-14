@@ -1,20 +1,21 @@
-import pandas as pd
 import glob
 import os
-from typing import TYPE_CHECKING, Optional, Dict, Any, Callable, Union
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+
+import pandas as pd
 
 if TYPE_CHECKING:
     from gwaslab.info.g_Log import Log
 
-from gwaslab.info.g_version import _show_version
-from gwaslab.info.g_version import gwaslab_info
+from gwaslab.g_Sumstats import Sumstats
+from gwaslab.info.g_Log import Log
 from gwaslab.info.g_meta import _init_meta
+from gwaslab.info.g_version import _show_version, gwaslab_info
 from gwaslab.qc.qc_fix_sumstats import _process_build
 from gwaslab.util.util_in_merge import _extract_variant
 from gwaslab.viz.viz_aux_params import VizParamsManager, load_viz_config
 from gwaslab.viz.viz_plot_effect import _plot_effect
-from gwaslab.info.g_Log import Log
-from gwaslab.g_Sumstats import Sumstats
 
 
 #20250215
@@ -58,8 +59,8 @@ class SumstatsSet(Sumstats):
 
     def __init__(
         self,
-        sumstats_dic: Union[Dict[str, Any], str],
-        variant_set: Optional[Any] = None,
+        sumstats_dic: Union[dict[str, Any], str],
+        variant_set: Any | None = None,
         build: str = "99",
         species: str = "homo sapiens",
         build_infer: bool = False,
@@ -73,7 +74,7 @@ class SumstatsSet(Sumstats):
         self.log = Log()
         # meta information
 
-        self.meta = _init_meta() 
+        self.meta = _init_meta()
         self.meta["gwaslab"]["genome_build"] = _process_build(build, log=self.log, verbose=False, species=species)
         self._build = self.meta["gwaslab"]["genome_build"]
         self.meta["gwaslab"]["set_name"] =  set
@@ -85,10 +86,10 @@ class SumstatsSet(Sumstats):
         # Handle glob pattern input
         if isinstance(sumstats_dic, str):
             sumstats_dic = self._load_from_glob_pattern(
-                sumstats_dic, 
-                build=build, 
-                species=species, 
-                verbose=verbose, 
+                sumstats_dic,
+                build=build,
+                species=species,
+                verbose=verbose,
                 **readargs
             )
 
@@ -97,14 +98,14 @@ class SumstatsSet(Sumstats):
             self.data = self._concat_all_variants(sumstats_dic, log=self.log, verbose=verbose)
         else:
             self.data = _extract_variant(variant_set, sumstats_dic, log=self.log, verbose=verbose)
-        
+
         self.viz_params = VizParamsManager()
         load_viz_config(self.viz_params)
 
     def _concat_all_variants(
         self,
-        sumstats_dic: Dict[str, 'Sumstats'],
-        log: 'Log' = None,
+        sumstats_dic: dict[str, "Sumstats"],
+        log: "Log" = None,
         verbose: bool = True
     ) -> pd.DataFrame:
         """
@@ -131,22 +132,22 @@ class SumstatsSet(Sumstats):
             log = Log()
 
         combined = pd.DataFrame()
-        
+
         for key, sumstats_gls in sumstats_dic.items():
             log.write(f" -{key} : {sumstats_gls}", verbose=verbose)
 
         for key, sumstats_gls in sumstats_dic.items():
             sumstats_single = sumstats_gls.data.copy()
             sumstats_single["STUDY"] = key
-            
+
             log.write(f" -Loaded {len(sumstats_single)} variants from {key}", verbose=verbose)
-            
+
             # Reorder columns to put STUDY first
             cols = ["STUDY"] + [c for c in sumstats_single.columns if c != "STUDY"]
             sumstats_single = sumstats_single[cols]
-            
+
             combined = pd.concat([combined, sumstats_single], ignore_index=True)
-        
+
         log.write(f" -Total: {len(combined)} variants from {len(sumstats_dic)} studies", verbose=verbose)
         return combined
 
@@ -157,7 +158,7 @@ class SumstatsSet(Sumstats):
         species: str = "homo sapiens",
         verbose: bool = True,
         **readargs: Any
-    ) -> Dict[str, 'Sumstats']:
+    ) -> dict[str, "Sumstats"]:
         """
         Load multiple Sumstats objects from files matching a glob pattern.
 
@@ -199,21 +200,21 @@ class SumstatsSet(Sumstats):
         """
         # Expand glob pattern
         matched_files = sorted(glob.glob(pattern))
-        
+
         if not matched_files:
             raise FileNotFoundError(f"No files match pattern: {pattern}")
-        
+
         self.log.write(f" -Detected glob pattern: {pattern}", verbose=verbose)
         self.log.write(f" -Found {len(matched_files)} matching file(s)", verbose=verbose)
-        
-        sumstats_dict: Dict[str, 'Sumstats'] = {}
-        
+
+        sumstats_dict: dict[str, Sumstats] = {}
+
         for filepath in matched_files:
             # Derive study name from filename
             study_name = self._derive_study_name(filepath)
-            
+
             self.log.write(f" -Loading: {filepath} as '{study_name}'", verbose=verbose)
-            
+
             # Create Sumstats object for this file
             sumstats_obj = Sumstats(
                 filepath,
@@ -222,11 +223,11 @@ class SumstatsSet(Sumstats):
                 verbose=verbose,
                 **readargs
             )
-            
+
             sumstats_dict[study_name] = sumstats_obj
-        
+
         self.log.write(f" -Successfully loaded {len(sumstats_dict)} Sumstats object(s)", verbose=verbose)
-        
+
         return sumstats_dict
 
     @staticmethod
@@ -253,16 +254,16 @@ class SumstatsSet(Sumstats):
         """
         # Get basename
         name = os.path.basename(filepath)
-        
+
         # Remove common extensions (order matters - .gz first, then others)
-        extensions_to_remove = ['.gz', '.bgz', '.zst', '.sumstats', '.txt', '.tsv', '.csv']
+        extensions_to_remove = [".gz", ".bgz", ".zst", ".sumstats", ".txt", ".tsv", ".csv"]
         for ext in extensions_to_remove:
             if name.lower().endswith(ext):
                 name = name[:-len(ext)]
-        
+
         return name
 
-    def _apply_viz_params(self, func: Callable[..., Any], kwargs: Dict[str, Any], key: Optional[str] = None, mode: Optional[str] = None) -> Dict[str, Any]:
+    def _apply_viz_params(self, func: Callable[..., Any], kwargs: dict[str, Any], key: str | None = None, mode: str | None = None) -> dict[str, Any]:
         params = self.viz_params.merge(key or func.__name__, kwargs, mode=mode)
         return self.viz_params.filter(func, params, key=key or func.__name__, mode=mode, log=self.log, verbose=kwargs.get("verbose", True))
 
@@ -270,4 +271,4 @@ class SumstatsSet(Sumstats):
         _plot_effect(self.data,**self._apply_viz_params(_plot_effect, kwargs, key="plot_effect"))
 
 
- 
+

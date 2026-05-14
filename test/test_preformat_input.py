@@ -1,8 +1,8 @@
 import os
-import sys
-import unittest
-import tempfile
 import shutil
+import sys
+import tempfile
+import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "src")
@@ -73,18 +73,18 @@ class TestPreformatInputPolars(unittest.TestCase):
             other=["NOTE"],
             verbose=False
         )
-        
+
         # Check that result is a polars DataFrame
         self.assertIsInstance(result, pl.DataFrame)
-        
+
         # Check that it has data
         self.assertGreater(result.height, 0)
-        
+
         # Check that expected columns are present
         expected_cols = ["SNPID", "CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P", "N", "N_CASE", "N_CONTROL", "NOTE"]
         for col in expected_cols:
             self.assertIn(col, result.columns, f"Column {col} not found in result")
-        
+
         # Check that NOTE column is preserved
         self.assertIn("NOTE", result.columns)
 
@@ -103,15 +103,15 @@ class TestPreformatInputPolars(unittest.TestCase):
             include=["SNPID", "CHR", "POS", "EA", "NEA", "P"],
             verbose=False
         )
-        
+
         self.assertIsInstance(result, pl.DataFrame)
         self.assertGreater(result.height, 0)
-        
+
         # Should only have included columns
         included_cols = ["SNPID", "CHR", "POS", "EA", "NEA", "P"]
         for col in included_cols:
             self.assertIn(col, result.columns)
-        
+
         # Should not have excluded columns like BETA
         self.assertNotIn("BETA", result.columns)
 
@@ -133,15 +133,15 @@ class TestPreformatInputPolars(unittest.TestCase):
             exclude=["BETA", "SE"],
             verbose=False
         )
-        
+
         self.assertIsInstance(result, pl.DataFrame)
         self.assertGreater(result.height, 0)
-        
+
         # Should have basic columns
         self.assertIn("SNPID", result.columns)
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
-        
+
         # Should not have excluded columns
         self.assertNotIn("BETA", result.columns)
         self.assertNotIn("SE", result.columns)
@@ -150,7 +150,7 @@ class TestPreformatInputPolars(unittest.TestCase):
         """Test loading from pandas DataFrame"""
         # First load as pandas
         df_pd = pd.read_csv(self.dirty_sumstats_path, sep="\t")
-        
+
         result = preformatp(
             sumstats=df_pd,
             fmt="gwaslab",
@@ -163,7 +163,7 @@ class TestPreformatInputPolars(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         self.assertIsInstance(result, pl.DataFrame)
         self.assertEqual(result.height, df_pd.shape[0])
         self.assertIn("SNPID", result.columns)
@@ -181,9 +181,9 @@ class TestPreformatInputPolars(unittest.TestCase):
             test_data = """CHR\tPOS\tEA\tNEA\tP
 1\t100\tA\tG\t0.001
 1\t200\tT\tC\t0.002"""
-            with open(path, 'w') as f:
+            with open(path, "w") as f:
                 f.write(test_data)
-            
+
             result = preformatp(
                 sumstats=path,
                 chrom="CHR",
@@ -193,7 +193,7 @@ class TestPreformatInputPolars(unittest.TestCase):
                 p="P",
                 verbose=False
             )
-            
+
             self.assertIsInstance(result, pl.DataFrame)
             self.assertIn("SNPID", result.columns)
             self.assertGreater(result.height, 0)
@@ -204,12 +204,12 @@ class TestPreformatInputPolars(unittest.TestCase):
 
 class TestPreformatInputWithAtSymbol(unittest.TestCase):
     """Test cases for loading files using @ symbol for chromosome-split files"""
-    
+
     def setUp(self):
         """Create temporary directory with chromosome-split files"""
         self.temp_dir = tempfile.mkdtemp()
         self.base_path = os.path.join(self.temp_dir, "chr@.tsv")
-        
+
         # Create test data for multiple chromosomes
         for chr_num in [1, 2, 3]:
             chr_path = os.path.join(self.temp_dir, f"chr{chr_num}.tsv")
@@ -230,12 +230,12 @@ class TestPreformatInputWithAtSymbol(unittest.TestCase):
                 })
             df = pd.DataFrame(rows)
             df.to_csv(chr_path, sep="\t", index=False)
-    
+
     def tearDown(self):
         """Clean up temporary directory"""
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
-    
+
     def test_load_with_at_symbol(self):
         """Test loading chromosome-split files using @ symbol"""
         result = _preformat(
@@ -251,19 +251,19 @@ class TestPreformatInputWithAtSymbol(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # Should have data from all 3 chromosomes
         self.assertGreater(len(result), 0)
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
-        
+
         # Check that we have data from multiple chromosomes
         unique_chrs = result["CHR"].unique()
         self.assertGreaterEqual(len(unique_chrs), 1)
 
         # @ pattern must NOT add FILE column
         self.assertNotIn("FILE", result.columns)
-    
+
     def test_load_with_at_symbol_polars(self):
         """Test loading chromosome-split files using @ symbol with polars"""
         result = preformatp(
@@ -279,7 +279,7 @@ class TestPreformatInputWithAtSymbol(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         self.assertIsInstance(result, pl.DataFrame)
         self.assertGreater(result.height, 0)
         self.assertIn("CHR", result.columns)
@@ -377,16 +377,16 @@ class TestPreformatInputGlobAndFileColumn(unittest.TestCase):
 
 class TestPreformatInputFormats(unittest.TestCase):
     """Test cases for loading different file formats"""
-    
+
     def setUp(self):
         """Create temporary directory for test files"""
         self.temp_dir = tempfile.mkdtemp()
-    
+
     def tearDown(self):
         """Clean up temporary directory"""
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
-    
+
     def test_load_plink_format(self):
         """Test loading PLINK format"""
         plink_path = os.path.join(self.temp_dir, "plink_test.assoc")
@@ -395,17 +395,17 @@ class TestPreformatInputFormats(unittest.TestCase):
 1\trs1\t1000\tA\t0.2\t0.3\tG\t10.5\t0.001\t1.2
 1\trs2\t2000\tT\t0.15\t0.25\tC\t8.3\t0.002\t1.15
 2\trs3\t3000\tG\t0.3\t0.35\tA\t12.1\t0.0005\t1.3"""
-        
-        with open(plink_path, 'w') as f:
+
+        with open(plink_path, "w") as f:
             f.write(plink_data)
-        
+
         try:
             result = _preformat(
                 sumstats=plink_path,
                 fmt="plink",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             # Check that key columns are present
             self.assertIn("CHR", result.columns)
@@ -413,7 +413,7 @@ class TestPreformatInputFormats(unittest.TestCase):
         except Exception as e:
             # If format not available, skip test
             self.skipTest(f"PLINK format not available: {e}")
-    
+
     def test_load_plink2_format(self):
         """Test loading PLINK2 format"""
         plink2_path = os.path.join(self.temp_dir, "plink2_test.glm.linear")
@@ -422,23 +422,23 @@ class TestPreformatInputFormats(unittest.TestCase):
 1\trs1\tG\tA\tA\tADD\t1000\t0.1\t0.01\t10.0\t0.001
 1\trs2\tC\tT\tT\tADD\t1000\t0.15\t0.015\t10.0\t0.0005
 2\trs3\tA\tG\tG\tADD\t1000\t0.2\t0.02\t10.0\t0.0001"""
-        
-        with open(plink2_path, 'w') as f:
+
+        with open(plink2_path, "w") as f:
             f.write(plink2_data)
-        
+
         try:
             result = _preformat(
                 sumstats=plink2_path,
                 fmt="plink2",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             self.assertIn("CHR", result.columns)
             self.assertIn("POS", result.columns)
         except Exception as e:
             self.skipTest(f"PLINK2 format not available: {e}")
-    
+
     def test_load_regenie_format(self):
         """Test loading REGENIE format"""
         regenie_path = os.path.join(self.temp_dir, "regenie_test.regenie")
@@ -447,23 +447,23 @@ class TestPreformatInputFormats(unittest.TestCase):
 1\t1000\trs1\tG\tA\t0.2\t0.95\t1000\tADD\t0.1\t0.01\t100.0\t3.0\t
 1\t2000\trs2\tC\tT\t0.15\t0.92\t1000\tADD\t0.15\t0.015\t100.0\t3.3\t
 2\t3000\trs3\tA\tG\t0.3\t0.98\t1000\tADD\t0.2\t0.02\t100.0\t4.0\t"""
-        
-        with open(regenie_path, 'w') as f:
+
+        with open(regenie_path, "w") as f:
             f.write(regenie_data)
-        
+
         try:
             result = _preformat(
                 sumstats=regenie_path,
                 fmt="regenie",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             self.assertIn("CHR", result.columns)
             self.assertIn("POS", result.columns)
         except Exception as e:
             self.skipTest(f"REGENIE format not available: {e}")
-    
+
     def test_load_vcf_format(self):
         """Test loading VCF format"""
         vcf_path = os.path.join(self.temp_dir, "test.vcf")
@@ -477,23 +477,23 @@ class TestPreformatInputFormats(unittest.TestCase):
 1\t1000\trs1\tG\tA\t.\t.\t.\tES:SE:LP\t0.1:0.01:3.0
 1\t2000\trs2\tC\tT\t.\t.\t.\tES:SE:LP\t0.15:0.015:3.3
 2\t3000\trs3\tA\tG\t.\t.\t.\tES:SE:LP\t0.2:0.02:4.0"""
-        
-        with open(vcf_path, 'w') as f:
+
+        with open(vcf_path, "w") as f:
             f.write(vcf_data)
-        
+
         try:
             result = _preformat(
                 sumstats=vcf_path,
                 fmt="vcf",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             self.assertIn("CHR", result.columns)
             self.assertIn("POS", result.columns)
         except Exception as e:
             self.skipTest(f"VCF format not available: {e}")
-    
+
     def test_load_saige_format(self):
         """Test loading SAIGE format"""
         saige_path = os.path.join(self.temp_dir, "saige_test.txt")
@@ -502,23 +502,23 @@ class TestPreformatInputFormats(unittest.TestCase):
 1\t1000\trs1\tG\tA\t200\t0.2\t1000\t0.1\t0.01\t0.001
 1\t2000\trs2\tC\tT\t150\t0.15\t1000\t0.15\t0.015\t0.0005
 2\t3000\trs3\tA\tG\t300\t0.3\t1000\t0.2\t0.02\t0.0001"""
-        
-        with open(saige_path, 'w') as f:
+
+        with open(saige_path, "w") as f:
             f.write(saige_data)
-        
+
         try:
             result = _preformat(
                 sumstats=saige_path,
                 fmt="saige",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             self.assertIn("CHR", result.columns)
             self.assertIn("POS", result.columns)
         except Exception as e:
             self.skipTest(f"SAIGE format not available: {e}")
-    
+
     def test_load_ldsc_format(self):
         """Test loading LDSC format"""
         ldsc_path = os.path.join(self.temp_dir, "ldsc_test.txt")
@@ -527,23 +527,23 @@ class TestPreformatInputFormats(unittest.TestCase):
 rs1\t1\t1000\tA\tG\t1000\t10.0
 rs2\t1\t2000\tT\tC\t1000\t10.0
 rs3\t2\t3000\tG\tA\t1000\t10.0"""
-        
-        with open(ldsc_path, 'w') as f:
+
+        with open(ldsc_path, "w") as f:
             f.write(ldsc_data)
-        
+
         try:
             result = _preformat(
                 sumstats=ldsc_path,
                 fmt="ldsc",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             self.assertIn("CHR", result.columns)
             self.assertIn("POS", result.columns)
         except Exception as e:
             self.skipTest(f"LDSC format not available: {e}")
-    
+
     def test_load_metal_format(self):
         """Test loading METAL format"""
         metal_path = os.path.join(self.temp_dir, "metal_test.txt")
@@ -552,37 +552,37 @@ rs3\t2\t3000\tG\tA\t1000\t10.0"""
 rs1\tA\tG\t0.2\t0.01\t0.15\t0.25\t0.1\t0.01\t0.001\t+++\t0.0\t0.0\t2\t1.0
 rs2\tT\tC\t0.15\t0.01\t0.1\t0.2\t0.15\t0.015\t0.0005\t+++\t0.0\t0.0\t2\t1.0
 rs3\tG\tA\t0.3\t0.01\t0.25\t0.35\t0.2\t0.02\t0.0001\t+++\t0.0\t0.0\t2\t1.0"""
-        
-        with open(metal_path, 'w') as f:
+
+        with open(metal_path, "w") as f:
             f.write(metal_data)
-        
+
         try:
             result = _preformat(
                 sumstats=metal_path,
                 fmt="metal",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             # METAL uses MarkerName which should be converted to SNPID
             self.assertIn("SNPID", result.columns)
         except Exception as e:
             self.skipTest(f"METAL format not available: {e}")
-    
+
     def test_load_compressed_file(self):
         """Test loading compressed (.gz) file"""
         import gzip
         gz_path = os.path.join(self.temp_dir, "test.tsv.gz")
-        
+
         # Create test data
         test_data = """CHR\tPOS\tEA\tNEA\tBETA\tSE\tP
 1\t1000\tA\tG\t0.1\t0.01\t0.001
 1\t2000\tT\tC\t0.15\t0.015\t0.0005
 2\t3000\tG\tA\t0.2\t0.02\t0.0001"""
-        
-        with gzip.open(gz_path, 'wt') as f:
+
+        with gzip.open(gz_path, "wt") as f:
             f.write(test_data)
-        
+
         result = _preformat(
             sumstats=gz_path,
             chrom="CHR",
@@ -594,15 +594,15 @@ rs3\tG\tA\t0.3\t0.01\t0.25\t0.35\t0.2\t0.02\t0.0001\t+++\t0.0\t0.0\t2\t1.0"""
             p="P",
             verbose=False
         )
-        
+
         self.assertGreater(len(result), 0)
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
-    
+
     def test_load_parquet_format(self):
         """Test loading Parquet format"""
         parquet_path = os.path.join(self.temp_dir, "test.parquet")
-        
+
         # Create test DataFrame
         test_df = pd.DataFrame({
             "CHR": [1, 1, 2],
@@ -613,9 +613,9 @@ rs3\tG\tA\t0.3\t0.01\t0.25\t0.35\t0.2\t0.02\t0.0001\t+++\t0.0\t0.0\t2\t1.0"""
             "SE": [0.01, 0.015, 0.02],
             "P": [0.001, 0.0005, 0.0001]
         })
-        
+
         test_df.to_parquet(parquet_path, index=False)
-        
+
         result = _preformat(
             sumstats=parquet_path,
             tab_fmt="parquet",
@@ -628,7 +628,7 @@ rs3\tG\tA\t0.3\t0.01\t0.25\t0.35\t0.2\t0.02\t0.0001\t+++\t0.0\t0.0\t2\t1.0"""
             p="P",
             verbose=False
         )
-        
+
         self.assertGreater(len(result), 0)
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
@@ -636,16 +636,16 @@ rs3\tG\tA\t0.3\t0.01\t0.25\t0.35\t0.2\t0.02\t0.0001\t+++\t0.0\t0.0\t2\t1.0"""
 
 class TestPreformatInputWithAtSymbolAndFormats(unittest.TestCase):
     """Test cases combining @ symbol with different formats"""
-    
+
     def setUp(self):
         """Create temporary directory with chromosome-split files in different formats"""
         self.temp_dir = tempfile.mkdtemp()
-    
+
     def tearDown(self):
         """Clean up temporary directory"""
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
-    
+
     def test_load_plink_format_with_at_symbol(self):
         """Test loading PLINK format files split by chromosome using @ symbol"""
         # Create PLINK format files for multiple chromosomes
@@ -654,19 +654,19 @@ class TestPreformatInputWithAtSymbolAndFormats(unittest.TestCase):
             plink_data = f"""CHR\tSNP\tBP\tA1\tF_A\tF_U\tA2\tCHISQ\tP\tOR
 {chr_num}\trs{chr_num}_1\t{1000 + chr_num * 100}\tA\t0.2\t0.3\tG\t10.5\t0.001\t1.2
 {chr_num}\trs{chr_num}_2\t{2000 + chr_num * 100}\tT\t0.15\t0.25\tC\t8.3\t0.002\t1.15"""
-            
-            with open(plink_path, 'w') as f:
+
+            with open(plink_path, "w") as f:
                 f.write(plink_data)
-        
+
         base_path = os.path.join(self.temp_dir, "chr@.assoc")
-        
+
         try:
             result = _preformat(
                 sumstats=base_path,
                 fmt="plink",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             self.assertIn("CHR", result.columns)
             # Should have data from multiple chromosomes
@@ -674,7 +674,7 @@ class TestPreformatInputWithAtSymbolAndFormats(unittest.TestCase):
             self.assertGreaterEqual(len(unique_chrs), 1)
         except Exception as e:
             self.skipTest(f"PLINK format with @ symbol not available: {e}")
-    
+
     def test_load_regenie_format_with_at_symbol(self):
         """Test loading REGENIE format files split by chromosome using @ symbol"""
         # Create REGENIE format files for multiple chromosomes
@@ -683,19 +683,19 @@ class TestPreformatInputWithAtSymbolAndFormats(unittest.TestCase):
             regenie_data = f"""CHROM\tGENPOS\tID\tALLELE0\tALLELE1\tA1FREQ\tINFO\tN\tTEST\tBETA\tSE\tCHISQ\tLOG10P\tEXTRA
 {chr_num}\t{1000 + chr_num * 100}\trs{chr_num}_1\tG\tA\t0.2\t0.95\t1000\tADD\t0.1\t0.01\t100.0\t3.0\t
 {chr_num}\t{2000 + chr_num * 100}\trs{chr_num}_2\tC\tT\t0.15\t0.92\t1000\tADD\t0.15\t0.015\t100.0\t3.3\t"""
-            
-            with open(regenie_path, 'w') as f:
+
+            with open(regenie_path, "w") as f:
                 f.write(regenie_data)
-        
+
         base_path = os.path.join(self.temp_dir, "chr@.regenie")
-        
+
         try:
             result = _preformat(
                 sumstats=base_path,
                 fmt="regenie",
                 verbose=False
             )
-            
+
             self.assertGreater(len(result), 0)
             self.assertIn("CHR", result.columns)
             unique_chrs = result["CHR"].unique()
@@ -706,21 +706,21 @@ class TestPreformatInputWithAtSymbolAndFormats(unittest.TestCase):
 
 class TestPreformatWorkflowAndPriority(unittest.TestCase):
     """Test cases for workflow and priority order of _preformat"""
-    
+
     def setUp(self):
         """Create test data files"""
         self.temp_dir = tempfile.mkdtemp()
-        
+
         # Create a test file with standard columns
         self.test_path = os.path.join(self.temp_dir, "test.tsv")
         test_data = """CHR\tPOS\tEA\tNEA\tBETA\tSE\tP\tEAF\tN\tEXTRA_COL
 1\t1000\tA\tG\t0.1\t0.01\t0.001\t0.2\t1000\tvalue1
 1\t2000\tT\tC\t0.15\t0.015\t0.0005\t0.25\t1000\tvalue2
 2\t3000\tG\tA\t0.2\t0.02\t0.0001\t0.3\t1000\tvalue3"""
-        
-        with open(self.test_path, 'w') as f:
+
+        with open(self.test_path, "w") as f:
             f.write(test_data)
-        
+
         # Create DataFrame version
         self.test_df = pd.DataFrame({
             "CHR": [1, 1, 2],
@@ -734,12 +734,12 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             "N": [1000, 1000, 1000],
             "EXTRA_COL": ["value1", "value2", "value3"]
         })
-    
+
     def tearDown(self):
         """Clean up temporary directory"""
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
-    
+
     def test_priority_user_overrides_formatbook(self):
         """Test that user-specified mappings override formatbook defaults"""
         # This test assumes formatbook might have different mappings
@@ -755,7 +755,7 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # User-specified columns should be mapped correctly
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
@@ -764,7 +764,7 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
         self.assertIn("BETA", result.columns)
         self.assertIn("SE", result.columns)
         self.assertIn("P", result.columns)
-    
+
     def test_priority_include_filter_after_mappings(self):
         """Test that include filter is applied after column mappings (Step 7)"""
         result = _preformat(
@@ -780,19 +780,19 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             include=["CHR", "POS", "EA", "NEA", "P"],  # Only include these
             verbose=False
         )
-        
+
         # Should only have included columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("EA", result.columns)
         self.assertIn("NEA", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded columns (even if mapped)
         self.assertNotIn("BETA", result.columns)
         self.assertNotIn("SE", result.columns)
         self.assertNotIn("EAF", result.columns)
-    
+
     def test_priority_exclude_filter_after_include(self):
         """Test that exclude filter is applied after include filter"""
         result = _preformat(
@@ -808,16 +808,16 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             exclude=["SE"],  # Exclude SE even if mapped
             verbose=False
         )
-        
+
         # Should have mapped columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded column
         self.assertNotIn("SE", result.columns)
-    
+
     def test_priority_include_then_exclude(self):
         """Test priority: include creates subset, then exclude removes from subset"""
         result = _preformat(
@@ -834,21 +834,21 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             exclude=["SE"],  # Then exclude SE
             verbose=False
         )
-        
+
         # Should have included columns except excluded
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded column
         self.assertNotIn("SE", result.columns)
-        
+
         # Should NOT have columns not in include list
         self.assertNotIn("EA", result.columns)
         self.assertNotIn("NEA", result.columns)
         self.assertNotIn("EAF", result.columns)
-    
+
     def test_workflow_configuration_phase_initialization(self):
         """Test Step 1: Parameter initialization"""
         # Test that parameters are properly initialized
@@ -858,16 +858,16 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             pos="POS",
             verbose=False
         )
-        
+
         # Should work without errors (initialization successful)
         self.assertIsInstance(result, pd.DataFrame)
         self.assertGreater(len(result), 0)
-    
+
     def test_workflow_configuration_phase_parquet(self):
         """Test Step 2: Parquet format handling (early exit)"""
         parquet_path = os.path.join(self.temp_dir, "test.parquet")
         self.test_df.to_parquet(parquet_path, index=False)
-        
+
         result = _preformat(
             sumstats=parquet_path,
             tab_fmt="parquet",
@@ -877,12 +877,12 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             nea="NEA",
             verbose=False
         )
-        
+
         # Should load parquet successfully
         self.assertIsInstance(result, pd.DataFrame)
         self.assertGreater(len(result), 0)
         self.assertIn("CHR", result.columns)
-    
+
     def test_workflow_mapping_phase_column_discovery(self):
         """Test Step 4: Column discovery from file"""
         result = _preformat(
@@ -893,13 +893,13 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             nea="NEA",
             verbose=False
         )
-        
+
         # Should discover and map columns correctly
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("EA", result.columns)
         self.assertIn("NEA", result.columns)
-    
+
     def test_workflow_mapping_phase_user_mappings(self):
         """Test Step 5: User-specified column mappings"""
         result = _preformat(
@@ -913,12 +913,12 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # All user-specified columns should be mapped
         expected_cols = ["CHR", "POS", "EA", "NEA", "BETA", "SE", "P"]
         for col in expected_cols:
             self.assertIn(col, result.columns, f"Column {col} should be mapped")
-    
+
     def test_workflow_data_phase_loading(self):
         """Test Step 8: Data loading"""
         # Test loading from path
@@ -930,7 +930,7 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             nea="NEA",
             verbose=False
         )
-        
+
         # Test loading from DataFrame
         result_df = _preformat(
             sumstats=self.test_df,
@@ -940,12 +940,12 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             nea="NEA",
             verbose=False
         )
-        
+
         # Both should produce valid DataFrames
         self.assertIsInstance(result_path, pd.DataFrame)
         self.assertIsInstance(result_df, pd.DataFrame)
         self.assertEqual(len(result_path), len(result_df))
-    
+
     def test_workflow_data_phase_postprocessing(self):
         """Test Step 9: Post-processing (renaming, transformations)"""
         result = _preformat(
@@ -960,20 +960,20 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             build="19",
             verbose=False
         )
-        
+
         # Should have standardized column names
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("EA", result.columns)
         self.assertIn("NEA", result.columns)
-        
+
         # Should have STATUS column created (post-processing)
         self.assertIn("STATUS", result.columns)
-        
+
         # Should have SNPID if missing (post-processing)
         # Since we didn't provide snpid, it should be created from CHR:POS:NEA:EA
         self.assertIn("SNPID", result.columns)
-    
+
     def test_workflow_other_columns_preserved(self):
         """Test that 'other' columns are preserved through workflow"""
         result = _preformat(
@@ -985,10 +985,10 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             other=["EXTRA_COL"],  # Add extra column
             verbose=False
         )
-        
+
         # Extra column should be preserved
         self.assertIn("EXTRA_COL", result.columns)
-    
+
     def test_workflow_other_columns_with_include(self):
         """Test that 'other' columns respect include filter"""
         result = _preformat(
@@ -1001,14 +1001,14 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             include=["CHR", "POS", "EA", "NEA"],  # Don't include EXTRA_COL
             verbose=False
         )
-        
+
         # Included columns should be present
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
-        
+
         # EXTRA_COL should NOT be present (not in include list)
         self.assertNotIn("EXTRA_COL", result.columns)
-    
+
     def test_workflow_other_columns_with_exclude(self):
         """Test that 'other' columns respect exclude filter"""
         result = _preformat(
@@ -1022,14 +1022,14 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             exclude=["EXTRA_COL"],  # Explicitly exclude
             verbose=False
         )
-        
+
         # Should have mapped columns
         self.assertIn("CHR", result.columns)
         self.assertIn("BETA", result.columns)
-        
+
         # EXTRA_COL should NOT be present (excluded)
         self.assertNotIn("EXTRA_COL", result.columns)
-    
+
     def test_workflow_numeric_constants(self):
         """Test that numeric constants (n, ncase, ncontrol) are handled correctly"""
         result = _preformat(
@@ -1043,17 +1043,17 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             ncontrol=2500,  # Constant value
             verbose=False
         )
-        
+
         # Should have constant columns added in post-processing
         self.assertIn("N", result.columns)
         self.assertIn("N_CASE", result.columns)
         self.assertIn("N_CONTROL", result.columns)
-        
+
         # Check that values are constant
         self.assertTrue((result["N"] == 5000).all())
         self.assertTrue((result["N_CASE"] == 2500).all())
         self.assertTrue((result["N_CONTROL"] == 2500).all())
-    
+
     def test_workflow_numeric_string_vs_int(self):
         """Test that string column names vs int constants are handled differently"""
         # Test with string column name
@@ -1066,7 +1066,7 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             n="N",  # Column name (string)
             verbose=False
         )
-        
+
         # Test with int constant
         result_int = _preformat(
             sumstats=self.test_path,
@@ -1077,14 +1077,14 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             n=5000,  # Constant value (int)
             verbose=False
         )
-        
+
         # Both should have N column
         self.assertIn("N", result_str.columns)
         self.assertIn("N", result_int.columns)
-        
+
         # String version should use column values, int version should be constant
         self.assertTrue((result_int["N"] == 5000).all())
-    
+
     def test_workflow_neaf_to_eaf_conversion(self):
         """Test NEAF to EAF conversion in post-processing"""
         # Create test file with NEAF instead of EAF
@@ -1093,10 +1093,10 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
 1\t1000\tA\tG\t0.8\t0.1\t0.01\t0.001
 1\t2000\tT\tC\t0.75\t0.15\t0.015\t0.0005
 2\t3000\tG\tA\t0.7\t0.2\t0.02\t0.0001"""
-        
-        with open(neaf_path, 'w') as f:
+
+        with open(neaf_path, "w") as f:
             f.write(neaf_data)
-        
+
         result = _preformat(
             sumstats=neaf_path,
             chrom="CHR",
@@ -1109,15 +1109,15 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # Should have EAF (converted from NEAF)
         self.assertIn("EAF", result.columns)
         self.assertNotIn("NEAF", result.columns)
-        
+
         # EAF should be 1 - NEAF
         # First row: NEAF=0.8, so EAF should be 0.2
         self.assertAlmostEqual(result.iloc[0]["EAF"], 0.2, places=5)
-    
+
     def test_workflow_snpid_creation(self):
         """Test SNPID creation when both rsID and SNPID are missing"""
         # Create test file without SNPID or rsID
@@ -1126,10 +1126,10 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
 1\t1000\tA\tG\t0.1\t0.01\t0.001
 1\t2000\tT\tC\t0.15\t0.015\t0.0005
 2\t3000\tG\tA\t0.2\t0.02\t0.0001"""
-        
-        with open(no_id_path, 'w') as f:
+
+        with open(no_id_path, "w") as f:
             f.write(no_id_data)
-        
+
         result = _preformat(
             sumstats=no_id_path,
             chrom="CHR",
@@ -1141,14 +1141,14 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # Should have SNPID created in post-processing
         self.assertIn("SNPID", result.columns)
-        
+
         # SNPID should be CHR:POS:NEA:EA format
         expected_snpid = "1:1000:G:A"
         self.assertEqual(result.iloc[0]["SNPID"], expected_snpid)
-    
+
     def test_workflow_snpid_creation_without_alleles(self):
         """Test SNPID creation when alleles are missing"""
         # Create test file without alleles
@@ -1157,10 +1157,10 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
 1\t1000\t0.1\t0.01\t0.001
 1\t2000\t0.15\t0.015\t0.0005
 2\t3000\t0.2\t0.02\t0.0001"""
-        
-        with open(no_alleles_path, 'w') as f:
+
+        with open(no_alleles_path, "w") as f:
             f.write(no_alleles_data)
-        
+
         result = _preformat(
             sumstats=no_alleles_path,
             chrom="CHR",
@@ -1170,14 +1170,14 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # Should have SNPID created (CHR:POS format, no alleles)
         self.assertIn("SNPID", result.columns)
-        
+
         # SNPID should be CHR:POS format
         expected_snpid = "1:1000"
         self.assertEqual(result.iloc[0]["SNPID"], expected_snpid)
-    
+
     def test_workflow_column_renaming_order(self):
         """Test that column renaming happens in correct order"""
         result = _preformat(
@@ -1191,15 +1191,15 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # Original column names should be renamed to standard names
         # The rename happens in post-processing (Step 9)
         # So we should see standard GWASLab column names
         standard_cols = ["CHR", "POS", "EA", "NEA", "BETA", "SE", "P"]
         for col in standard_cols:
-            self.assertIn(col, result.columns, 
+            self.assertIn(col, result.columns,
                          f"Standard column {col} should be present after renaming")
-    
+
     def test_workflow_dataframe_vs_path_consistency(self):
         """Test that DataFrame and path inputs produce consistent results for mapped columns"""
         result_path = _preformat(
@@ -1213,7 +1213,7 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         result_df = _preformat(
             sumstats=self.test_df,
             chrom="CHR",
@@ -1225,56 +1225,56 @@ class TestPreformatWorkflowAndPriority(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
-        # Note: Path loading only loads specified columns (usecols), 
+
+        # Note: Path loading only loads specified columns (usecols),
         # while DataFrame preserves all existing columns
         # So we check that mapped columns are consistent
         mapped_cols = {"CHR", "POS", "EA", "NEA", "BETA", "SE", "P", "STATUS", "SNPID"}
-        
+
         # Both should have all mapped columns
         for col in mapped_cols:
-            self.assertIn(col, result_path.columns, 
+            self.assertIn(col, result_path.columns,
                          f"Mapped column {col} should be in path result")
-            self.assertIn(col, result_df.columns, 
+            self.assertIn(col, result_df.columns,
                          f"Mapped column {col} should be in DataFrame result")
-        
+
         # DataFrame may have additional columns (N, EAF, EXTRA_COL) that weren't mapped
         # This is expected behavior - DataFrame preserves all columns
         self.assertIn("N", result_df.columns)  # DataFrame preserves this
         self.assertIn("EAF", result_df.columns)  # DataFrame preserves this
         self.assertIn("EXTRA_COL", result_df.columns)  # DataFrame preserves this
-        
+
         # Path result should NOT have unmapped columns
         self.assertNotIn("N", result_path.columns)  # Not mapped, so not loaded
         self.assertNotIn("EAF", result_path.columns)  # Not mapped, so not loaded
         self.assertNotIn("EXTRA_COL", result_path.columns)  # Not mapped, so not loaded
-        
+
         # Both should have same number of rows
         self.assertEqual(len(result_path), len(result_df))
 
 
 class TestExcludeIncludeWithStandardNames(unittest.TestCase):
     """Test exclude/include functionality with standard names and original column names"""
-    
+
     def setUp(self):
         self.raw_dir = os.path.join(os.path.dirname(__file__), "raw")
         # Create a test file with Rsq column that maps to INFO
         self.test_file = os.path.join(self.raw_dir, "test_rsq_info.tsv")
-        
+
         # Create test data with Rsq column (which maps to INFO in formatbook)
         test_data = """CHR\tPOS\tEA\tNEA\tRsq\tBETA\tSE\tP\tSNP
 1\t1000\tA\tG\t0.95\t0.1\t0.01\t1e-5\trs1
 1\t2000\tT\tC\t0.92\t0.2\t0.02\t1e-6\trs2
 1\t3000\tG\tA\t0.98\t0.15\t0.015\t1e-7\trs3"""
-        
+
         os.makedirs(self.raw_dir, exist_ok=True)
-        with open(self.test_file, 'w') as f:
+        with open(self.test_file, "w") as f:
             f.write(test_data)
-    
+
     def tearDown(self):
         if os.path.exists(self.test_file):
             os.remove(self.test_file)
-    
+
     def test_exclude_info_using_standard_name_with_auto_format(self):
         """Test excluding INFO column using standard name 'INFO' when original column is 'Rsq'"""
         result = _preformat(
@@ -1291,17 +1291,17 @@ class TestExcludeIncludeWithStandardNames(unittest.TestCase):
             exclude=["INFO"],  # Using standard name
             verbose=False
         )
-        
+
         # Should have other columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("SE", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have INFO column (Rsq was excluded)
         self.assertNotIn("INFO", result.columns)
-    
+
     def test_exclude_info_using_original_column_name_with_auto_format(self):
         """Test excluding INFO column using original column name 'Rsq'"""
         result = _preformat(
@@ -1318,15 +1318,15 @@ class TestExcludeIncludeWithStandardNames(unittest.TestCase):
             exclude=["Rsq"],  # Using original column name
             verbose=False
         )
-        
+
         # Should have other columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
-        
+
         # Should NOT have INFO column (Rsq was excluded)
         self.assertNotIn("INFO", result.columns)
-    
+
     def test_include_with_standard_names_with_auto_format(self):
         """Test including columns using standard names"""
         result = _preformat(
@@ -1343,7 +1343,7 @@ class TestExcludeIncludeWithStandardNames(unittest.TestCase):
             include=["CHR", "POS", "EA", "NEA", "BETA", "P"],  # Using standard names
             verbose=False
         )
-        
+
         # Should only have included columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
@@ -1351,11 +1351,11 @@ class TestExcludeIncludeWithStandardNames(unittest.TestCase):
         self.assertIn("NEA", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded columns
         self.assertNotIn("SE", result.columns)
         self.assertNotIn("INFO", result.columns)
-    
+
     def test_exclude_multiple_columns_with_standard_names(self):
         """Test excluding multiple columns using standard names"""
         result = _preformat(
@@ -1372,17 +1372,17 @@ class TestExcludeIncludeWithStandardNames(unittest.TestCase):
             exclude=["INFO", "SE"],  # Exclude both using standard names
             verbose=False
         )
-        
+
         # Should have basic columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded columns
         self.assertNotIn("INFO", result.columns)
         self.assertNotIn("SE", result.columns)
-    
+
     def test_include_then_exclude_with_standard_names(self):
         """Test include then exclude with standard names"""
         result = _preformat(
@@ -1400,17 +1400,17 @@ class TestExcludeIncludeWithStandardNames(unittest.TestCase):
             exclude=["INFO"],  # Exclude INFO from the included set
             verbose=False
         )
-        
+
         # Should have included columns except excluded
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("SE", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded column
         self.assertNotIn("INFO", result.columns)
-        
+
         # Should NOT have columns not in include list
         self.assertNotIn("EA", result.columns)
         self.assertNotIn("NEA", result.columns)
@@ -1418,32 +1418,32 @@ class TestExcludeIncludeWithStandardNames(unittest.TestCase):
 
 class TestExcludeIncludeWithStandardNamesPolars(unittest.TestCase):
     """Test exclude/include functionality with polars engine"""
-    
+
     def setUp(self):
         import tempfile
         self.raw_dir = os.path.join(os.path.dirname(__file__), "raw")
         # Create a test file with Rsq column that maps to INFO
         # Use a unique filename to avoid conflicts in parallel test execution
         self.test_file = os.path.join(self.raw_dir, f"test_rsq_info_polars_{os.getpid()}.tsv")
-        
+
         # Create test data with Rsq column (which maps to INFO in formatbook)
         test_data = """CHR\tPOS\tEA\tNEA\tRsq\tBETA\tSE\tP\tSNP
 1\t1000\tA\tG\t0.95\t0.1\t0.01\t1e-5\trs1
 1\t2000\tT\tC\t0.92\t0.2\t0.02\t1e-6\trs2
 1\t3000\tG\tA\t0.98\t0.15\t0.015\t1e-7\trs3"""
-        
+
         os.makedirs(self.raw_dir, exist_ok=True)
         # Ensure file is created and written
-        with open(self.test_file, 'w') as f:
+        with open(self.test_file, "w") as f:
             f.write(test_data)
         # Verify file exists
         if not os.path.exists(self.test_file):
             raise RuntimeError(f"Failed to create test file: {self.test_file}")
-    
+
     def tearDown(self):
         if os.path.exists(self.test_file):
             os.remove(self.test_file)
-    
+
     def test_exclude_info_using_standard_name_with_auto_format_polars(self):
         """Test excluding INFO column using standard name 'INFO' with polars"""
         result = preformatp(
@@ -1460,17 +1460,17 @@ class TestExcludeIncludeWithStandardNamesPolars(unittest.TestCase):
             exclude=["INFO"],  # Using standard name
             verbose=False
         )
-        
+
         # Should have other columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("SE", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have INFO column (Rsq was excluded)
         self.assertNotIn("INFO", result.columns)
-    
+
     def test_exclude_info_using_original_column_name_with_auto_format_polars(self):
         """Test excluding INFO column using original column name 'Rsq' with polars"""
         result = preformatp(
@@ -1487,15 +1487,15 @@ class TestExcludeIncludeWithStandardNamesPolars(unittest.TestCase):
             exclude=["Rsq"],  # Using original column name
             verbose=False
         )
-        
+
         # Should have other columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
-        
+
         # Should NOT have INFO column (Rsq was excluded)
         self.assertNotIn("INFO", result.columns)
-    
+
     def test_include_with_standard_names_with_auto_format_polars(self):
         """Test including columns using standard names with polars"""
         result = preformatp(
@@ -1512,7 +1512,7 @@ class TestExcludeIncludeWithStandardNamesPolars(unittest.TestCase):
             include=["CHR", "POS", "EA", "NEA", "BETA", "P"],  # Using standard names
             verbose=False
         )
-        
+
         # Should only have included columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
@@ -1520,11 +1520,11 @@ class TestExcludeIncludeWithStandardNamesPolars(unittest.TestCase):
         self.assertIn("NEA", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded columns
         self.assertNotIn("SE", result.columns)
         self.assertNotIn("INFO", result.columns)
-    
+
     def test_exclude_multiple_columns_with_standard_names_polars(self):
         """Test excluding multiple columns using standard names with polars"""
         result = preformatp(
@@ -1541,13 +1541,13 @@ class TestExcludeIncludeWithStandardNamesPolars(unittest.TestCase):
             exclude=["INFO", "SE"],  # Exclude both using standard names
             verbose=False
         )
-        
+
         # Should have basic columns
         self.assertIn("CHR", result.columns)
         self.assertIn("POS", result.columns)
         self.assertIn("BETA", result.columns)
         self.assertIn("P", result.columns)
-        
+
         # Should NOT have excluded columns
         self.assertNotIn("INFO", result.columns)
         self.assertNotIn("SE", result.columns)

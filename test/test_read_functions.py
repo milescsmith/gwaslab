@@ -10,15 +10,15 @@ Covers:
   - read_bigwig, read_bigwig_intervals, read_bigwig_stats, read_bigbed  (io_bigwig_bigbed)
 """
 
-import os
-import sys
 import gzip
-import unittest
-import tempfile
+import os
 import shutil
+import sys
+import tempfile
+import unittest
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 # ---------------------------------------------------------------------------
 # Setup path so that `gwaslab` can be imported from source tree
@@ -32,30 +32,33 @@ if SRC not in sys.path:
 # Imports under test (public API via __init__)
 # ---------------------------------------------------------------------------
 import gwaslab as gl
+from gwaslab.io.io_bedpe import read_bedpe
+from gwaslab.io.io_gtf import read_gtf, read_gtf_file
 
 # Also import directly from submodules for lower-level tests
-from gwaslab.io.io_read_ldsc import read_ldsc, read_popcorn, read_greml
+from gwaslab.io.io_read_ldsc import read_greml, read_ldsc, read_popcorn
 from gwaslab.io.io_read_tabular import (
     _read_tabular as read_tabular,
+)
+from gwaslab.io.io_read_tabular import (
+    read_bgen_sample,
     read_bim,
     read_fam,
     read_psam,
     read_pvar,
-    read_bgen_sample,
 )
 from gwaslab.io.io_ucsc_bed import read_bed
-from gwaslab.io.io_bedpe import read_bedpe
-from gwaslab.io.io_gtf import read_gtf, read_gtf_file
 
 # Optional bigwig/bigbed (requires pyBigWig)
 try:
+    import pyBigWig
+
     from gwaslab.io.io_bigwig_bigbed import (
+        read_bigbed,
         read_bigwig,
         read_bigwig_intervals,
         read_bigwig_stats,
-        read_bigbed,
     )
-    import pyBigWig
 
     HAS_PYBIGWIG = True
 except ImportError:

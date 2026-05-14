@@ -13,8 +13,9 @@ Tests cover:
 import os
 import sys
 import unittest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "src")
@@ -41,7 +42,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test converting numeric sumstats to number."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2, 23]))
-        
+
         self.assertEqual(mapper.sumstats_to_number(1), 1)
         self.assertEqual(mapper.sumstats_to_number(22), 22)
         self.assertEqual(mapper.sumstats_to_number(23), 23)
@@ -52,7 +53,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test converting string sumstats to number."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["1", "2", "X"]))
-        
+
         self.assertEqual(mapper.sumstats_to_number("1"), 1)
         self.assertEqual(mapper.sumstats_to_number("22"), 22)
         self.assertEqual(mapper.sumstats_to_number("X"), 23)
@@ -63,7 +64,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test converting chr-prefixed sumstats to number."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["chr1", "chr2", "chrX"]))
-        
+
         self.assertEqual(mapper.sumstats_to_number("chr1"), 1)
         self.assertEqual(mapper.sumstats_to_number("chr22"), 22)
         self.assertEqual(mapper.sumstats_to_number("chrX"), 23)
@@ -77,7 +78,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test converting number to numeric sumstats."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2, 23]))
-        
+
         self.assertEqual(mapper.number_to_sumstats(1), 1)
         self.assertEqual(mapper.number_to_sumstats(22), 22)
         self.assertEqual(mapper.number_to_sumstats(23), 23)
@@ -86,7 +87,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test converting number to string sumstats."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["1", "2", "X"]))
-        
+
         self.assertEqual(mapper.number_to_sumstats(1), "1")
         self.assertEqual(mapper.number_to_sumstats(22), "22")
         self.assertEqual(mapper.number_to_sumstats(23), "X")
@@ -99,7 +100,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test converting number to chr-prefixed sumstats."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["chr1", "chr2", "chrX"]))
-        
+
         self.assertEqual(mapper.number_to_sumstats(1), "chr1")
         self.assertEqual(mapper.number_to_sumstats(22), "chr22")
         self.assertEqual(mapper.number_to_sumstats(23), "chrX")
@@ -114,15 +115,15 @@ class TestChromosomeMapper(unittest.TestCase):
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2, 23]))
         mapper.detect_reference_format("dummy.vcf")  # Will detect chr format
-        
+
         # Mock the reference format detection to return chr format
         mapper._reference_format = "chr"
         mapper._reference_prefix = "chr"
         mapper._build_reference_layer("chr", "chr")
-        
+
         result = mapper.sumstats_to_reference(1)
         self.assertEqual(result, "chr1")
-        
+
         result = mapper.sumstats_to_reference(23)
         self.assertEqual(result, "chrX")
 
@@ -133,10 +134,10 @@ class TestChromosomeMapper(unittest.TestCase):
         mapper._reference_format = "chr"
         mapper._reference_prefix = "chr"
         mapper._build_reference_layer("chr", "chr")
-        
+
         result = mapper.reference_to_sumstats("chr1")
         self.assertEqual(result, 1)
-        
+
         result = mapper.reference_to_sumstats("chrX")
         self.assertEqual(result, 23)
 
@@ -147,17 +148,17 @@ class TestChromosomeMapper(unittest.TestCase):
     def test_to_numeric(self):
         """Test to_numeric convenience method."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
-        
+
         # Single value - need to detect format first for chr format
         mapper.detect_sumstats_format(pd.Series(["chr1"]))
         result = mapper.to_numeric("chr1")
         self.assertEqual(result, 1)
-        
+
         # For string format
         mapper.detect_sumstats_format(pd.Series(["X"]))
         result = mapper.to_numeric("X")
         self.assertEqual(result, 23)
-        
+
         # Series - detect format first
         series = pd.Series(["chr1", "chr2", "X"])
         mapper.detect_sumstats_format(series)
@@ -168,14 +169,14 @@ class TestChromosomeMapper(unittest.TestCase):
     def test_to_string(self):
         """Test to_string convenience method."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
-        
+
         # Single value
         result = mapper.to_string(1)
         self.assertEqual(result, "1")
-        
+
         result = mapper.to_string(23)
         self.assertEqual(result, "X")
-        
+
         # Series
         series = pd.Series([1, 2, 23, 24, 25])
         result = mapper.to_string(series)
@@ -185,14 +186,14 @@ class TestChromosomeMapper(unittest.TestCase):
     def test_to_chr(self):
         """Test to_chr convenience method."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
-        
+
         # Single value
         result = mapper.to_chr(1, prefix="chr")
         self.assertEqual(result, "chr1")
-        
+
         result = mapper.to_chr(23, prefix="chr")
         self.assertEqual(result, "chrX")
-        
+
         # Series
         series = pd.Series([1, 2, 23])
         result = mapper.to_chr(series, prefix="chr")
@@ -207,14 +208,14 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Single value
         result = mapper.to_nc(1)
         self.assertEqual(result, "NC_000001.10")
-        
+
         result = mapper.to_nc(23)
         self.assertEqual(result, "NC_000023.10")
-        
+
         # Series
         series = pd.Series([1, 2, 23])
         result = mapper.to_nc(series)
@@ -258,24 +259,24 @@ class TestChromosomeMapper(unittest.TestCase):
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         detected = mapper.detect_format("chr1")
         self.assertEqual(detected, "chr")
-        
+
         detected = mapper.detect_format(1)
         self.assertEqual(detected, "numeric")
 
     def test_detect_sumstats_format(self):
         """Test sumstats format detection."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
-        
+
         # Numeric format
         series = pd.Series([1, 2, 23])
         mapper.detect_sumstats_format(series)
         self.assertEqual(mapper._sumstats_format, "numeric")
-        
+
         # String format
         series = pd.Series(["1", "2", "X"])
         mapper.detect_sumstats_format(series)
         self.assertEqual(mapper._sumstats_format, "string")
-        
+
         # Chr format
         series = pd.Series(["chr1", "chr2", "chrX"])
         mapper.detect_sumstats_format(series)
@@ -292,10 +293,10 @@ class TestChromosomeMapper(unittest.TestCase):
         mapper._reference_format = "chr"
         mapper._reference_prefix = "chr"
         mapper._build_reference_layer("chr", "chr")
-        
+
         series = pd.Series([1, 2, 23, 24, 25])
         result = mapper.sumstats_to_reference_series(series)
-        
+
         # Check individual values as the exact format may vary
         self.assertEqual(result.iloc[0], "chr1")
         self.assertEqual(result.iloc[1], "chr2")
@@ -311,10 +312,10 @@ class TestChromosomeMapper(unittest.TestCase):
         mapper._reference_format = "chr"
         mapper._reference_prefix = "chr"
         mapper._build_reference_layer("chr", "chr")
-        
+
         series = pd.Series(["chr1", "chr2", "chrX", "chrY", "chrMT"])
         result = mapper.reference_to_sumstats_series(series)
-        
+
         expected = pd.Series([1, 2, 23, 24, 25])
         pd.testing.assert_series_equal(result, expected, check_dtype=False)
 
@@ -322,10 +323,10 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test backward compatibility map_series method."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2, 23]))
-        
+
         series = pd.Series([1, 2, 22, 23, 24, 25])
         result = mapper.map_series(series)
-        
+
         # Should return in sumstats format (numeric in this case)
         expected = pd.Series([1, 2, 22, 23, 24, 25])
         pd.testing.assert_series_equal(result, expected, check_dtype=False)
@@ -344,7 +345,7 @@ class TestChromosomeMapper(unittest.TestCase):
         )
         mapper_human.detect_sumstats_format(pd.Series(["X"]))
         self.assertEqual(mapper_human.sumstats_to_number("X"), 23)
-        
+
         # Mouse
         mapper_mouse = ChromosomeMapper(
             species="mus musculus",
@@ -365,7 +366,7 @@ class TestChromosomeMapper(unittest.TestCase):
             verbose=False
         )
         self.assertEqual(mapper_human._max_chr, 25)  # 22 autosomes + X + Y + MT
-        
+
         # Mouse has 19 autosomes
         mapper_mouse = ChromosomeMapper(
             species="mus musculus",
@@ -385,7 +386,7 @@ class TestChromosomeMapper(unittest.TestCase):
         series = pd.Series(["chr1", None, "chr2", np.nan, "X"])
         # Filter out None/NaN for format detection
         mapper.detect_sumstats_format(series.dropna())
-        
+
         # Use to_numeric which should handle missing values
         # Note: The current implementation may raise errors for None/NaN
         # So we test with a series that has valid values and check the behavior
@@ -393,7 +394,7 @@ class TestChromosomeMapper(unittest.TestCase):
         result = mapper.to_numeric(valid_series)
         expected = pd.Series([1, 2, 23])
         pd.testing.assert_series_equal(result, expected, check_dtype=False)
-        
+
         # For missing values, the mapper may raise errors or handle them
         # This is expected behavior - missing values need to be handled by the caller
 
@@ -401,11 +402,11 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test handling of invalid chromosome values."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["1", "2"]))
-        
+
         # Invalid values should return pd.NA instead of raising ValueError
         result = mapper.sumstats_to_number("invalid")
         self.assertTrue(pd.isna(result))
-        
+
         # Test with unconvertible chromosome like '1_KI270766v1_alt'
         result = mapper.sumstats_to_number("1_KI270766v1_alt")
         self.assertTrue(pd.isna(result))
@@ -413,21 +414,21 @@ class TestChromosomeMapper(unittest.TestCase):
     def test_empty_series(self):
         """Test handling of empty Series."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
-        
+
         series = pd.Series([], dtype=object)
         result = mapper.to_numeric(series)
-        
+
         self.assertEqual(len(result), 0)
 
     def test_mixed_formats_in_series(self):
         """Test handling of mixed formats in Series."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
-        
+
         # When format is detected, it should handle the primary format
         series = pd.Series(["chr1", "chr2", "chrX"])
         mapper.detect_sumstats_format(series)
         result = mapper.to_numeric(series)
-        
+
         expected = pd.Series([1, 2, 23])
         pd.testing.assert_series_equal(result, expected, check_dtype=False)
 
@@ -435,7 +436,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test NC format conversion without build."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2]))
-        
+
         # Without build, NC mapping is not available, should raise ValueError
         with self.assertRaises(ValueError):
             mapper.to_nc(1)
@@ -448,7 +449,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         result = mapper.to_nc(1)
         self.assertEqual(result, "NC_000001.10")
 
@@ -463,7 +464,7 @@ class TestChromosomeMapper(unittest.TestCase):
         )
         result_19 = mapper_19.to_nc(1)
         self.assertEqual(result_19, "NC_000001.10")
-        
+
         # hg38
         mapper_38 = ChromosomeMapper(
             species="homo sapiens",
@@ -485,11 +486,11 @@ class TestChromosomeMapper(unittest.TestCase):
         mapper._reference_format = "chr"
         mapper._reference_prefix = "chr"
         mapper._build_reference_layer("chr", "chr")
-        
+
         original = 1
         intermediate = mapper.sumstats_to_reference(original)
         result = mapper.reference_to_sumstats(intermediate)
-        
+
         self.assertEqual(result, original)
 
     def test_round_trip_nc_format(self):
@@ -501,18 +502,18 @@ class TestChromosomeMapper(unittest.TestCase):
             verbose=False
         )
         mapper.detect_sumstats_format(pd.Series(["NC_000001.10"]))
-        
+
         original = 1
         intermediate = mapper.to_nc(original)
         result = mapper.sumstats_to_number(intermediate)
-        
+
         self.assertEqual(result, original)
 
     def test_case_insensitive_chr_prefix(self):
         """Test case-insensitive handling of chr prefix."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["chr1", "Chr1", "CHR1"]))
-        
+
         # All should map to the same value
         self.assertEqual(mapper.sumstats_to_number("chr1"), 1)
         self.assertEqual(mapper.sumstats_to_number("Chr1"), 1)
@@ -522,7 +523,7 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test alternative mitochondrial notation (M vs MT)."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["MT", "M"]))
-        
+
         # Both M and MT should map to 25
         self.assertEqual(mapper.sumstats_to_number("MT"), 25)
         self.assertEqual(mapper.sumstats_to_number("M"), 25)
@@ -531,11 +532,11 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test performance with large Series."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series(["chr1", "chrX"]))
-        
+
         # Create a large series
         large_series = pd.Series(["chr1"] * 10000 + ["chrX"] * 1000)
         result = mapper.to_numeric(large_series)
-        
+
         # Check that all values were converted
         self.assertEqual(len(result), 11000)
         self.assertEqual((result == 1).sum(), 10000)
@@ -550,7 +551,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertIsInstance(mapper, ChromosomeMapper)
         self.assertEqual(mapper._default_reference_file, "dummy.vcf")
 
@@ -558,11 +559,11 @@ class TestChromosomeMapper(unittest.TestCase):
         """Test backward compatibility map method."""
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2, 23]))
-        
+
         # Map should work with sumstats format
         result = mapper.map(1)
         self.assertEqual(result, 1)
-        
+
         result = mapper.map(23)
         self.assertEqual(result, 23)
 
@@ -578,11 +579,11 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         series = pd.Series(["NC_000001.11", "NC_000002.12", "NC_000023.11"])
         mapper.detect_sumstats_format(series)
         self.assertEqual(mapper._sumstats_format, "nc")
-        
+
         # Test that NC format can be converted to number
         self.assertEqual(mapper.sumstats_to_number("NC_000001.11"), 1)
         self.assertEqual(mapper.sumstats_to_number("NC_000023.11"), 23)
@@ -595,15 +596,15 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Test autosomes
         self.assertEqual(mapper.to_nc(1), "NC_000001.10")
         self.assertEqual(mapper.to_nc(22), "NC_000022.10")
-        
+
         # Test sex chromosomes
         self.assertEqual(mapper.to_nc(23), "NC_000023.10")  # X
         self.assertEqual(mapper.to_nc(24), "NC_000024.9")   # Y
-        
+
         # Test mitochondrial
         self.assertEqual(mapper.to_nc(25), "NC_012920.1")    # MT
 
@@ -615,15 +616,15 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Test autosomes
         self.assertEqual(mapper.to_nc(1), "NC_000001.11")
         self.assertEqual(mapper.to_nc(22), "NC_000022.11")
-        
+
         # Test sex chromosomes
         self.assertEqual(mapper.to_nc(23), "NC_000023.11")  # X
         self.assertEqual(mapper.to_nc(24), "NC_000024.10")   # Y
-        
+
         # Test mitochondrial
         self.assertEqual(mapper.to_nc(25), "NC_012920.1")   # MT
 
@@ -635,7 +636,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # T2T-CHM13 uses CM prefix instead of NC
         self.assertEqual(mapper.to_nc(1), "CM000663.2")
         self.assertEqual(mapper.to_nc(22), "CM000684.2")
@@ -660,7 +661,7 @@ class TestChromosomeMapper(unittest.TestCase):
         y_num = mapper_mouse.sumstats_to_number("Y")
         self.assertEqual(mapper_mouse.to_nc(x_num), "NC_000086.8")  # X
         self.assertEqual(mapper_mouse.to_nc(y_num), "NC_000087.8")  # Y
-        
+
         # Rat
         mapper_rat = ChromosomeMapper(
             species="rat",
@@ -685,7 +686,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         original_values = [1, 2, 22, 23, 24, 25]
         for val in original_values:
             nc_id = mapper.to_nc(val)
@@ -700,10 +701,10 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Set NC as sumstats format
         mapper.detect_sumstats_format(pd.Series(["NC_000001.11", "NC_000023.11"]))
-        
+
         original_nc = "NC_000001.11"
         number = mapper.sumstats_to_number(original_nc)
         result_nc = mapper.number_to_sumstats(number)
@@ -717,7 +718,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Convert numeric Series to NC
         numeric_series = pd.Series([1, 2, 22, 23, 24, 25])
         nc_series = mapper.to_nc(numeric_series)
@@ -726,7 +727,7 @@ class TestChromosomeMapper(unittest.TestCase):
             "NC_000023.11", "NC_000024.10", "NC_012920.1"
         ])
         pd.testing.assert_series_equal(nc_series, expected)
-        
+
         # Convert NC Series back to numeric
         mapper.detect_sumstats_format(nc_series)
         result_numeric = mapper.to_numeric(nc_series)
@@ -740,17 +741,17 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Set NC as sumstats format
         mapper.detect_sumstats_format(pd.Series(["NC_000001.11", "NC_000023.11"]))
-        
+
         # NC -> numeric
         self.assertEqual(mapper.to_numeric("NC_000001.11"), 1)
-        
+
         # NC -> string
         self.assertEqual(mapper.to_string("NC_000001.11"), "1")
         self.assertEqual(mapper.to_string("NC_000023.11"), "X")
-        
+
         # NC -> chr
         self.assertEqual(mapper.to_chr("NC_000001.11"), "chr1")
         self.assertEqual(mapper.to_chr("NC_000023.11"), "chrX")
@@ -763,15 +764,15 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # numeric -> NC
         self.assertEqual(mapper.to_nc(1), "NC_000001.11")
-        
+
         # string -> NC (need to detect format first)
         mapper.detect_sumstats_format(pd.Series(["1", "X"]))
         number = mapper.sumstats_to_number("1")
         self.assertEqual(mapper.to_nc(number), "NC_000001.11")
-        
+
         # chr -> NC
         mapper.detect_sumstats_format(pd.Series(["chr1", "chrX"]))
         number = mapper.sumstats_to_number("chr1")
@@ -785,13 +786,13 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         mapper.detect_sumstats_format(pd.Series(["NC_000001.11"]))
-        
+
         # Invalid NC ID should return pd.NA
         result = mapper.sumstats_to_number("NC_INVALID.1")
         self.assertTrue(pd.isna(result))
-        
+
         result = mapper.sumstats_to_number("INVALID_FORMAT")
         self.assertTrue(pd.isna(result))
 
@@ -802,7 +803,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Should raise ValueError when build is not specified
         with self.assertRaises(ValueError):
             mapper.to_nc(1)
@@ -815,7 +816,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Should raise ValueError for unsupported combination
         with self.assertRaises(ValueError):
             mapper.to_nc(1)
@@ -828,7 +829,7 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Chromosome 100 doesn't exist, should raise ValueError
         with self.assertRaises(ValueError):
             mapper.to_nc(100)
@@ -841,14 +842,14 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # NC format should be detected regardless of case
         series_upper = pd.Series(["NC_000001.11", "NC_000023.11"])
         series_lower = pd.Series(["nc_000001.11", "nc_000023.11"])
-        
+
         mapper.detect_sumstats_format(series_upper)
         self.assertEqual(mapper._sumstats_format, "nc")
-        
+
         mapper.detect_sumstats_format(series_lower)
         self.assertEqual(mapper._sumstats_format, "nc")
 
@@ -860,11 +861,11 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # When NC format is detected, it should handle NC IDs
         series = pd.Series(["NC_000001.11", "NC_000002.12", "NC_000023.11"])
         mapper.detect_sumstats_format(series)
-        
+
         # All should convert to numbers
         result = mapper.to_numeric(series)
         expected = pd.Series([1, 2, 23])
@@ -878,17 +879,17 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Should use hg19 mappings
         self.assertEqual(mapper.to_nc(1), "NC_000001.10")
-        
+
         mapper2 = ChromosomeMapper(
             species="homo sapiens",
             build="GRCh38",  # Should be processed to "38"
             log=self.log,
             verbose=False
         )
-        
+
         # Should use hg38 mappings
         self.assertEqual(mapper2.to_nc(1), "NC_000001.11")
 
@@ -902,7 +903,7 @@ class TestChromosomeMapper(unittest.TestCase):
             verbose=False
         )
         self.assertEqual(mapper_human.to_nc(1), "NC_000001.11")
-        
+
         # Test with "mouse" alias
         mapper_mouse = ChromosomeMapper(
             species="mouse",
@@ -920,15 +921,15 @@ class TestChromosomeMapper(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Test all chromosomes 1-25
         all_chromosomes = list(range(1, 26))
         nc_ids = mapper.to_nc(pd.Series(all_chromosomes))
-        
+
         # Verify all chromosomes have NC IDs
         self.assertEqual(len(nc_ids), 25)
         self.assertTrue(all(nc_ids.str.startswith(("NC_", "CM_"))))
-        
+
         # Verify specific chromosomes
         self.assertEqual(nc_ids.iloc[0], "NC_000001.11")   # chr1
         self.assertEqual(nc_ids.iloc[21], "NC_000022.11")   # chr22
@@ -937,5 +938,5 @@ class TestChromosomeMapper(unittest.TestCase):
         self.assertEqual(nc_ids.iloc[24], "NC_012920.1")   # chrMT
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

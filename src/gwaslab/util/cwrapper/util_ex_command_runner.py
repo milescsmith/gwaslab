@@ -9,13 +9,13 @@ Provides a centralized, robust framework for executing shell commands and bash s
 - Result validation
 """
 
+import os
+import shutil
 import subprocess
 import tempfile
-import os
 import time
-import shutil
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Any, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from gwaslab.info.g_Log import Log
 
@@ -26,12 +26,12 @@ class CommandExecutionResult:
     success: bool
     output: str  # stdout/stderr combined
     exit_code: int
-    output_files: Dict[str, str] = field(default_factory=dict)  # expected_file -> actual_path
-    errors: List[str] = field(default_factory=list)
+    output_files: dict[str, str] = field(default_factory=dict)  # expected_file -> actual_path
+    errors: list[str] = field(default_factory=list)
     execution_time: float = 0.0
-    script_path: Optional[str] = None
-    temp_dir: Optional[str] = None
-    command: Optional[str] = None  # The actual command executed
+    script_path: str | None = None
+    temp_dir: str | None = None
+    command: str | None = None  # The actual command executed
 
 
 class CommandRunner:
@@ -39,15 +39,15 @@ class CommandRunner:
     Centralized command/script execution with timeout, proper temp file management,
     and structured error handling.
     """
-    
+
     def __init__(
         self,
         shell: bool = True,
-        log: Optional[Log] = None,
-        timeout: Optional[float] = None,
-        temp_dir: Optional[str] = None,
+        log: Log | None = None,
+        timeout: float | None = None,
+        temp_dir: str | None = None,
         cleanup: bool = True,
-        executable: Optional[str] = None
+        executable: str | None = None
     ):
         """
         Initialize command runner.
@@ -66,16 +66,16 @@ class CommandRunner:
         self.temp_dir = temp_dir
         self.cleanup = cleanup
         self.executable = executable
-    
+
     def execute(
         self,
-        command_or_script: Union[str, List[str]],
-        expected_outputs: Optional[List[str]] = None,
+        command_or_script: Union[str, list[str]],
+        expected_outputs: list[str] | None = None,
         temp_prefix: str = "gwaslab_command",
         temp_suffix: str = ".sh",
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         verbose: bool = True,
-        working_dir: Optional[str] = None,
+        working_dir: str | None = None,
         as_script: bool = False
     ) -> CommandExecutionResult:
         """
@@ -96,20 +96,20 @@ class CommandRunner:
         """
         if expected_outputs is None:
             expected_outputs = []
-        
+
         timeout = timeout if timeout is not None else self.timeout
         temp_dir = self.temp_dir
         temp_script_path = None
         temp_dir_created = False
-        
+
         result = CommandExecutionResult(
             success=False,
             output="",
             exit_code=-1
         )
-        
+
         start_time = time.time()
-        
+
         try:
             # Create temporary directory if needed
             if temp_dir is None:
@@ -119,7 +119,7 @@ class CommandRunner:
             else:
                 os.makedirs(temp_dir, exist_ok=True)
                 result.temp_dir = temp_dir
-            
+
             # Determine command to execute
             if as_script:
                 # Create temporary script file
@@ -131,32 +131,31 @@ class CommandRunner:
                     temp_suffix
                 )
                 result.script_path = temp_script_path
-                
+
                 # Make script executable
                 try:
                     os.chmod(temp_script_path, 0o755)
                 except Exception:
                     pass  # Ignore on Windows
-                
+
                 # Execute script
                 if self.shell:
                     cmd = temp_script_path
                 else:
                     # Use shebang or default shell
-                    cmd = ["/bin/bash", temp_script_path] if os.name != 'nt' else ["cmd", "/c", temp_script_path]
+                    cmd = ["/bin/bash", temp_script_path] if os.name != "nt" else ["cmd", "/c", temp_script_path]
+            # Execute command directly
+            elif isinstance(command_or_script, str):
+                cmd = command_or_script
             else:
-                # Execute command directly
-                if isinstance(command_or_script, str):
-                    cmd = command_or_script
-                else:
-                    cmd = command_or_script
-                    self.shell = False  # List commands can't use shell=True safely
-            
+                cmd = command_or_script
+                self.shell = False  # List commands can't use shell=True safely
+
             result.command = str(cmd) if isinstance(cmd, (str, list)) else repr(cmd)
-            
+
             # Log command (for debugging)
             self.log.write(f" -Executing command: {result.command[:200]}...", verbose=verbose)
-            
+
             # Execute command
             working_dir = working_dir if working_dir is not None else temp_dir
             output, exit_code = self._run_command(
@@ -165,11 +164,11 @@ class CommandRunner:
                 working_dir=working_dir,
                 verbose=verbose
             )
-            
+
             result.output = output
             result.exit_code = exit_code
             result.execution_time = time.time() - start_time
-            
+
             # Check if execution was successful
             if exit_code == 0:
                 # Validate and collect output files
@@ -178,7 +177,7 @@ class CommandRunner:
                     working_dir,
                     verbose=verbose
                 )
-                
+
                 # Check if all expected outputs exist
                 missing_outputs = [f for f in expected_outputs if f not in result.output_files]
                 if missing_outputs:
@@ -193,26 +192,26 @@ class CommandRunner:
                 self.log.warning(f"Command execution failed with exit code {exit_code}", verbose=verbose)
                 if output:
                     self.log.write(f" -Error output:\n{output}", verbose=verbose)
-        
+
         except subprocess.TimeoutExpired as e:
             result.success = False
             result.execution_time = time.time() - start_time
             result.errors.append(f"Command execution timed out after {timeout}s")
             result.output = str(e)
             self.log.warning(f"Command execution timed out after {timeout}s", verbose=verbose)
-        
+
         except FileNotFoundError:
             result.success = False
             result.errors.append("Command or executable not found")
             self.log.warning("Command or executable not found", verbose=verbose)
-        
+
         except Exception as e:
             result.success = False
             result.execution_time = time.time() - start_time
-            result.errors.append(f"Unexpected error during command execution: {str(e)}")
+            result.errors.append(f"Unexpected error during command execution: {e!s}")
             result.output = str(e)
-            self.log.warning(f"Unexpected error during command execution: {str(e)}", verbose=verbose)
-        
+            self.log.warning(f"Unexpected error during command execution: {e!s}", verbose=verbose)
+
         finally:
             # Cleanup temporary files
             if self.cleanup:
@@ -222,9 +221,9 @@ class CommandRunner:
                     result.script_path = temp_script_path
                 if temp_dir_created:
                     result.temp_dir = temp_dir
-        
+
         return result
-    
+
     def _create_temp_script(
         self,
         script_content: str,
@@ -238,24 +237,24 @@ class CommandRunner:
         timestamp = int(time.time() * 1000) % 1000000
         unique_name = f"{prefix}_{pid}_{timestamp}{suffix}"
         temp_script_path = os.path.join(temp_dir, unique_name)
-        
+
         # Add shebang if not present
         if not script_content.startswith("#!"):
-            shebang = "#!/bin/bash\n" if os.name != 'nt' else "@echo off\n"
+            shebang = "#!/bin/bash\n" if os.name != "nt" else "@echo off\n"
             script_content = shebang + script_content
-        
+
         with open(temp_script_path, "w") as f:
             f.write(script_content)
-        
+
         return temp_script_path
-    
+
     def _run_command(
         self,
-        cmd: Union[str, List[str]],
-        timeout: Optional[float] = None,
-        working_dir: Optional[str] = None,
+        cmd: Union[str, list[str]],
+        timeout: float | None = None,
+        working_dir: str | None = None,
         verbose: bool = True
-    ) -> Tuple[str, int]:
+    ) -> tuple[str, int]:
         """
         Execute command using subprocess.
         Returns (output, exit_code).
@@ -271,60 +270,59 @@ class CommandRunner:
                 timeout=timeout,
                 check=False  # Don't raise on non-zero exit
             )
-            
+
             # Combine stdout and stderr
             output = ""
             if process.stdout:
                 output += process.stdout
             if process.stderr:
                 output += process.stderr
-            
+
             return output, process.returncode
-        
+
         except subprocess.TimeoutExpired:
             raise
         except FileNotFoundError:
             raise
-    
+
     def _collect_output_files(
         self,
-        expected_outputs: List[str],
+        expected_outputs: list[str],
         working_dir: str,
         verbose: bool = True
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Collect and validate output files.
         Returns dict mapping expected_file -> actual_path.
         """
         output_files = {}
-        
+
         for expected_file in expected_outputs:
             # Try to find the file in working directory
             actual_path = os.path.join(working_dir, expected_file)
-            
+
             # Also try just the expected_file name (in case it's an absolute path)
             if not os.path.exists(actual_path):
                 if os.path.isabs(expected_file) and os.path.exists(expected_file):
                     actual_path = expected_file
+                # Try current directory
+                elif os.path.exists(expected_file):
+                    actual_path = expected_file
                 else:
-                    # Try current directory
-                    if os.path.exists(expected_file):
-                        actual_path = expected_file
-                    else:
-                        continue  # File not found
-            
+                    continue  # File not found
+
             if os.path.exists(actual_path) and os.path.isfile(actual_path):
                 output_files[expected_file] = actual_path
                 self.log.write(f" -Found output file: {actual_path}", verbose=verbose)
             else:
                 self.log.warning(f" -Expected output file not found: {expected_file}", verbose=verbose)
-        
+
         return output_files
-    
+
     def _cleanup_temp_files(
         self,
-        temp_script_path: Optional[str],
-        temp_dir: Optional[str],
+        temp_script_path: str | None,
+        temp_dir: str | None,
         temp_dir_created: bool,
         verbose: bool = True
     ) -> None:
@@ -333,7 +331,7 @@ class CommandRunner:
             if temp_script_path and os.path.exists(temp_script_path):
                 os.remove(temp_script_path)
                 self.log.write(f" -Removed temp script: {temp_script_path}", verbose=verbose)
-            
+
             if temp_dir_created and temp_dir and os.path.exists(temp_dir):
                 try:
                     shutil.rmtree(temp_dir)
@@ -350,7 +348,7 @@ def create_temp_script(
     script_content: str,
     prefix: str = "gwaslab_command",
     suffix: str = ".sh",
-    temp_dir: Optional[str] = None
+    temp_dir: str | None = None
 ) -> str:
     """
     Create a temporary script file.
@@ -366,33 +364,33 @@ def create_temp_script(
     """
     if temp_dir is None:
         temp_dir = tempfile.gettempdir()
-    
+
     pid = os.getpid()
     timestamp = int(time.time() * 1000) % 1000000
     unique_name = f"{prefix}_{pid}_{timestamp}{suffix}"
     temp_script_path = os.path.join(temp_dir, unique_name)
-    
+
     # Add shebang if not present
     if not script_content.startswith("#!"):
-        shebang = "#!/bin/bash\n" if os.name != 'nt' else "@echo off\n"
+        shebang = "#!/bin/bash\n" if os.name != "nt" else "@echo off\n"
         script_content = shebang + script_content
-    
+
     with open(temp_script_path, "w") as f:
         f.write(script_content)
-    
+
     # Make script executable on Unix systems
     try:
         os.chmod(temp_script_path, 0o755)
     except Exception:
         pass  # Ignore on Windows
-    
+
     return temp_script_path
 
 
 def read_command_output_files(
     result: CommandExecutionResult,
-    expected_files: List[str]
-) -> Dict[str, Any]:
+    expected_files: list[str]
+) -> dict[str, Any]:
     """
     Read and return output files from command execution result.
     
@@ -404,24 +402,24 @@ def read_command_output_files(
         Dict mapping file names to their contents (as DataFrames for CSV, strings for text)
     """
     import pandas as pd
-    
+
     outputs = {}
-    
+
     for file_name in expected_files:
         if file_name in result.output_files:
             file_path = result.output_files[file_name]
             try:
                 # Try to read as CSV first
-                if file_path.endswith('.csv'):
+                if file_path.endswith(".csv"):
                     outputs[file_name] = pd.read_csv(file_path)
-                elif file_path.endswith('.tsv') or file_path.endswith('.tsv.gz'):
-                    outputs[file_name] = pd.read_csv(file_path, sep='\t')
+                elif file_path.endswith(".tsv") or file_path.endswith(".tsv.gz"):
+                    outputs[file_name] = pd.read_csv(file_path, sep="\t")
                 else:
                     # Read as text
-                    with open(file_path, 'r') as f:
+                    with open(file_path) as f:
                         outputs[file_name] = f.read()
             except Exception as e:
                 outputs[file_name] = None
-                result.errors.append(f"Error reading output file {file_name}: {str(e)}")
-    
+                result.errors.append(f"Error reading output file {file_name}: {e!s}")
+
     return outputs

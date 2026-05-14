@@ -12,17 +12,18 @@ Notes
 """
 
 from __future__ import annotations
+
 import argparse
 import gzip
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 
-def read_chrom_sizes(path: str) -> Dict[str, int]:
-    sizes: Dict[str, int] = {}
-    with open(path, "r", encoding="utf-8") as f:
+def read_chrom_sizes(path: str) -> dict[str, int]:
+    sizes: dict[str, int] = {}
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):
@@ -34,7 +35,7 @@ def read_chrom_sizes(path: str) -> Dict[str, int]:
     return sizes
 
 
-def choose_weighted(items: List[str], weights: np.ndarray, rng: np.random.Generator) -> str:
+def choose_weighted(items: list[str], weights: np.ndarray, rng: np.random.Generator) -> str:
     idx = rng.choice(len(items), p=weights)
     return items[idx]
 
@@ -60,21 +61,21 @@ def truncated_power_law(
     return x
 
 
-def bin_interval(pos: int, bin_size: int) -> Tuple[int, int]:
+def bin_interval(pos: int, bin_size: int) -> tuple[int, int]:
     start = (pos // bin_size) * bin_size
     end = start + bin_size
     return start, end
 
 
 def simulate_bedpe(
-    chrom_sizes: Dict[str, int],
+    chrom_sizes: dict[str, int],
     n_pairs: int,
     cis_fraction: float,
     bin_size: int,
     cis_min_dist: int,
     cis_max_dist: int,
     cis_alpha: float,
-    seed: Optional[int],
+    seed: int | None,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
 

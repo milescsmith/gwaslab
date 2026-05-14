@@ -12,9 +12,11 @@ pre-computed LD data.
 import os
 import sys
 import unittest
+
+import matplotlib
 import numpy as np
 import pandas as pd
-import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -23,8 +25,8 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from gwaslab.viz.viz_plot_ld_block import plot_ld_block
 from gwaslab.info.g_Log import Log
+from gwaslab.viz.viz_plot_ld_block import plot_ld_block
 
 
 def make_mock_ld_matrix(n, seed=42):
@@ -100,9 +102,9 @@ class TestLdBlock(unittest.TestCase):
         self.n_variants = 50
         self.ld_matrix = make_mock_ld_matrix(self.n_variants)
         self.positions = make_mock_positions(self.n_variants)
-        
+
     def tearDown(self):
-        plt.close('all')
+        plt.close("all")
 
     def test_plot_ld_block_standalone_with_ld_matrix(self):
         """
@@ -195,7 +197,7 @@ class TestLdBlock(unittest.TestCase):
         """
         lead_snp_is = [10, 25, 40]  # Indices of lead SNPs
         lead_snp_is_color = ["red", "blue", "green"]
-        
+
         fig, ax = plot_ld_block(
             ld=self.ld_matrix,
             pos=self.positions,
@@ -214,7 +216,7 @@ class TestLdBlock(unittest.TestCase):
         specify which variants to annotate.
         """
         anno_set = [0, 5, 10, 15, 20]
-        
+
         fig, ax = plot_ld_block(
             ld=self.ld_matrix,
             pos=self.positions,
@@ -234,7 +236,7 @@ class TestLdBlock(unittest.TestCase):
         """
         fig, ax_main = plt.subplots(figsize=(10, 8))
         ax_pos = fig.add_subplot(2, 1, 2)
-        
+
         fig, ax = plot_ld_block(
             ld=self.ld_matrix,
             pos=self.positions,
@@ -299,7 +301,7 @@ class TestLdBlock(unittest.TestCase):
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             tmp_path = tmp.name
-        
+
         try:
             fig, ax = plot_ld_block(
                 ld=self.ld_matrix,
@@ -321,11 +323,11 @@ class TestLdBlock(unittest.TestCase):
         which are used to represent missing or invalid LD values
         in the matrix.
         """
-        import numpy.ma as ma
+        from numpy import ma
         masked_ld = ma.masked_array(self.ld_matrix)
         # Mask some values
         masked_ld[0:5, 0:5] = ma.masked
-        
+
         fig, ax = plot_ld_block(
             ld=masked_ld,
             pos=self.positions,
@@ -342,7 +344,7 @@ class TestLdBlock(unittest.TestCase):
         """
         small_ld = make_mock_ld_matrix(5)
         small_pos = make_mock_positions(5)
-        
+
         fig, ax = plot_ld_block(
             ld=small_ld,
             pos=small_pos,
@@ -360,7 +362,7 @@ class TestLdBlock(unittest.TestCase):
         """
         large_ld = make_mock_ld_matrix(100)
         large_pos = make_mock_positions(100)
-        
+
         fig, ax = plot_ld_block(
             ld=large_ld,
             pos=large_pos,
@@ -378,7 +380,7 @@ class TestLdBlock(unittest.TestCase):
         Note: Full execution requires a valid VCF file.
         """
         import gwaslab
-        
+
         # Create minimal sumstats
         sumstats_df = pd.DataFrame({
             "CHR": [7] * self.n_variants,
@@ -388,7 +390,7 @@ class TestLdBlock(unittest.TestCase):
             "NEA": ["A"] * self.n_variants,
             "EA": ["G"] * self.n_variants,
         })
-        
+
         sumstats = gwaslab.Sumstats(
             sumstats=sumstats_df,
             snpid="SNPID",
@@ -398,7 +400,7 @@ class TestLdBlock(unittest.TestCase):
             build="19",
             verbose=False
         )
-        
+
         # Test that parameters don't cause errors (even if VCF is missing)
         try:
             fig = sumstats.plot_mqq(
@@ -412,7 +414,7 @@ class TestLdBlock(unittest.TestCase):
             )
             # Should still create a plot even without VCF
             self.assertIsNotNone(fig)
-        except Exception as e:
+        except Exception:
             # Some errors are expected without VCF, but function should handle gracefully
             pass
 

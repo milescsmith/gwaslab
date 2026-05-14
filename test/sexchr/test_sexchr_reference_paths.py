@@ -21,10 +21,10 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 from gwaslab import Sumstats
-from gwaslab.bd.bd_common_data import get_chr_list
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
-from gwaslab.io.io_fasta import load_and_build_fasta_records
+from gwaslab.bd.bd_common_data import get_chr_list
 from gwaslab.info.g_Log import Log
+from gwaslab.io.io_fasta import load_and_build_fasta_records
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _mod_name = "gwaslab_sexchr_simulate_ref"
@@ -50,7 +50,7 @@ def _ref_align_digit(status) -> int:
 
 
 try:
-    import pysam  # noqa: F401
+    import pysam
 except ImportError:
     pysam = None  # type: ignore
 

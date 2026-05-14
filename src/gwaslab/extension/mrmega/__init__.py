@@ -15,9 +15,9 @@ Example usage:
     result = meta_regress_mrmega(multi, num_pcs=2, use_genomic_control=True)
 """
 
-from .mrmega import meta_regress_mrmega, _check_mrmega_available
+from .mrmega import _check_mrmega_available, meta_regress_mrmega
 
 __all__ = [
-    "meta_regress_mrmega",
     "_check_mrmega_available",
+    "meta_regress_mrmega",
 ]

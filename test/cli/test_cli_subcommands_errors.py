@@ -54,8 +54,8 @@ def test_launcher_main_uses_sys_argv_when_argv_none(
 
 
 def test_launcher_version_when_metadata_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    from gwaslab_cli.main import main as launcher_main
     import gwaslab_cli.main as launcher_mod
+    from gwaslab_cli.main import main as launcher_main
 
     def _boom(_name: str) -> str:
         raise PackageNotFoundError

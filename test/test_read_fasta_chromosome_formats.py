@@ -9,29 +9,30 @@ Tests cover:
 - Mixed formats in same file
 """
 
-import os
-import sys
 import gzip
-import unittest
-import tempfile
+import os
 import shutil
+import sys
+import tempfile
+import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from gwaslab.io.io_fasta import (
-    parse_fasta,
-    load_fasta_auto,
-    load_fasta_filtered,
-    load_and_build_fasta_records,
-    write_fasta,
-    FastaRecord,
-)
+import pandas as pd
+
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
 from gwaslab.info.g_Log import Log
-import pandas as pd
+from gwaslab.io.io_fasta import (
+    FastaRecord,
+    load_and_build_fasta_records,
+    load_fasta_auto,
+    load_fasta_filtered,
+    parse_fasta,
+    write_fasta,
+)
 
 
 class TestReadFastaChromosomeFormats(unittest.TestCase):
@@ -66,23 +67,23 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             Path to created file
         """
         fasta_path = os.path.join(self.tmpdir, filename)
-        
+
         lines = []
         for chrom_name, sequence in records:
             lines.append(f">{chrom_name}")
             # Wrap sequence at 60 characters
             for i in range(0, len(sequence), 60):
                 lines.append(sequence[i:i+60])
-        
+
         content = "\n".join(lines) + "\n" if lines else ""
-        
+
         if gzipped:
             with gzip.open(fasta_path, "wt") as f:
                 f.write(content)
         else:
             with open(fasta_path, "w") as f:
                 f.write(content)
-        
+
         return fasta_path
 
     def _make_sequence(self, length=100, seed=42):
@@ -101,9 +102,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=1)
         records = [("1", seq)]
         fasta_path = self._create_fasta_file("test_num1.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("1", result)
         self.assertEqual(result["1"], seq)
@@ -113,9 +114,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=22)
         records = [("22", seq)]
         fasta_path = self._create_fasta_file("test_num22.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("22", result)
         self.assertEqual(result["22"], seq)
@@ -129,9 +130,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=23)
         records = [("X", seq)]
         fasta_path = self._create_fasta_file("test_strX.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("X", result)
         self.assertEqual(result["X"], seq)
@@ -141,9 +142,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=24)
         records = [("Y", seq)]
         fasta_path = self._create_fasta_file("test_strY.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("Y", result)
         self.assertEqual(result["Y"], seq)
@@ -153,9 +154,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=25)
         records = [("MT", seq)]
         fasta_path = self._create_fasta_file("test_strMT.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("MT", result)
         self.assertEqual(result["MT"], seq)
@@ -169,9 +170,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=1)
         records = [("chr1", seq)]
         fasta_path = self._create_fasta_file("test_chr1.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("chr1", result)
         self.assertEqual(result["chr1"], seq)
@@ -181,9 +182,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=23)
         records = [("chrX", seq)]
         fasta_path = self._create_fasta_file("test_chrX.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("chrX", result)
         self.assertEqual(result["chrX"], seq)
@@ -193,9 +194,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=25)
         records = [("chrMT", seq)]
         fasta_path = self._create_fasta_file("test_chrMT.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("chrMT", result)
         self.assertEqual(result["chrMT"], seq)
@@ -209,9 +210,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=1)
         records = [("Chr1", seq)]
         fasta_path = self._create_fasta_file("test_Chr1.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("Chr1", result)
         self.assertEqual(result["Chr1"], seq)
@@ -221,9 +222,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=1)
         records = [("CHR1", seq)]
         fasta_path = self._create_fasta_file("test_CHR1.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("CHR1", result)
         self.assertEqual(result["CHR1"], seq)
@@ -233,9 +234,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=23)
         records = [("ChrX", seq)]
         fasta_path = self._create_fasta_file("test_ChrX.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("ChrX", result)
         self.assertEqual(result["ChrX"], seq)
@@ -245,9 +246,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=23)
         records = [("CHRX", seq)]
         fasta_path = self._create_fasta_file("test_CHRX.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("CHRX", result)
         self.assertEqual(result["CHRX"], seq)
@@ -262,13 +263,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq2 = self._make_sequence(100, seed=2)
         records = [("1", seq1), ("2", seq2)]
         fasta_path = self._create_fasta_file("test_filtered_num.fa.gz", records)
-        
+
         chromlist_set = {1, 2}
         chroms_in_sumstats_set = {1, 2}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2]))
-        
+
         result = load_fasta_filtered(
             fasta_path,
             chromlist_set,
@@ -277,7 +278,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertEqual(len(result), 2)
         self.assertIn(1, result)
         self.assertIn(2, result)
@@ -288,13 +289,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seqX = self._make_sequence(100, seed=23)
         records = [("chr1", seq1), ("chrX", seqX)]
         fasta_path = self._create_fasta_file("test_filtered_chr.fa.gz", records)
-        
+
         chromlist_set = {1, 23}
         chroms_in_sumstats_set = {1, 23}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 23]))
-        
+
         result = load_fasta_filtered(
             fasta_path,
             chromlist_set,
@@ -303,7 +304,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertEqual(len(result), 2)
         # Normalized to numeric format
         self.assertIn(1, result)
@@ -315,13 +316,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq2 = self._make_sequence(100, seed=2)
         records = [("Chr1", seq1), ("CHR2", seq2)]
         fasta_path = self._create_fasta_file("test_filtered_Chr.fa.gz", records)
-        
+
         chromlist_set = {1, 2}
         chroms_in_sumstats_set = {1, 2}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2]))
-        
+
         result = load_fasta_filtered(
             fasta_path,
             chromlist_set,
@@ -330,7 +331,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertEqual(len(result), 2)
         self.assertIn(1, result)
         self.assertIn(2, result)
@@ -342,13 +343,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seqMT = self._make_sequence(100, seed=25)
         records = [("X", seqX), ("Y", seqY), ("MT", seqMT)]
         fasta_path = self._create_fasta_file("test_filtered_sex.fa.gz", records)
-        
+
         chromlist_set = {23, 24, 25}
         chroms_in_sumstats_set = {23, 24, 25}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([23, 24, 25]))
-        
+
         result = load_fasta_filtered(
             fasta_path,
             chromlist_set,
@@ -357,7 +358,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertEqual(len(result), 3)
         self.assertIn(23, result)  # X
         self.assertIn(24, result)  # Y
@@ -370,13 +371,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seqMT = self._make_sequence(100, seed=25)
         records = [("chrX", seqX), ("chrY", seqY), ("chrMT", seqMT)]
         fasta_path = self._create_fasta_file("test_filtered_chrXYMT.fa.gz", records)
-        
+
         chromlist_set = {23, 24, 25}
         chroms_in_sumstats_set = {23, 24, 25}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([23, 24, 25]))
-        
+
         result = load_fasta_filtered(
             fasta_path,
             chromlist_set,
@@ -385,7 +386,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertEqual(len(result), 3)
         self.assertIn(23, result)  # chrX -> 23
         self.assertIn(24, result)  # chrY -> 24
@@ -401,13 +402,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq2 = self._make_sequence(100, seed=2)
         records = [("1", seq1), ("2", seq2)]
         fasta_path = self._create_fasta_file("test_build_num.fa.gz", records)
-        
+
         chromlist_set = {1, 2}
         chroms_in_sumstats_set = {1, 2}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2]))
-        
+
         record, starting_positions, records_len = load_and_build_fasta_records(
             fasta_path,
             chromlist_set,
@@ -417,7 +418,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertIn(1, starting_positions)
         self.assertIn(2, starting_positions)
         self.assertEqual(records_len[1], 100)
@@ -429,13 +430,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seqX = self._make_sequence(100, seed=23)
         records = [("chr1", seq1), ("chrX", seqX)]
         fasta_path = self._create_fasta_file("test_build_chr.fa.gz", records)
-        
+
         chromlist_set = {1, 23}
         chroms_in_sumstats_set = {1, 23}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 23]))
-        
+
         record, starting_positions, records_len = load_and_build_fasta_records(
             fasta_path,
             chromlist_set,
@@ -445,7 +446,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertIn(1, starting_positions)
         self.assertIn(23, starting_positions)
         self.assertEqual(records_len[1], 100)
@@ -457,13 +458,13 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq2 = self._make_sequence(100, seed=2)
         records = [("Chr1", seq1), ("CHR2", seq2)]
         fasta_path = self._create_fasta_file("test_build_mixed.fa.gz", records)
-        
+
         chromlist_set = {1, 2}
         chroms_in_sumstats_set = {1, 2}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1, 2]))
-        
+
         record, starting_positions, records_len = load_and_build_fasta_records(
             fasta_path,
             chromlist_set,
@@ -473,7 +474,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         self.assertIn(1, starting_positions)
         self.assertIn(2, starting_positions)
 
@@ -487,9 +488,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq2 = self._make_sequence(100, seed=2)
         records = [("chr1", seq1), ("chr2", seq2)]
         fasta_path = self._create_fasta_file("test_auto.fa.gz", records)
-        
+
         result = list(load_fasta_auto(fasta_path, as_seqrecord=True))
-        
+
         self.assertEqual(len(result), 2)
         self.assertIsInstance(result[0], FastaRecord)
         self.assertEqual(result[0].id, "chr1")
@@ -501,9 +502,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq2 = self._make_sequence(100, seed=2)
         records = [("Chr1", seq1), ("ChrX", seq2)]
         fasta_path = self._create_fasta_file("test_auto_tuple.fa.gz", records)
-        
+
         result = list(load_fasta_auto(fasta_path, as_seqrecord=False))
-        
+
         self.assertEqual(len(result), 2)
         self.assertIsInstance(result[0], tuple)
         self.assertEqual(result[0][0], "Chr1")
@@ -523,9 +524,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             ("MT", self._make_sequence(100, seed=25)),
         ]
         fasta_path = self._create_fasta_file("test_mixed.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 5)
         self.assertIn("1", result)
         self.assertIn("2", result)
@@ -543,9 +544,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             ("chrMT", self._make_sequence(100, seed=25)),
         ]
         fasta_path = self._create_fasta_file("test_all_chr.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 5)
         self.assertIn("chr1", result)
         self.assertIn("chr2", result)
@@ -560,9 +561,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
     def test_empty_fasta(self):
         """Test parsing an empty FASTA file."""
         fasta_path = self._create_fasta_file("test_empty.fa.gz", [])
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 0)
 
     def test_uncompressed_fasta(self):
@@ -570,9 +571,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         seq = self._make_sequence(100, seed=1)
         records = [("chr1", seq)]
         fasta_path = self._create_fasta_file("test_uncompressed.fa", records, gzipped=False)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         self.assertIn("chr1", result)
         self.assertEqual(result["chr1"], seq)
@@ -586,9 +587,9 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             f.write(">chr1 Homo sapiens chromosome 1\n")
             for i in range(0, len(seq), 60):
                 f.write(seq[i:i+60] + "\n")
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 1)
         # The record name should be just "chr1" (first word)
         self.assertIn("chr1", result)
@@ -603,11 +604,11 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
         records.append(("X", self._make_sequence(50, seed=23)))
         records.append(("Y", self._make_sequence(50, seed=24)))
         records.append(("MT", self._make_sequence(50, seed=25)))
-        
+
         fasta_path = self._create_fasta_file("test_all_chroms.fa.gz", records)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 25)
         # Check autosomes
         for i in range(1, 23):
@@ -624,12 +625,12 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             "chrX": self._make_sequence(100, seed=23),
             "chrMT": self._make_sequence(100, seed=25),
         }
-        
+
         fasta_path = os.path.join(self.tmpdir, "test_roundtrip.fa.gz")
         write_fasta(original_records, fasta_path)
-        
+
         result = parse_fasta(fasta_path, as_dict=True)
-        
+
         self.assertEqual(len(result), 3)
         for name, seq in original_records.items():
             self.assertIn(name, result)
@@ -643,14 +644,14 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             ("chr3", self._make_sequence(100, seed=3)),
         ]
         fasta_path = self._create_fasta_file("test_filter.fa.gz", records)
-        
+
         # Only request chromosome 1
         chromlist_set = {1}
         chroms_in_sumstats_set = {1}
-        
+
         mapper = ChromosomeMapper(log=self.log, verbose=False)
         mapper.detect_sumstats_format(pd.Series([1]))
-        
+
         result = load_fasta_filtered(
             fasta_path,
             chromlist_set,
@@ -659,7 +660,7 @@ class TestReadFastaChromosomeFormats(unittest.TestCase):
             log=self.log,
             verbose=False
         )
-        
+
         # Should only have chromosome 1
         self.assertEqual(len(result), 1)
         self.assertIn(1, result)

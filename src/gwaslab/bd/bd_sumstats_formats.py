@@ -20,9 +20,9 @@ import json
 import math
 import re
 from collections import Counter
+from os import path
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
-from os import path
 
 from gwaslab.bd.bd_config import options
 from gwaslab.bd.bd_download import update_formatbook
@@ -47,7 +47,7 @@ def _open_text_maybe_gz(file_path: Union[str, Path], encoding: str = "utf-8") ->
     file_path = str(file_path)
     if file_path.endswith(".gz"):
         return io.TextIOWrapper(gzip.open(file_path, "rb"), encoding=encoding, newline="")
-    return open(file_path, "r", encoding=encoding, newline="")
+    return open(file_path, encoding=encoding, newline="")
 
 
 _norm_re = re.compile(r"[^a-z0-9#]+")
@@ -105,7 +105,7 @@ def sniff_delimiter(sample: str) -> str:
         return best
 
 
-def read_header_and_rows(file_path: Union[str, Path], max_lines: int = 2000) -> Tuple[Optional[List[str]], List[List[str]], Dict]:
+def read_header_and_rows(file_path: Union[str, Path], max_lines: int = 2000) -> tuple[list[str] | None, list[list[str]], dict]:
     """
     Read header and sample rows from a sumstats file.
     
@@ -188,7 +188,7 @@ def read_header_and_rows(file_path: Union[str, Path], max_lines: int = 2000) -> 
     return header, rows, meta
 
 
-def build_idf_weights(formatbook: Dict, candidate_formats: List[str]) -> Tuple[Dict[str, float], Dict[str, set]]:
+def build_idf_weights(formatbook: dict, candidate_formats: list[str]) -> tuple[dict[str, float], dict[str, set]]:
     """
     Compute IDF (Inverse Document Frequency) weights for format keys.
     
@@ -227,9 +227,9 @@ def build_idf_weights(formatbook: Dict, candidate_formats: List[str]) -> Tuple[D
 
 def detect_sumstats_format(
     sumstats_path: Union[str, Path],
-    formatbook_path: Optional[Union[str, Path]] = None,
+    formatbook_path: Union[str, Path] | None = None,
     topk: int = 5
-) -> Dict:
+) -> dict:
     """
     Detect the format of a sumstats file by comparing its headers against formatbook definitions.
     
@@ -334,11 +334,11 @@ def detect_sumstats_format(
     # Load formatbook
     if formatbook_path is None:
         formatbook_path = options.paths["formatbook"]
-    
+
     if not path.exists(formatbook_path):
         update_formatbook()
-    
-    formatbook = json.load(open(formatbook_path, "r", encoding="utf-8"))
+
+    formatbook = json.load(open(formatbook_path, encoding="utf-8"))
 
     # Read header and sample rows
     header, rows, meta = read_header_and_rows(sumstats_path)

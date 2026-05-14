@@ -1,28 +1,31 @@
-import scipy.sparse as sparse
-import numpy as np
-import pandas as pd
-
-import subprocess
+import gc
 import os
 import re
-import gc
-from typing import TYPE_CHECKING, Optional, List, Dict, Any, Tuple, Union
+import subprocess
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+from scipy import sparse
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
 
-from gwaslab.info.g_Log import Log
-from gwaslab.extension import _checking_plink_version
-
-from gwaslab.hm.hm_casting import _merge_mold_with_sumstats_by_chrpos
-
-from gwaslab.util.util_in_get_sig import _get_sig
-from gwaslab.io.io_plink import _process_plink_input_files
-from gwaslab.util.util_in_filter_value import _exclude_hla
-from gwaslab.util.util_ex_calculate_ldmatrix import _extract_variants_in_locus, _align_sumstats_with_bim, _calculate_ld_r
-from gwaslab.qc.qc_decorator import with_logging
 from shutil import which
-from gwaslab.io.io_load_ld import _load_ld_matrix, _load_ld_map
+
+from gwaslab.extension import _checking_plink_version
+from gwaslab.hm.hm_casting import _merge_mold_with_sumstats_by_chrpos
+from gwaslab.info.g_Log import Log
+from gwaslab.io.io_load_ld import _load_ld_map, _load_ld_matrix
+from gwaslab.io.io_plink import _process_plink_input_files
+from gwaslab.qc.qc_decorator import with_logging
+from gwaslab.util.util_ex_calculate_ldmatrix import (
+    _align_sumstats_with_bim,
+    _calculate_ld_r,
+    _extract_variants_in_locus,
+)
+from gwaslab.util.util_in_filter_value import _exclude_hla
+from gwaslab.util.util_in_get_sig import _get_sig
 
 ####################################################################################################
 # Helper functions for unified LD source handling
@@ -30,15 +33,15 @@ from gwaslab.io.io_load_ld import _load_ld_matrix, _load_ld_map
 
 def _normalize_parameters_to_lists(
     n_studies: int,
-    bfile: Optional[Union[str, List[str]]],
-    pfile: Optional[Union[str, List[str]]],
-    vcf: Optional[Union[str, List[str]]],
-    ld_paths: Optional[List[str]],
-    ld_maps: Optional[List[str]],
-    ld_types: Optional[List[str]],
-    ld_map_dics: Optional[List[Dict[str, str]]],
-    tabix: Optional[Union[bool, str, List[Union[bool, str]]]]
-) -> Tuple[List[Optional[str]], List[Optional[str]], List[Optional[str]], List[Optional[str]], List[Optional[str]], List[str], List[Optional[Dict[str, str]]], List[Optional[Union[bool, str]]]]:
+    bfile: Union[str, list[str]] | None,
+    pfile: Union[str, list[str]] | None,
+    vcf: Union[str, list[str]] | None,
+    ld_paths: list[str] | None,
+    ld_maps: list[str] | None,
+    ld_types: list[str] | None,
+    ld_map_dics: list[dict[str, str]] | None,
+    tabix: Union[bool, str, list[Union[bool, str]]] | None
+) -> tuple[list[str | None], list[str | None], list[str | None], list[str | None], list[str | None], list[str], list[dict[str, str] | None], list[Union[bool, str] | None]]:
     """
     Normalize LD source parameters to lists (one per study).
     
@@ -55,11 +58,11 @@ def _normalize_parameters_to_lists(
             return [value] * n_studies
         elif isinstance(value, list):
             if len(value) != n_studies:
-                raise ValueError("List parameter has {} elements but {} studies expected".format(len(value), n_studies))
+                raise ValueError(f"List parameter has {len(value)} elements but {n_studies} studies expected")
             return value
         else:
             return [value] * n_studies
-    
+
     bfiles = _normalize_to_list(bfile, n_studies)
     pfiles = _normalize_to_list(pfile, n_studies)
     vcfs = _normalize_to_list(vcf, n_studies)
@@ -68,19 +71,19 @@ def _normalize_parameters_to_lists(
     ld_types_list = _normalize_to_list(ld_types, n_studies, default="npz")
     ld_map_dics_list = _normalize_to_list(ld_map_dics, n_studies)
     tabix_list = _normalize_to_list(tabix, n_studies)
-    
+
     return bfiles, pfiles, vcfs, ld_paths_list, ld_maps_list, ld_types_list, ld_map_dics_list, tabix_list
 
 def _detect_ld_source_types(
     n_studies: int,
-    ld_paths_list: List[Optional[str]],
-    ld_maps_list: List[Optional[str]],
-    bfiles: List[Optional[str]],
-    pfiles: List[Optional[str]],
-    vcfs: List[Optional[str]],
+    ld_paths_list: list[str | None],
+    ld_maps_list: list[str | None],
+    bfiles: list[str | None],
+    pfiles: list[str | None],
+    vcfs: list[str | None],
     log: Log,
     verbose: bool
-) -> List[str]:
+) -> list[str]:
     """
     Detect LD source type for each study.
     
@@ -99,12 +102,12 @@ def _detect_ld_source_types(
             vcf=vcfs[i]
         )
         ld_source_types.append(source_type)
-        log.write(" -Study {} will use LD source type: {}".format(i+1, source_type), verbose=verbose)
+        log.write(f" -Study {i+1} will use LD source type: {source_type}", verbose=verbose)
     return ld_source_types
 
 def _filter_and_prepare_sumstats(
     sumstats: pd.DataFrame,
-    required_cols: List[str],
+    required_cols: list[str],
     log: Log,
     verbose: bool
 ) -> pd.DataFrame:
@@ -117,32 +120,31 @@ def _filter_and_prepare_sumstats(
     log.write(" -Filtering NA values from sumstats...", verbose=verbose)
     missing_cols = [col for col in required_cols if col not in sumstats.columns]
     if missing_cols:
-        raise ValueError("Missing required columns in sumstats: {}".format(missing_cols))
-    
+        raise ValueError(f"Missing required columns in sumstats: {missing_cols}")
+
     initial_count = len(sumstats)
     sumstats = sumstats.dropna(subset=required_cols).copy()
     filtered_count = len(sumstats)
     n_filtered = initial_count - filtered_count
     if n_filtered > 0:
-        log.write(" -Filtered {} variants with NA values ({} -> {})".format(
-            n_filtered, initial_count, filtered_count), verbose=verbose)
-    
+        log.write(f" -Filtered {n_filtered} variants with NA values ({initial_count} -> {filtered_count})", verbose=verbose)
+
     if len(sumstats) == 0:
         raise ValueError("No variants remaining after filtering NA values")
-    
+
     # Drop duplicate SNPIDs (keep first occurrence)
     log.write(" -Dropping duplicated SNPIDs...", verbose=verbose)
     sumstats = sumstats.drop_duplicates(subset=["SNPID"]).copy()
-    
+
     return sumstats
 
 def _extract_lead_variants(
     sumstats: pd.DataFrame,
-    loci: Optional[List[str]],
-    loci_chrpos: Optional[List[Tuple[int, int]]],
-    locus: Optional[Tuple[int, int]],
-    suffixes: List[str],
-    getlead_kwargs: Dict[str, Any],
+    loci: list[str] | None,
+    loci_chrpos: list[tuple[int, int]] | None,
+    locus: tuple[int, int] | None,
+    suffixes: list[str],
+    getlead_kwargs: dict[str, Any],
     exclude_hla: bool,
     log: Log,
     verbose: bool
@@ -167,36 +169,36 @@ def _extract_lead_variants(
     else:  # locus is not None
         matches = sumstats[(sumstats["CHR"] == locus[0]) & (sumstats["POS"] == locus[1])]
         sig_df = matches
-    
+
     if exclude_hla:
         sig_df = _exclude_hla(sig_df, log=log, verbose=verbose)
-    
+
     sig_df = sig_df.reset_index(drop=True)
     return sig_df
 
 def _get_all_ld_maps(
     n_studies: int,
-    studies: List[str],
-    ld_source_types: List[str],
+    studies: list[str],
+    ld_source_types: list[str],
     row: pd.Series,
     locus_sumstats: pd.DataFrame,
-    ld_maps_list: List[Optional[str]],
-    ld_map_dics_list: List[Optional[Dict[str, str]]],
-    ld_map_kwargs: Dict[str, Any],
-    bfiles: List[Optional[str]],
-    pfiles: List[Optional[str]],
-    vcfs: List[Optional[str]],
+    ld_maps_list: list[str | None],
+    ld_map_dics_list: list[dict[str, str] | None],
+    ld_map_kwargs: dict[str, Any],
+    bfiles: list[str | None],
+    pfiles: list[str | None],
+    vcfs: list[str | None],
     windowsizekb: int,
     plink: str,
     plink2: str,
     threads: int,
-    memory: Optional[int],
+    memory: int | None,
     overwrite: bool,
-    tabix_list: List[Optional[Union[bool, str]]],
+    tabix_list: list[Union[bool, str] | None],
     log: Log,
     verbose: bool,
     **kwargs: Any
-) -> List[pd.DataFrame]:
+) -> list[pd.DataFrame]:
     """
     Get LD maps (variant information) for all studies.
     
@@ -208,13 +210,13 @@ def _get_all_ld_maps(
     """
     all_ld_maps = []
     log.write(" -Getting LD maps for all studies to determine common SNPs...", verbose=verbose)
-    
+
     for i in range(n_studies):
         gc.collect()
-        study_name = studies[i] if studies else "study_{}".format(i+1)
-        
-        log.write(" -Study {} ({}): Getting LD map from {}...".format(i+1, study_name, ld_source_types[i]), verbose=verbose)
-        
+        study_name = studies[i] if studies else f"study_{i+1}"
+
+        log.write(f" -Study {i+1} ({study_name}): Getting LD map from {ld_source_types[i]}...", verbose=verbose)
+
         # Get LD map from source (variant information only, not LD matrix yet)
         ld_map = _get_ld_map_from_source(
             source_type=ld_source_types[i],
@@ -238,17 +240,17 @@ def _get_all_ld_maps(
             verbose=verbose,
             **kwargs
         )
-        
+
         all_ld_maps.append(ld_map)
-    
+
     return all_ld_maps
 
 def _find_common_variants_across_studies(
     n_studies: int,
-    studies: List[str],
+    studies: list[str],
     locus_sumstats: pd.DataFrame,
-    all_ld_maps: List[pd.DataFrame],
-    suffixes: List[str],
+    all_ld_maps: list[pd.DataFrame],
+    suffixes: list[str],
     row: pd.Series,
     log: Log,
     verbose: bool
@@ -264,76 +266,75 @@ def _find_common_variants_across_studies(
         DataFrame with common variants, including _INDEX_BIM_{i} and _FLIPPED_{i} columns
     """
     log.write(" -Determining common SNPs across all studies and sumstats...", verbose=verbose)
-    
+
     # Start with sumstats variants in locus
     common_variants = locus_sumstats.copy()
-    
+
     # For each study, find matching variants
     for i in range(n_studies):
         gc.collect()
-        study_name = studies[i] if studies else "study_{}".format(i+1)
+        study_name = studies[i] if studies else f"study_{i+1}"
         ld_map = all_ld_maps[i]
-        
-        log.write(" -Matching with study {} ({} variants in LD map)...".format(i+1, len(ld_map)), verbose=verbose)
-        
+
+        log.write(f" -Matching with study {i+1} ({len(ld_map)} variants in LD map)...", verbose=verbose)
+
         # Match on CHR and POS first
         # CRITICAL: Ensure CHR and POS types are compatible for merging
         # Keep CHR as int for consistent matching
         if "CHR" in common_variants.columns and "CHR" in ld_map.columns:
             # Convert both to int for consistent matching
             if pd.api.types.is_string_dtype(common_variants["CHR"]):
-                common_variants["CHR"] = pd.to_numeric(common_variants["CHR"], errors='coerce').astype('Int64')
+                common_variants["CHR"] = pd.to_numeric(common_variants["CHR"], errors="coerce").astype("Int64")
             elif not pd.api.types.is_integer_dtype(common_variants["CHR"]):
-                common_variants["CHR"] = common_variants["CHR"].astype('Int64')
-            
+                common_variants["CHR"] = common_variants["CHR"].astype("Int64")
+
             if pd.api.types.is_string_dtype(ld_map["CHR"]):
-                ld_map["CHR"] = pd.to_numeric(ld_map["CHR"], errors='coerce').astype('Int64')
+                ld_map["CHR"] = pd.to_numeric(ld_map["CHR"], errors="coerce").astype("Int64")
             elif not pd.api.types.is_integer_dtype(ld_map["CHR"]):
-                ld_map["CHR"] = ld_map["CHR"].astype('Int64')
-        
+                ld_map["CHR"] = ld_map["CHR"].astype("Int64")
+
         # Ensure POS is integer for both
         if "POS" in common_variants.columns and "POS" in ld_map.columns:
             if not pd.api.types.is_integer_dtype(common_variants["POS"]):
                 common_variants["POS"] = common_variants["POS"].astype(int)
             if not pd.api.types.is_integer_dtype(ld_map["POS"]):
                 ld_map["POS"] = ld_map["POS"].astype(int)
-        
+
         # Convert alleles to string for reliable comparison
         common_variants["EA"] = common_variants["EA"].astype("string")
         common_variants["NEA"] = common_variants["NEA"].astype("string")
         ld_map["EA_bim"] = ld_map["EA_bim"].astype("string")
         ld_map["NEA_bim"] = ld_map["NEA_bim"].astype("string")
-        
+
         # Merge on CHR and POS (inner join - only keeps matching positions)
         combined = pd.merge(common_variants, ld_map, on=["CHR", "POS"], how="inner", suffixes=("", "_ref"))
-        
+
         if len(combined) == 0:
-            log.write(" -No variants match on CHR/POS for study {}. No common variants.".format(i+1), verbose=verbose)
+            log.write(f" -No variants match on CHR/POS for study {i+1}. No common variants.", verbose=verbose)
             common_variants = pd.DataFrame()
             break
-        
+
         # Check allele matching: perfect match or flipped
-        index_suffix = "_{}".format(i+1)
+        index_suffix = f"_{i+1}"
         combined["_FLIPPED" + index_suffix] = False
-        
+
         perfect_match = ((combined["EA"] == combined["EA_bim"]) & (combined["NEA"] == combined["NEA_bim"]))
         flipped_match = ((combined["EA"] == combined["NEA_bim"]) & (combined["NEA"] == combined["EA_bim"]))
         allele_match = perfect_match | flipped_match
-        
+
         combined.loc[flipped_match, "_FLIPPED" + index_suffix] = True
-        
-        log.write("   -Study {}: {} perfect matches, {} flipped matches, {} total matches".format(
-            i+1, perfect_match.sum(), flipped_match.sum(), allele_match.sum()), verbose=verbose)
-        
+
+        log.write(f"   -Study {i+1}: {perfect_match.sum()} perfect matches, {flipped_match.sum()} flipped matches, {allele_match.sum()} total matches", verbose=verbose)
+
         # Keep only variants with valid allele matches
         common_variants = combined[allele_match].copy()
-        
+
         # Store reference SNPID and index for later use
         if "SNPID_bim" in common_variants.columns:
             common_variants["SNPID_bim" + index_suffix] = common_variants["SNPID_bim"]
         if "_INDEX_BIM" in common_variants.columns:
             common_variants["_INDEX_BIM" + index_suffix] = common_variants["_INDEX_BIM"]
-        
+
         # Keep only essential columns for next iteration
         keep_cols = ["SNPID", "CHR", "POS", "EA", "NEA"] + [col for col in common_variants.columns if "_FLIPPED_" in col or "_INDEX_BIM_" in col or "SNPID_bim_" in col]
         # Also keep study-specific sumstats columns
@@ -341,29 +342,29 @@ def _find_common_variants_across_studies(
             for col in ["BETA", "SE", "Z", "EAF", "N", "P"]:
                 if col + suffix in common_variants.columns:
                     keep_cols.append(col + suffix)
-        
+
         common_variants = common_variants[[col for col in keep_cols if col in common_variants.columns]].copy()
-        
+
         if len(common_variants) == 0:
-            log.write(" -No common variants after matching with study {}.".format(i+1), verbose=verbose)
+            log.write(f" -No common variants after matching with study {i+1}.", verbose=verbose)
             break
-    
+
     return common_variants
 
 def _process_ld_matrices_for_all_studies(
     n_studies: int,
-    studies: List[str],
-    ld_source_types: List[str],
+    studies: list[str],
+    ld_source_types: list[str],
     common_variants: pd.DataFrame,
     row: pd.Series,
-    ld_paths_list: List[Optional[str]],
-    ld_maps_list: List[Optional[str]],
-    ld_types_list: List[str],
+    ld_paths_list: list[str | None],
+    ld_maps_list: list[str | None],
+    ld_types_list: list[str],
     ld_if_square: bool,
     ld_if_add_T: bool,
-    bfiles: List[Optional[str]],
-    pfiles: List[Optional[str]],
-    vcfs: List[Optional[str]],
+    bfiles: list[str | None],
+    pfiles: list[str | None],
+    vcfs: list[str | None],
     windowsizekb: int,
     out: str,
     group: str,
@@ -371,15 +372,15 @@ def _process_ld_matrices_for_all_studies(
     plink2: str,
     threads: int,
     mode: str,
-    memory: Optional[int],
+    memory: int | None,
     overwrite: bool,
     extra_plink_option: str,
-    tabix_list: List[Optional[Union[bool, str]]],
-    suffixes: List[str],
+    tabix_list: list[Union[bool, str] | None],
+    suffixes: list[str],
     log: Log,
     verbose: bool,
     **kwargs: Any
-) -> Tuple[List[np.ndarray], str, pd.DataFrame]:
+) -> tuple[list[np.ndarray], str, pd.DataFrame]:
     """
     Process LD matrices for all studies.
     
@@ -392,15 +393,15 @@ def _process_ld_matrices_for_all_studies(
     all_ld_matrices = []
     plink_log = ""
     output_file_list = pd.DataFrame(columns=["SNPID","SNPID_LIST","LD_R_MATRIX","LOCUS_SUMSTATS"])
-    
+
     log.write(" -Processing LD matrices for each study...", verbose=verbose)
-    
+
     for i in range(n_studies):
         gc.collect()
-        study_name = studies[i] if studies else "study_{}".format(i+1)
-        
-        log.write(" -Study {} ({}): Computing LD matrix from {}...".format(i+1, study_name, ld_source_types[i]), verbose=verbose)
-        
+        study_name = studies[i] if studies else f"study_{i+1}"
+
+        log.write(f" -Study {i+1} ({study_name}): Computing LD matrix from {ld_source_types[i]}...", verbose=verbose)
+
         # Get LD matrix for common variants only
         r_matrix, study_plink_log, matched_sumstats_from_vcf = _get_ld_matrix_for_common_variants(
             source_type=ld_source_types[i],
@@ -431,37 +432,36 @@ def _process_ld_matrices_for_all_studies(
             verbose=verbose,
             **kwargs
         )
-        
+
         plink_log += study_plink_log
-        
+
         # CRITICAL: For VCF sources, update indices to sequential
-        index_col = "_INDEX_BIM_{}".format(i + 1)
+        index_col = f"_INDEX_BIM_{i + 1}"
         if ld_source_types[i] == "vcf" and r_matrix.shape[0] == len(common_variants):
             if index_col in common_variants.columns:
                 common_variants[index_col] = range(len(common_variants))
-                log.write(" -Updated _INDEX_BIM for VCF source to sequential indices (0-{})".format(
-                    len(common_variants) - 1), verbose=verbose)
+                log.write(f" -Updated _INDEX_BIM for VCF source to sequential indices (0-{len(common_variants) - 1})", verbose=verbose)
             elif ld_source_types[i] in ["bfile", "pfile"] and r_matrix.shape[0] == len(common_variants):
                 if index_col in common_variants.columns:
                     max_index = common_variants[index_col].max() if len(common_variants) > 0 else -1
                     if max_index >= r_matrix.shape[0]:
                         common_variants[index_col] = range(len(common_variants))
-        
+
         all_ld_matrices.append(r_matrix)
-        
+
         # Extract and export LD matrix for this study
         matched_ld_matrix_path = _extract_variants_from_ld_matrix_m(
-            merged_sumstats=common_variants, 
-            r_matrix=r_matrix, 
-            out=out, 
-            group=group, 
-            row=row, 
-            windowsizekb=windowsizekb, 
+            merged_sumstats=common_variants,
+            r_matrix=r_matrix,
+            out=out,
+            group=group,
+            row=row,
+            windowsizekb=windowsizekb,
             index=i,
-            log=log, 
+            log=log,
             verbose=verbose
         )
-        
+
         # Export sumstats for this study
         matched_sumstats_path = _export_locus_sumstats_for_study(
             common_variants=common_variants,
@@ -473,7 +473,7 @@ def _process_ld_matrices_for_all_studies(
             suffixes=suffixes,
             log=log
         )
-        
+
         # Add to file list
         row_dict = {
             "SNPID": row["SNPID"],
@@ -486,15 +486,15 @@ def _process_ld_matrices_for_all_studies(
         }
         file_row = pd.Series(row_dict).to_frame().T
         output_file_list = pd.concat([output_file_list, file_row], ignore_index=True)
-    
+
     return all_ld_matrices, plink_log, output_file_list
 
 def _detect_ld_source_type(
-    ld_path: Optional[str] = None,
-    ld_map_path: Optional[str] = None,
-    bfile: Optional[str] = None,
-    pfile: Optional[str] = None,
-    vcf: Optional[str] = None
+    ld_path: str | None = None,
+    ld_map_path: str | None = None,
+    bfile: str | None = None,
+    pfile: str | None = None,
+    vcf: str | None = None
 ) -> str:
     """
     Detect the type of LD source based on provided parameters.
@@ -533,19 +533,19 @@ def _get_ld_map_from_source(
     study_index: int,
     row: pd.Series,
     locus_sumstats: pd.DataFrame,
-    ld_map_path: Optional[str] = None,
-    ld_map_rename_dic: Optional[Union[Dict[str, str], List[str]]] = None,
-    ld_map_kwargs: Optional[Dict[str, Any]] = None,
-    bfile: Optional[str] = None,
-    pfile: Optional[str] = None,
-    vcf: Optional[str] = None,
+    ld_map_path: str | None = None,
+    ld_map_rename_dic: Union[dict[str, str], list[str]] | None = None,
+    ld_map_kwargs: dict[str, Any] | None = None,
+    bfile: str | None = None,
+    pfile: str | None = None,
+    vcf: str | None = None,
     windowsizekb: int = 1000,
     plink: str = "plink",
     plink2: str = "plink2",
     threads: int = 1,
-    memory: Optional[int] = None,
+    memory: int | None = None,
     overwrite: bool = False,
-    tabix: Optional[Union[bool, str]] = None,
+    tabix: Union[bool, str] | None = None,
     log: Log = Log(),
     verbose: bool = True,
     **kwargs: Any
@@ -608,15 +608,15 @@ def _get_ld_map_from_source(
     if source_type == "precomputed":
         if ld_map_path is None:
             raise ValueError("ld_map_path is required for precomputed LD source")
-        log.write(" -Loading LD map for study {}...".format(study_index + 1), verbose=verbose)
+        log.write(f" -Loading LD map for study {study_index + 1}...", verbose=verbose)
         ld_map = _load_ld_map(ld_map_path, ld_map_rename_dic=ld_map_rename_dic, **ld_map_kwargs if ld_map_kwargs else {})
         if "_INDEX_BIM" not in ld_map.columns:
             ld_map["_INDEX_BIM"] = range(len(ld_map))
         return ld_map
-    
+
     elif source_type in ["bfile", "pfile"]:
         # Logging already done at caller level
-        
+
         # Process PLINK input files and get BIM/PVAR
         bfile_prefix, plink_log, ref_bims, filetype = _process_plink_input_files(
             chrlist=[row["CHR"]],
@@ -633,50 +633,50 @@ def _get_ld_map_from_source(
             convert="bfile",
             **kwargs
         )
-        
+
         if len(ref_bims) == 0:
-            raise ValueError("No BIM/PVAR data loaded for study {}".format(study_index + 1))
-        
+            raise ValueError(f"No BIM/PVAR data loaded for study {study_index + 1}")
+
         ref_bim = ref_bims[0]
-        
+
         # Filter to locus window
         locus_ref_bim = ref_bim[
             (ref_bim["CHR_bim"] == str(row["CHR"])) &
             (ref_bim["POS_bim"] >= row["POS"] - windowsizekb * 1000) &
             (ref_bim["POS_bim"] <= row["POS"] + windowsizekb * 1000)
         ].copy()
-        
+
         # Create LD map from BIM/PVAR
         ld_map = pd.DataFrame()
         ld_map["SNPID_bim"] = locus_ref_bim["SNPID"]
         # Keep CHR as int (convert from string if needed)
         if pd.api.types.is_string_dtype(locus_ref_bim["CHR_bim"]):
-            ld_map["CHR"] = pd.to_numeric(locus_ref_bim["CHR_bim"], errors='coerce').astype('Int64')
+            ld_map["CHR"] = pd.to_numeric(locus_ref_bim["CHR_bim"], errors="coerce").astype("Int64")
         else:
-            ld_map["CHR"] = locus_ref_bim["CHR_bim"].astype('Int64')
+            ld_map["CHR"] = locus_ref_bim["CHR_bim"].astype("Int64")
         ld_map["POS"] = locus_ref_bim["POS_bim"]
         ld_map["EA_bim"] = locus_ref_bim["EA_bim"]
         ld_map["NEA_bim"] = locus_ref_bim["NEA_bim"]
         ld_map["_INDEX_BIM"] = range(len(ld_map))
-        
+
         return ld_map
-    
+
     elif source_type == "vcf":
-        from gwaslab.io.io_vcf import read_vcf
         from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
-        
+        from gwaslab.io.io_vcf import read_vcf
+
         # Define region for VCF extraction
         # Ensure start position is at least 1 (chromosomes start at position 1)
         region_start = max(1, row["POS"] - windowsizekb * 1000)
         region_end = row["POS"] + windowsizekb * 1000
         region = (row["CHR"], region_start, region_end)
-        
+
         # Get mapper and convert chromosome
         mapper = ChromosomeMapper(log=log, verbose=False)  # Reduce verbosity
         mapper.detect_reference_format(vcf)
         region_chr_ref = mapper.sumstats_to_reference(region[0], reference_file=vcf, as_string=True)
         region_str = f"{region_chr_ref}:{region[1]}-{region[2]}"
-        
+
         # Auto-detect tabix if not provided (only log once if not already detected)
         if tabix is None:
             tabix = which("tabix")
@@ -684,58 +684,58 @@ def _get_ld_map_from_source(
                 log.write(" -tabix not found, VCF will be read without indexing (slower)", verbose=verbose)
         elif tabix is True:
             tabix = which("tabix")
-        
+
         # Read VCF (tabix enables efficient region queries for indexed VCF files)
         ref_genotype = read_vcf(vcf, region=region_str, tabix=tabix)
         if ref_genotype is None or len(ref_genotype.get("variants/POS", [])) == 0:
-            raise ValueError("No variants found in VCF for study {}".format(study_index + 1))
-        
+            raise ValueError(f"No variants found in VCF for study {study_index + 1}")
+
         # Create LD map from VCF variants
         # Keep CHR as int (region[0] should already be int)
         ld_map = pd.DataFrame()
-        ld_map["CHR"] = pd.Series([int(region[0])] * len(ref_genotype["variants/POS"]), dtype='Int64')
+        ld_map["CHR"] = pd.Series([int(region[0])] * len(ref_genotype["variants/POS"]), dtype="Int64")
         ld_map["POS"] = ref_genotype["variants/POS"]
         ld_map["EA_bim"] = [alt[0] if len(alt) > 0 else "N" for alt in ref_genotype["variants/ALT"]]
         ld_map["NEA_bim"] = ref_genotype["variants/REF"]
-        ld_map["SNPID_bim"] = ref_genotype.get("variants/ID", ["{}:{}".format(region[0], pos) for pos in ld_map["POS"]])
+        ld_map["SNPID_bim"] = ref_genotype.get("variants/ID", [f"{region[0]}:{pos}" for pos in ld_map["POS"]])
         ld_map["_INDEX_BIM"] = range(len(ld_map))
-        
+
         return ld_map
-    
+
     else:
-        raise ValueError("Unknown LD source type: {}".format(source_type))
+        raise ValueError(f"Unknown LD source type: {source_type}")
 
 def _get_ld_matrix_and_map_from_source(
     source_type: str,
     study_index: int,
     row: pd.Series,
     locus_sumstats: pd.DataFrame,
-    ld_path: Optional[str] = None,
-    ld_map_path: Optional[str] = None,
+    ld_path: str | None = None,
+    ld_map_path: str | None = None,
     ld_fmt: str = "npz",
     ld_if_square: bool = False,
     ld_if_add_T: bool = False,
-    ld_map_rename_dic: Optional[Union[Dict[str, str], List[str]]] = None,
-    ld_map_kwargs: Optional[Dict[str, Any]] = None,
-    bfile: Optional[str] = None,
-    pfile: Optional[str] = None,
-    vcf: Optional[str] = None,
+    ld_map_rename_dic: Union[dict[str, str], list[str]] | None = None,
+    ld_map_kwargs: dict[str, Any] | None = None,
+    bfile: str | None = None,
+    pfile: str | None = None,
+    vcf: str | None = None,
     windowsizekb: int = 1000,
     out: str = "./",
-    group: Optional[str] = None,
-    study: Optional[str] = None,
+    group: str | None = None,
+    study: str | None = None,
     plink: str = "plink",
     plink2: str = "plink2",
     threads: int = 1,
     mode: str = "r",
-    memory: Optional[int] = None,
+    memory: int | None = None,
     overwrite: bool = False,
     extra_plink_option: str = "",
-    tabix: Optional[Union[bool, str]] = None,
+    tabix: Union[bool, str] | None = None,
     log: Log = Log(),
     verbose: bool = True,
     **kwargs: Any
-) -> Tuple[np.ndarray, pd.DataFrame, str]:
+) -> tuple[np.ndarray, pd.DataFrame, str]:
     """
     Get LD matrix and map from any source type (pre-computed, bfile, pfile, or vcf).
     
@@ -807,32 +807,31 @@ def _get_ld_matrix_and_map_from_source(
         - plink_log: PLINK log output (empty string if PLINK not used)
     """
     plink_log = ""
-    
+
     if source_type == "precomputed":
         # Load pre-computed LD matrix and map
         if ld_path is None or ld_map_path is None:
             raise ValueError("ld_path and ld_map_path are required for precomputed LD source")
-        
-        log.write(" -Loading pre-computed LD matrix and map for study {}...".format(study_index + 1), verbose=verbose)
+
+        log.write(f" -Loading pre-computed LD matrix and map for study {study_index + 1}...", verbose=verbose)
         r_matrix = _load_ld_matrix(ld_path, fmt=ld_fmt, if_square=ld_if_square, if_add_T=ld_if_add_T, log=log, verbose=verbose)
         ld_map = _load_ld_map(ld_map_path, ld_map_rename_dic=ld_map_rename_dic, **ld_map_kwargs if ld_map_kwargs else {})
-        
+
         # Ensure _INDEX_BIM is set to match LD matrix row/column indices
         # For precomputed sources, the LD map should be in the same order as the LD matrix
         if "_INDEX_BIM" not in ld_map.columns:
             ld_map["_INDEX_BIM"] = range(len(ld_map))
-        
+
         # Verify dimensions match
         if len(ld_map) != r_matrix.shape[0]:
-            log.warning(" -Warning: LD map has {} variants but LD matrix has {} rows. They should match.".format(
-                len(ld_map), r_matrix.shape[0]), verbose=verbose)
-        
+            log.warning(f" -Warning: LD map has {len(ld_map)} variants but LD matrix has {r_matrix.shape[0]} rows. They should match.", verbose=verbose)
+
         return r_matrix, ld_map, plink_log
-    
+
     elif source_type in ["bfile", "pfile"]:
         # Calculate LD from bfile/pfile using PLINK
-        log.write(" -Calculating LD from {} for study {}...".format(source_type, study_index + 1), verbose=verbose)
-        
+        log.write(f" -Calculating LD from {source_type} for study {study_index + 1}...", verbose=verbose)
+
         # Process PLINK input files and get BIM/PVAR
         bfile_prefix, plink_log, ref_bims, filetype = _process_plink_input_files(
             chrlist=[row["CHR"]],
@@ -849,12 +848,12 @@ def _get_ld_matrix_and_map_from_source(
             convert="bfile",  # Always convert to bfile for PLINK1 LD calculation
             **kwargs
         )
-        
+
         if len(ref_bims) == 0:
-            raise ValueError("No BIM/PVAR data loaded for study {}".format(study_index + 1))
-        
+            raise ValueError(f"No BIM/PVAR data loaded for study {study_index + 1}")
+
         ref_bim = ref_bims[0]
-        
+
         # Align sumstats with BIM
         matched_sumstats = _align_sumstats_with_bim(
             row=row,
@@ -863,18 +862,18 @@ def _get_ld_matrix_and_map_from_source(
             log=log,
             suffixes=None
         )
-        
+
         if len(matched_sumstats) == 0:
-            raise ValueError("No matching variants found between sumstats and reference for study {}".format(study_index + 1))
-        
+            raise ValueError(f"No matching variants found between sumstats and reference for study {study_index + 1}")
+
         # Export SNP list and sumstats for PLINK
-        study_name = study if study else "study_{}".format(study_index + 1)
+        study_name = study if study else f"study_{study_index + 1}"
         matched_snp_list_path = "{}/{}_{}_{}.snplist.raw".format(out.rstrip("/"), study_name, row["SNPID"], windowsizekb)
         matched_sumstats_path = "{}/{}_{}_{}.sumstats".format(out.rstrip("/"), study_name, row["SNPID"], windowsizekb)
-        
+
         matched_sumstats["SNPID"].to_csv(matched_snp_list_path, index=None, header=None)
         matched_sumstats[["SNPID", "CHR", "POS", "EA", "NEA"]].to_csv(matched_sumstats_path, sep="\t", index=None)
-        
+
         # Calculate LD matrix using PLINK
         matched_ld_matrix_path, plink_log = _calculate_ld_r(
             study=study_name,
@@ -895,11 +894,11 @@ def _get_ld_matrix_and_map_from_source(
             extra_plink_option=extra_plink_option,
             verbose=verbose
         )
-        
+
         # Load the calculated LD matrix
         # The matrix is square, with rows/cols in the same order as the SNP list provided to PLINK
         r_matrix = np.loadtxt(matched_ld_matrix_path)
-        
+
         # Create LD map from matched sumstats (matching the order of LD matrix)
         # CRITICAL: The LD matrix from PLINK matches the order of variants in the snplist
         # We create the LD map in the same order, and set _INDEX_BIM = [0, 1, 2, ...]
@@ -909,15 +908,15 @@ def _get_ld_matrix_and_map_from_source(
         ld_map["SNPID_bim"] = ld_map["SNPID"]
         # Set indices to match matrix rows/cols (0-indexed, matching numpy array indexing)
         ld_map["_INDEX_BIM"] = range(len(ld_map))
-        
+
         return r_matrix, ld_map, plink_log
-    
+
     elif source_type == "vcf":
         # Calculate LD from VCF using allel
-        log.write(" -Calculating LD from VCF for study {}...".format(study_index + 1), verbose=verbose)
-        
+        log.write(f" -Calculating LD from VCF for study {study_index + 1}...", verbose=verbose)
+
         from gwaslab.io.io_vcf import _get_ld_matrix_from_vcf
-        
+
         # Auto-detect tabix if not provided (only log if not found)
         if tabix is None:
             tabix = which("tabix")
@@ -925,13 +924,13 @@ def _get_ld_matrix_and_map_from_source(
                 log.write(" -tabix not found, VCF will be read without indexing (slower)", verbose=verbose)
         elif tabix is True:
             tabix = which("tabix")
-        
+
         # Define region for VCF extraction
         # Ensure start position is at least 1 (chromosomes start at position 1)
         region_start = max(1, row["POS"] - windowsizekb * 1000)
         region_end = row["POS"] + windowsizekb * 1000
         region = (row["CHR"], region_start, region_end)
-        
+
         # Get LD matrix from VCF (tabix enables efficient region queries for indexed VCF files)
         matched_sumstats, ld_matrix = _get_ld_matrix_from_vcf(
             sumstats_or_dataframe=locus_sumstats,
@@ -944,10 +943,10 @@ def _get_ld_matrix_and_map_from_source(
             ea="EA",
             tabix=tabix
         )
-        
+
         if len(matched_sumstats) == 0:
-            raise ValueError("No matching variants found in VCF for study {}".format(study_index + 1))
-        
+            raise ValueError(f"No matching variants found in VCF for study {study_index + 1}")
+
         # Create LD map from matched sumstats
         # CRITICAL: The LD matrix from _get_ld_matrix_from_vcf has rows/cols in the same order
         # as matched_sumstats. We create the LD map in the same order and set _INDEX_BIM accordingly.
@@ -956,47 +955,47 @@ def _get_ld_matrix_and_map_from_source(
         ld_map["SNPID_bim"] = ld_map["SNPID"]
         # Set indices to match matrix rows/cols (0-indexed, matching numpy array indexing)
         ld_map["_INDEX_BIM"] = range(len(ld_map))
-        
+
         # Note: _get_ld_matrix_from_vcf returns r^2, but PLINK and other sources return r (correlation)
         # Convert r^2 to |r| for consistency with PLINK output format
         # We lose sign information when converting from r^2, but this is acceptable for fine-mapping
         # as we're primarily interested in LD magnitude
         ld_matrix = np.sqrt(np.abs(ld_matrix))
-        
+
         return ld_matrix, ld_map, plink_log
-    
+
     else:
-        raise ValueError("Unknown LD source type: {}".format(source_type))
+        raise ValueError(f"Unknown LD source type: {source_type}")
 
 def _get_ld_matrix_for_common_variants(
     source_type: str,
     study_index: int,
     row: pd.Series,
     common_variants: pd.DataFrame,
-    ld_path: Optional[str] = None,
-    ld_map_path: Optional[str] = None,
+    ld_path: str | None = None,
+    ld_map_path: str | None = None,
     ld_fmt: str = "npz",
     ld_if_square: bool = False,
     ld_if_add_T: bool = False,
-    bfile: Optional[str] = None,
-    pfile: Optional[str] = None,
-    vcf: Optional[str] = None,
+    bfile: str | None = None,
+    pfile: str | None = None,
+    vcf: str | None = None,
     windowsizekb: int = 1000,
     out: str = "./",
-    group: Optional[str] = None,
-    study: Optional[str] = None,
+    group: str | None = None,
+    study: str | None = None,
     plink: str = "plink",
     plink2: str = "plink2",
     threads: int = 1,
     mode: str = "r",
-    memory: Optional[int] = None,
+    memory: int | None = None,
     overwrite: bool = False,
     extra_plink_option: str = "",
-    tabix: Optional[Union[bool, str]] = None,
+    tabix: Union[bool, str] | None = None,
     log: Log = Log(),
     verbose: bool = True,
     **kwargs: Any
-) -> Tuple[np.ndarray, str]:
+) -> tuple[np.ndarray, str]:
     """
     Get LD matrix for common variants only.
     
@@ -1007,29 +1006,29 @@ def _get_ld_matrix_for_common_variants(
         (ld_matrix, plink_log) where ld_matrix has shape (len(common_variants), len(common_variants))
     """
     plink_log = ""
-    index_suffix = "_{}".format(study_index + 1)
+    index_suffix = f"_{study_index + 1}"
     index_col = "_INDEX_BIM" + index_suffix
-    
+
     if source_type == "precomputed":
         # Load full LD matrix
         r_matrix = _load_ld_matrix(ld_path, fmt=ld_fmt, if_square=ld_if_square, if_add_T=ld_if_add_T, log=log, verbose=verbose)
         # Extract sub-matrix for common variants using original indices
-        index_col = "_INDEX_BIM_{}".format(study_index + 1)
+        index_col = f"_INDEX_BIM_{study_index + 1}"
         indices = common_variants[index_col].values.astype(int)
         r_matrix = r_matrix[np.ix_(indices, indices)]
         # For precomputed, we use the original indices, so no need to return matched_sumstats
         return r_matrix, plink_log, None
-    
+
     elif source_type in ["bfile", "pfile"]:
         # Calculate LD matrix using only common variants
-        study_name = study if study else "study_{}".format(study_index + 1)
+        study_name = study if study else f"study_{study_index + 1}"
         matched_snp_list_path = "{}/{}_{}_{}.snplist.raw".format(out.rstrip("/"), study_name, row["SNPID"], windowsizekb)
         matched_sumstats_path = "{}/{}_{}_{}.sumstats".format(out.rstrip("/"), study_name, row["SNPID"], windowsizekb)
-        
+
         # Export SNP list and sumstats for PLINK
         common_variants["SNPID"].to_csv(matched_snp_list_path, index=None, header=None)
         common_variants[["SNPID", "CHR", "POS", "EA", "NEA"]].to_csv(matched_sumstats_path, sep="\t", index=None)
-        
+
         # Get bfile prefix
         bfile_prefix, _, _, filetype = _process_plink_input_files(
             chrlist=[row["CHR"]],
@@ -1046,7 +1045,7 @@ def _get_ld_matrix_for_common_variants(
             convert="bfile",
             **kwargs
         )
-        
+
         # Calculate LD matrix
         matched_ld_matrix_path, plink_log = _calculate_ld_r(
             study=study_name,
@@ -1067,17 +1066,17 @@ def _get_ld_matrix_for_common_variants(
             extra_plink_option=extra_plink_option,
             verbose=verbose
         )
-        
+
         # Load the calculated LD matrix
         # For bfile/pfile, the LD matrix is calculated for the matched variants only,
         # so it's already in the correct order and size matches common_variants
         r_matrix = np.loadtxt(matched_ld_matrix_path)
         return r_matrix, plink_log, None
-    
+
     elif source_type == "vcf":
         # Calculate LD matrix from VCF using only common variants
         from gwaslab.io.io_vcf import _get_ld_matrix_from_vcf
-        
+
         # Auto-detect tabix if not provided (only log if not found)
         if tabix is None:
             tabix = which("tabix")
@@ -1085,7 +1084,7 @@ def _get_ld_matrix_for_common_variants(
                 log.write(" -tabix not found, VCF will be read without indexing (slower)", verbose=verbose)
         elif tabix is True:
             tabix = which("tabix")
-        
+
         # CRITICAL: _get_ld_matrix_from_vcf filters sumstats to region using _filter_region,
         # which uses strict boundaries (POS > start and POS < end, excluding boundaries).
         # However, _extract_variants_in_locus uses (POS >= start - window and POS < start + window).
@@ -1096,7 +1095,7 @@ def _get_ld_matrix_for_common_variants(
         region_start = max(1, row["POS"] - windowsizekb * 1000 - 1)  # Expand by 1bp to account for > vs >=
         region_end = row["POS"] + windowsizekb * 1000 + 1     # Expand by 1bp to account for < vs <=
         region = (row["CHR"], region_start, region_end)
-        
+
         # Keep CHR as int - _filter_region will handle normalization internally
         # Get LD matrix from VCF (will match common variants)
         # tabix enables efficient region queries for indexed VCF files
@@ -1111,31 +1110,30 @@ def _get_ld_matrix_for_common_variants(
             ea="EA",
             tabix=tabix
         )
-        
+
         # Check if we got valid results
         if len(matched_sumstats) == 0 or ld_matrix.size == 0:
-            raise ValueError("No variants matched in VCF for study {} after region filtering. "
+            raise ValueError(f"No variants matched in VCF for study {study_index + 1} after region filtering. "
                            "This may indicate a region format mismatch or that all variants were filtered out. "
-                           "Common variants count: {}, Region: {}".format(
-                               study_index + 1, len(common_variants), region))
-        
+                           f"Common variants count: {len(common_variants)}, Region: {region}")
+
         # CRITICAL: For VCF sources, the LD matrix returned by _get_ld_matrix_from_vcf
         # is already filtered to matched variants and is in the same order as matched_sumstats.
         # The matrix shape (n, n) matches len(matched_sumstats), so we need to use sequential
         # indices (0, 1, 2, ...) rather than the original _INDEX_BIM from the LD map extraction.
-        # 
+        #
         # We return the matched_sumstats so the caller can update _INDEX_BIM accordingly.
         # For now, we'll handle this in the caller by checking if matrix shape matches variant count.
-        
+
         # Convert r^2 to |r|
         ld_matrix = np.sqrt(np.abs(ld_matrix))
-        
+
         # Return matched_sumstats so caller can verify order and update indices if needed
         # The matched_sumstats should be in the same order as the LD matrix rows/cols
         return ld_matrix, plink_log, matched_sumstats
-    
+
     else:
-        raise ValueError("Unknown LD source type: {}".format(source_type))
+        raise ValueError(f"Unknown LD source type: {source_type}")
 
 def _export_locus_sumstats_for_study(
     common_variants: pd.DataFrame,
@@ -1144,7 +1142,7 @@ def _export_locus_sumstats_for_study(
     group: str,
     row: pd.Series,
     windowsizekb: int,
-    suffixes: List[str],
+    suffixes: list[str],
     log: Log
 ) -> str:
     """
@@ -1153,11 +1151,11 @@ def _export_locus_sumstats_for_study(
     Returns:
         Path to exported sumstats file
     """
-    study_suffix = suffixes[study_index] if study_index < len(suffixes) else "_{}".format(study_index + 1)
+    study_suffix = suffixes[study_index] if study_index < len(suffixes) else f"_{study_index + 1}"
     matched_sumstats_path = "{}/{}_{}_{}_{}.sumstats".format(out.rstrip("/"), group, row["SNPID"], windowsizekb, study_index + 1)
-    
+
     to_export_columns = ["CHR", "POS", "EA", "NEA"]
-    
+
     if "Z" + study_suffix in common_variants.columns:
         to_export_columns.append("Z" + study_suffix)
     if ("BETA" + study_suffix in common_variants.columns) and ("SE" + study_suffix in common_variants.columns):
@@ -1167,18 +1165,18 @@ def _export_locus_sumstats_for_study(
         to_export_columns.append("EAF" + study_suffix)
     if "N" + study_suffix in common_variants.columns:
         to_export_columns.append("N" + study_suffix)
-    
+
     # Export path is already clear from file path, no need for verbose message
     rename_dic = {
         "BETA" + study_suffix: "Beta",
         "SE" + study_suffix: "Se",
         "SNPID": "SNP"
     }
-    
+
     export_df = common_variants[["SNPID"] + to_export_columns].rename(columns=rename_dic)
     export_df.to_csv(matched_sumstats_path, sep="\t", index=None)
     export_df.to_csv(matched_sumstats_path + ".gz", sep="\t", index=None)
-    
+
     return matched_sumstats_path + ".gz"
 
 @with_logging(
@@ -1188,39 +1186,39 @@ def _export_locus_sumstats_for_study(
         start_function=".calculate_ld_matrix()"
 )
 def tofinemapping_m(
-    sumstats: pd.DataFrame, 
-    studies: Optional[List[str]] = None, 
-    group: Optional[str] = None,
-    ld_paths: Optional[List[str]] = None,
-    ld_types: Optional[List[str]] = None, 
-    ld_maps: Optional[List[str]] = None,
-    ld_map_dics: Optional[List[Dict[str, str]]] = None,
-    bfile: Optional[Union[str, List[str]]] = None, 
-    pfile: Optional[Union[str, List[str]]] = None,
-    vcf: Optional[Union[str, List[str]]] = None, 
-    locus: Optional[Tuple[int, int]] = None,
-    loci: Optional[List[str]] = None,
-    loci_chrpos: Optional[List[Tuple[int, int]]] = None,
+    sumstats: pd.DataFrame,
+    studies: list[str] | None = None,
+    group: str | None = None,
+    ld_paths: list[str] | None = None,
+    ld_types: list[str] | None = None,
+    ld_maps: list[str] | None = None,
+    ld_map_dics: list[dict[str, str]] | None = None,
+    bfile: Union[str, list[str]] | None = None,
+    pfile: Union[str, list[str]] | None = None,
+    vcf: Union[str, list[str]] | None = None,
+    locus: tuple[int, int] | None = None,
+    loci: list[str] | None = None,
+    loci_chrpos: list[tuple[int, int]] | None = None,
     out: str = "./",
     plink: str = "plink",
     plink2: str = "plink2",
     windowsizekb: int = 1000,
-    threads: int = 1, 
+    threads: int = 1,
     mode: str = "r",
-    exclude_hla: bool = False, 
-    getlead_kwargs: Optional[Dict[str, Any]] = None, 
-    memory: Optional[int] = None, 
+    exclude_hla: bool = False,
+    getlead_kwargs: dict[str, Any] | None = None,
+    memory: int | None = None,
     overwrite: bool = False,
     log: Log = Log(),
-    suffixes: Optional[List[str]] = None,
-    ld_map_kwargs: Optional[Dict[str, Any]] = None,
+    suffixes: list[str] | None = None,
+    ld_map_kwargs: dict[str, Any] | None = None,
     ld_if_square: bool = False,
     ld_if_add_T: bool = False,
     extra_plink_option: str = "",
-    tabix: Optional[Union[bool, str, List[Union[bool, str]]]] = None,
+    tabix: Union[bool, str, list[Union[bool, str]]] | None = None,
     verbose: bool = True,
     **kwargs: Any
-) -> Tuple[Optional[str], pd.DataFrame, str]:
+) -> tuple[str | None, pd.DataFrame, str]:
     """
     Prepare data for multi-study fine-mapping by matching sumstats with LD reference files
     and extracting LD matrices for specified loci.
@@ -1383,7 +1381,7 @@ def tofinemapping_m(
     ...     out="./finemapping_output"
     ... )
     """
-    
+
     ############################################################################################
     # STEP 0: Initialize and validate parameters
     ############################################################################################
@@ -1393,7 +1391,7 @@ def tofinemapping_m(
         getlead_kwargs={"windowsizekb":1000}
     if ld_map_kwargs is None:
         ld_map_kwargs={}
-    
+
     # Determine number of studies
     if studies is None:
         # Try to infer from other parameters
@@ -1408,15 +1406,15 @@ def tofinemapping_m(
             n_studies = max(n_studies, len(pfile))
         if isinstance(vcf, list):
             n_studies = max(n_studies, len(vcf))
-        studies = ["Study_{}".format(i+1) for i in range(n_studies)]
+        studies = [f"Study_{i+1}" for i in range(n_studies)]
     else:
         n_studies = len(studies)
-    
+
     if n_studies < 1:
         raise ValueError("At least one study must be specified")
-    
-    log.write(" -Number of studies: {}".format(n_studies), verbose=verbose)
-    
+
+    log.write(f" -Number of studies: {n_studies}", verbose=verbose)
+
     # Normalize LD source parameters to lists (one per study)
     bfiles, pfiles, vcfs, ld_paths_list, ld_maps_list, ld_types_list, ld_map_dics_list, tabix_list = _normalize_parameters_to_lists(
         n_studies=n_studies,
@@ -1429,7 +1427,7 @@ def tofinemapping_m(
         ld_map_dics=ld_map_dics,
         tabix=tabix
     )
-    
+
     # Detect LD source type for each study
     ld_source_types = _detect_ld_source_types(
         n_studies=n_studies,
@@ -1441,7 +1439,7 @@ def tofinemapping_m(
         log=log,
         verbose=verbose
     )
-    
+
     ############################################################################################
     # STEP 1: Filter and prepare sumstats
     ############################################################################################
@@ -1452,7 +1450,7 @@ def tofinemapping_m(
         log=log,
         verbose=verbose
     )
-    
+
     ############################################################################################
     # STEP 2: Extract lead variants
     ############################################################################################
@@ -1467,35 +1465,35 @@ def tofinemapping_m(
         log=log,
         verbose=verbose
     )
-    
+
     if len(sig_df) == 0:
         log.write(" -No lead variants found.", verbose=verbose)
         output_file_list = pd.DataFrame(columns=["SNPID","SNPID_LIST","LD_R_MATRIX","LOCUS_SUMSTATS"])
         return None, output_file_list, ""
-    
-    log.write(" -Processing {} lead variant(s)...".format(len(sig_df)), verbose=verbose)
-    
+
+    log.write(f" -Processing {len(sig_df)} lead variant(s)...", verbose=verbose)
+
     # Initialize output file list
     output_file_list = pd.DataFrame(columns=["SNPID","SNPID_LIST","LD_R_MATRIX","LOCUS_SUMSTATS"])
     plink_log = ""
-    
+
     ############################################################################################
     # STEP 3: Process each lead variant
     ############################################################################################
     for locus_idx, (_, row) in enumerate(sig_df.iterrows()):
         log.write(" -Processing lead variant {} of {}: {} (chr{}:{})...".format(
             locus_idx + 1, len(sig_df), row["SNPID"], row["CHR"], row["POS"]), verbose=verbose)
-        
+
         # STEP 3.1: Extract variants in locus
         locus_sumstats = _extract_variants_in_locus(sumstats, windowsizekb, locus=(row["CHR"], row["POS"]))
         locus_sumstats = locus_sumstats.dropna(subset=required_cols).copy()
-        log.write(" -Variants in locus after NA filtering: {}".format(len(locus_sumstats)), verbose=verbose)
-        
+        log.write(f" -Variants in locus after NA filtering: {len(locus_sumstats)}", verbose=verbose)
+
         if len(locus_sumstats) == 0:
             log.write(" -No variants in locus for {} (chr{}:{}). Skipping...".format(
                 row["SNPID"], row["CHR"], row["POS"]), verbose=verbose)
             continue
-        
+
         # STEP 3.2: Get LD maps for all studies
         all_ld_maps = _get_all_ld_maps(
             n_studies=n_studies,
@@ -1520,7 +1518,7 @@ def tofinemapping_m(
             verbose=verbose,
             **kwargs
         )
-        
+
         # STEP 3.3: Find common variants across all studies
         common_variants = _find_common_variants_across_studies(
             n_studies=n_studies,
@@ -1532,14 +1530,14 @@ def tofinemapping_m(
             log=log,
             verbose=verbose
         )
-        
+
         if len(common_variants) == 0:
             log.write(" -No common variants found across all studies for locus {} (chr{}:{}). Skipping to next locus...".format(
                 row["SNPID"], row["CHR"], row["POS"]), verbose=verbose)
             continue
-        
-        log.write(" -Found {} common variants across all studies".format(len(common_variants)), verbose=verbose)
-        
+
+        log.write(f" -Found {len(common_variants)} common variants across all studies", verbose=verbose)
+
         # STEP 3.4: Process LD matrices for all studies
         all_ld_matrices, study_plink_log, locus_file_list = _process_ld_matrices_for_all_studies(
             n_studies=n_studies,
@@ -1571,22 +1569,22 @@ def tofinemapping_m(
             verbose=verbose,
             **kwargs
         )
-        
+
         plink_log += study_plink_log
-        
+
         # Export common SNP list (same for all studies)
         matched_snp_list_path = "{}/{}_{}_{}.snplist.raw".format(out.rstrip("/"), group, row["SNPID"], windowsizekb)
         common_variants["SNPID"].to_csv(matched_snp_list_path, index=None, header=None)
-        log.write(" -Exported common SNP list ({} variants) to: {}".format(len(common_variants), matched_snp_list_path), verbose=verbose)
-        
+        log.write(f" -Exported common SNP list ({len(common_variants)} variants) to: {matched_snp_list_path}", verbose=verbose)
+
         # Update SNPID_LIST in all rows for this locus to point to the common list
         locus_rows = locus_file_list["SNPID"] == row["SNPID"]
         if locus_rows.any():
             locus_file_list.loc[locus_rows, "SNPID_LIST"] = matched_snp_list_path
-        
+
         # Add locus file list to main output
         output_file_list = pd.concat([output_file_list, locus_file_list], ignore_index=True)
-    
+
     # After processing all loci, finalize output
     if len(output_file_list)>0:
         output_file_list["GROUP"] = group
@@ -1598,8 +1596,8 @@ def tofinemapping_m(
         else:
             output_file_list_path =  "{}/{}_{}study_{}kb.filelist".format(out.rstrip("/"), group, n_studies, windowsizekb)
         output_file_list.to_csv(output_file_list_path,index=None,sep="\t")
-        log.write(" -File list is saved to: {}".format(output_file_list_path),verbose=verbose)
-        log.write(" -Finished LD matrix calculation for {} loci.".format(nloci),verbose=verbose)
+        log.write(f" -File list is saved to: {output_file_list_path}",verbose=verbose)
+        log.write(f" -Finished LD matrix calculation for {nloci} loci.",verbose=verbose)
     else:
         output_file_list_path=None
         log.write(" -No available lead variants.",verbose=verbose)
@@ -1611,14 +1609,14 @@ def tofinemapping_m(
 ###################################################################################################################################################################
 ####################################################################################################
 def _extract_variants_from_ld_matrix_m(
-    merged_sumstats: pd.DataFrame, 
-    r_matrix: np.ndarray, 
-    out: str, 
-    group: str, 
-    row: pd.Series, 
-    windowsizekb: int, 
-    log: Log, 
-    verbose: bool, 
+    merged_sumstats: pd.DataFrame,
+    r_matrix: np.ndarray,
+    out: str,
+    group: str,
+    row: pd.Series,
+    windowsizekb: int,
+    log: Log,
+    verbose: bool,
     index: int
 ) -> str:
     """
@@ -1633,47 +1631,46 @@ def _extract_variants_from_ld_matrix_m(
     and matches the variant order in merged_sumstats exactly.
     """
     # study suffixes starting from 1
-    index_bim_header = "_INDEX_BIM_{}".format(index + 1) 
-    flipped_header = "_FLIPPED_{}".format(index + 1) 
-    
+    index_bim_header = f"_INDEX_BIM_{index + 1}"
+    flipped_header = f"_FLIPPED_{index + 1}"
+
     # Get indices: these point to rows/columns in the full LD matrix
     # Each value in avaiable_index corresponds to a variant in merged_sumstats
-    avaiable_index = merged_sumstats[index_bim_header].values 
-    
+    avaiable_index = merged_sumstats[index_bim_header].values
+
     # Validate indices before extraction
     if len(avaiable_index) == 0:
-        raise ValueError("No valid indices found for study {}. Cannot extract LD matrix.".format(index + 1))
-    
+        raise ValueError(f"No valid indices found for study {index + 1}. Cannot extract LD matrix.")
+
     # Check if indices are within LD matrix bounds
     max_index = avaiable_index.max() if len(avaiable_index) > 0 else -1
     if max_index >= r_matrix.shape[0] or max_index < 0:
-        raise ValueError("Invalid indices for study {}: max_index={}, matrix_shape={}".format(
-            index + 1, max_index, r_matrix.shape))
-    
+        raise ValueError(f"Invalid indices for study {index + 1}: max_index={max_index}, matrix_shape={r_matrix.shape}")
+
     if r_matrix.size == 0:
-        raise ValueError("LD matrix is empty for study {}. Cannot extract sub-matrix.".format(index + 1))
-    
+        raise ValueError(f"LD matrix is empty for study {index + 1}. Cannot extract sub-matrix.")
+
     # Get flip flags: True for variants where alleles are flipped
-    flipped = merged_sumstats[flipped_header].values 
-    
+    flipped = merged_sumstats[flipped_header].values
+
     # Extract sub-matrix using fancy indexing
     # np.ix_ creates index arrays for both dimensions, extracting the sub-matrix
     # The result has shape (len(merged_sumstats), len(merged_sumstats))
     # and the order matches merged_sumstats
     reduced_r_matrix = r_matrix[np.ix_(avaiable_index, avaiable_index)]
-    
+
     # Correct for allele flips: if a variant's alleles are flipped, we negate
     # its row and column in the LD matrix. This is because LD is calculated
     # based on allele coding, and flipping alleles changes the sign of correlations.
     n_flipped = sum(flipped)
     if n_flipped > 0:
-        log.write(" -Flipping LD matrix for {} variants...".format(n_flipped), verbose=verbose)
+        log.write(f" -Flipping LD matrix for {n_flipped} variants...", verbose=verbose)
     reduced_r_matrix[flipped,:] = -1 * reduced_r_matrix[flipped,:]
     reduced_r_matrix[:,flipped] = -1 * reduced_r_matrix[:,flipped]
 
     output_prefix =  "{}/{}_{}_{}_{}".format(out.rstrip("/"),group,row["SNPID"],windowsizekb, index + 1)
-    output_path = "{}.ld.gz".format(output_prefix)
-    
+    output_path = f"{output_prefix}.ld.gz"
+
     pd.DataFrame(reduced_r_matrix).to_csv(output_path,sep="\t",index=None,header=None)
     #reduced_r_matrix.to_csv("{}.ld.gz".format(output_prefix),se="\t")
     return output_path

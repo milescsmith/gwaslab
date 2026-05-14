@@ -1,50 +1,64 @@
 import copy
 import gc as garbage_collect
+from math import ceil
+
 import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy as sp
-from math import ceil
-import matplotlib.pyplot as plt
 import seaborn as sns
 from adjustText import adjust_text
 from matplotlib.ticker import MaxNLocator
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 from scipy import stats
 
-from gwaslab.bd.bd_common_data import get_chr_to_number
-from gwaslab.bd.bd_common_data import get_number_to_chr
+import gwaslab.viz.viz_plot_manhattan_like as manlike
+from gwaslab.bd.bd_common_data import get_chr_to_number, get_number_to_chr
 from gwaslab.info.g_Log import Log
 from gwaslab.info.g_version import _get_version
-from gwaslab.io.io_process_kwargs import _update_arg
-from gwaslab.io.io_process_kwargs import _update_kwargs
+from gwaslab.io.io_process_kwargs import _update_arg, _update_kwargs, normalize_series_inputs
 from gwaslab.qc.qc_build import _process_build
+from gwaslab.qc.qc_normalize_args import _normalize_group, _normalize_region
 from gwaslab.util.util_in_filter_value import _filter_region
-from gwaslab.util.util_in_get_sig import _get_sig, _anno_gene
+from gwaslab.util.util_in_get_sig import _anno_gene, _get_sig
 from gwaslab.viz.viz_aux_annotate_plot import annotate_single
+from gwaslab.viz.viz_aux_quickfix import (
+    _cut,
+    _jagged_y,
+    _quick_assign_i_with_rank,
+    _quick_fix_chr,
+    _quick_fix_eaf,
+    _quick_fix_mlog10p,
+    _quick_fix_p_value,
+    _quick_fix_pos,
+    _set_yticklabels,
+)
 from gwaslab.viz.viz_aux_reposition_text import _get_highest_y_pixels
-from gwaslab.viz.viz_aux_quickfix import _cut
-from gwaslab.viz.viz_aux_quickfix import _jagged_y
-from gwaslab.viz.viz_aux_quickfix import _set_yticklabels
-from gwaslab.qc.qc_normalize_args import _normalize_group
-from gwaslab.qc.qc_normalize_args import _normalize_region
-from gwaslab.viz.viz_aux_quickfix import _quick_assign_i_with_rank
-from gwaslab.viz.viz_aux_quickfix import _quick_fix_chr
-from gwaslab.viz.viz_aux_quickfix import _quick_fix_eaf
-from gwaslab.viz.viz_aux_quickfix import _quick_fix_mlog10p
-from gwaslab.viz.viz_aux_quickfix import _quick_fix_p_value
-from gwaslab.viz.viz_aux_quickfix import _quick_fix_pos
-from gwaslab.viz.viz_aux_save_figure import safefig
-from gwaslab.viz.viz_aux_save_figure import save_figure
+from gwaslab.viz.viz_aux_save_figure import safefig, save_figure
 from gwaslab.viz.viz_aux_style_options import set_plot_style
 from gwaslab.viz.viz_plot_density import _process_density
-from gwaslab.viz.viz_plot_manhattan_like import _configure_fig_save_kwargs, _add_pad_to_x_axis, _configure_cols_to_use, _sanity_check, _process_p_value, _process_highlight, _process_line, _process_cbar, _process_xtick, _process_ytick, _process_xlabel, _process_ylabel, _process_spine, _process_layout, _adjust_spacing_for_ax3_labels
-import gwaslab.viz.viz_plot_manhattan_like as manlike
+from gwaslab.viz.viz_plot_manhattan_like import (
+    _add_pad_to_x_axis,
+    _adjust_spacing_for_ax3_labels,
+    _configure_cols_to_use,
+    _configure_fig_save_kwargs,
+    _process_cbar,
+    _process_highlight,
+    _process_layout,
+    _process_line,
+    _process_p_value,
+    _process_spine,
+    _process_xlabel,
+    _process_xtick,
+    _process_ylabel,
+    _process_ytick,
+    _sanity_check,
+)
 from gwaslab.viz.viz_plot_manhattan_mode import draw_manhattan_panel
 from gwaslab.viz.viz_plot_qqplot import _plot_qq
 from gwaslab.viz.viz_plot_regional2 import _get_lead_id, _plot_regional, prepare_vcf_context, process_ld, process_vcf
-from gwaslab.io.io_process_kwargs import normalize_series_inputs
+
 
 @normalize_series_inputs(keys=["highlight","pinpoint","anno_set"])
 def _setup_and_log_mqq_info(
@@ -78,17 +92,17 @@ def _setup_and_log_mqq_info(
         plot_label = "MQQ plot"
 
     # Header and build info
-    log.write("Starting {} creation (Version {})".format(plot_label, _get_version()), verbose=verbose)
+    log.write(f"Starting {plot_label} creation (Version {_get_version()})", verbose=verbose)
     build = _update_arg(build, "19")
     build = _process_build(build, log=log, verbose=verbose)
-    log.write(" - Genomic coordinates version: {} ...".format(build), verbose=verbose)
+    log.write(f" - Genomic coordinates version: {build} ...", verbose=verbose)
     if build is None or build == "99":
         log.warning("Genomic coordinates version is unknown.")
 
     # Basic stats and mode
     log.write(" - Genome-wide significance level to plot is set to " + str(sig_level) + " ...", verbose=verbose)
-    log.write(" - Input sumstats contains {} variants...".format(len(insumstats)), verbose=verbose)
-    log.write(" - {} layout mode selected: {}".format(plot_label, mode), verbose=verbose)
+    log.write(f" - Input sumstats contains {len(insumstats)} variants...", verbose=verbose)
+    log.write(f" - {plot_label} layout mode selected: {mode}", verbose=verbose)
 
     # Annotation set (only meaningful when Manhattan panel is present)
     if anno_set is not None and len(anno_set) > 0 and ("m" in mode):
@@ -106,7 +120,7 @@ def _setup_and_log_mqq_info(
             verbose=verbose,
             is_chrpos_mode=highlight_chrpos
         )
-        log.write("  -highlight_windowkb is set to: {} kb".format(highlight_windowkb), verbose=verbose)
+        log.write(f"  -highlight_windowkb is set to: {highlight_windowkb} kb", verbose=verbose)
 
     # Pinpoint variants
     if pinpoint is None:
@@ -124,13 +138,13 @@ def _setup_and_log_mqq_info(
     # Region specification
     if region is not None:
         chr_, start_, end_ = region[0], region[1], region[2]
-        log.write(" -Region to plot : chr{}:{}-{}.".format(chr_, start_, end_), verbose=verbose)
+        log.write(f" -Region to plot : chr{chr_}:{start_}-{end_}.", verbose=verbose)
 
     return plot_label, build, highlight, highlight_color, pinpoint, pinpoint_color
 
 @normalize_series_inputs(keys=["highlight","pinpoint","anno_set"])
 @safefig
-def _mqqplot(insumstats,            
+def _mqqplot(insumstats,
           chrom="CHR",
           pos="POS",
           p="P",
@@ -205,7 +219,7 @@ def _mqqplot(insumstats,
           ld_link_linewidth=1.0,
           ld_link_sig_level=None,
           show_ld_score=False,
-          cbar_title='LD $\\mathregular{r^2}$ with variant',
+          cbar_title="LD $\\mathregular{r^2}$ with variant",
           cbar_fontsize = None,
           cbar_scale=True,
           cbar_font_family = None,
@@ -213,7 +227,7 @@ def _mqqplot(insumstats,
           cbar_equal_aspect = True,
           cbar_w_scale=1,
           cbar_h_scale=1,
-          cbar_downward_offset =1.3, 
+          cbar_downward_offset =1.3,
           cbar_borderpad=None,
           track_n=4,
           track_n_offset=0,
@@ -291,7 +305,7 @@ def _mqqplot(insumstats,
           xpadl=None,
           xpadr=None,
           xtight=False,
-          chrpad=0.03, 
+          chrpad=0.03,
           drop_chr_start=False,
           title =None,
           mtitle=None,
@@ -300,7 +314,7 @@ def _mqqplot(insumstats,
           qtitle_pad=1.08,
           ylabel=None,
           xlabel=None,
-          title_pad=1.08, 
+          title_pad=1.08,
           title_fontsize=13,
           title_kwargs=None,
           fontsize = 9,
@@ -754,10 +768,10 @@ def _mqqplot(insumstats,
     # Extract dataframe if Sumstats object is passed
     # Store reference to original object to check meta
     sumstats_obj = None
-    if hasattr(insumstats, 'data') and not isinstance(insumstats, pd.DataFrame):
+    if hasattr(insumstats, "data") and not isinstance(insumstats, pd.DataFrame):
         sumstats_obj = insumstats
         insumstats = insumstats.data
-    
+
     # scan all local args for series and convert to list for further processing
     for arg in locals().values():
         if isinstance(arg, pd.Series):
@@ -769,10 +783,10 @@ def _mqqplot(insumstats,
         snpid="SNPID"
     elif "rsID" in insumstats.columns:
         snpid="rsID"
-    
+
     if "EAF" not in insumstats.columns:
         eaf=None
-    
+
     chr_dict = _update_kwargs(chr_dict, get_chr_to_number())
     xtick_chr_dict = _update_kwargs(xtick_chr_dict, get_number_to_chr())
     gtf_chr_dict = _update_kwargs(gtf_chr_dict, get_number_to_chr())
@@ -819,12 +833,12 @@ def _mqqplot(insumstats,
     taf = _update_arg(taf, [track_n,track_n_offset,track_fontsize_ratio,track_exon_ratio,track_text_offset])
     font_family = _update_arg(font_family, fontfamily)
 
-    
+
     # Step 1: Set arguments and normalize inputs
     if region is not None:
         if region[1] == region[2]:
             raise ValueError("Region should be [chr, start, end] with start < end")
-    
+
     # make region_ref a list of ref variants
     if pd.api.types.is_list_like(region_ref):
         if len(region_ref) == 0 :
@@ -838,7 +852,7 @@ def _mqqplot(insumstats,
     region_ref_index_dic = {value: index for index,value in enumerate(region_ref)}
 
     # scatter_kwargs and qq_scatter_kwargs merged via set_plot_style
-        
+
     # Check if QC is finished in Sumstats meta, skip quick QC if so
     if sumstats_obj is not None:
         qc_performed = sumstats_obj.meta.get("gwaslab", {}).get("basic_check", {}).get("performed", False)
@@ -849,19 +863,18 @@ def _mqqplot(insumstats,
             _if_quick_qc = True
         else:
             _if_quick_qc = False
+    # If not a Sumstats object, use original logic
+    elif check==True and _if_quick_qc==True:
+        _if_quick_qc = True
     else:
-        # If not a Sumstats object, use original logic
-        if check==True and _if_quick_qc==True:
-            _if_quick_qc = True
-        else:
-            _if_quick_qc = False
+        _if_quick_qc = False
 
     # configure dpi if saving the plot
     fig_kwargs, scatter_kwargs, qq_scatter_kwargs, save_kwargs = _configure_fig_save_kwargs(mode=mode,
-                                                                                    save = save, 
-                                                                                    fig_kwargs = fig_kwargs, 
-                                                                                    scatter_kwargs = scatter_kwargs, 
-                                                                                    qq_scatter_kwargs = qq_scatter_kwargs, 
+                                                                                    save = save,
+                                                                                    fig_kwargs = fig_kwargs,
+                                                                                    scatter_kwargs = scatter_kwargs,
+                                                                                    qq_scatter_kwargs = qq_scatter_kwargs,
                                                                                     save_kwargs = save_kwargs,
                                                                                     log=log,
                                                                                     verbose=verbose)
@@ -885,20 +898,20 @@ def _mqqplot(insumstats,
         log=log,
         verbose=verbose,
     )
-    
+
     # Build significance threshold series and convert to -log10 scale
     # Add anno_sig_level as last item so it gets transformed by _cut, then remove it after
     if additional_line is None:
         lines_to_plot = pd.Series([sig_level, suggestive_sig_level, anno_sig_level] )
     else:
-        lines_to_plot = pd.Series([sig_level, suggestive_sig_level, anno_sig_level] + additional_line ) 
+        lines_to_plot = pd.Series([sig_level, suggestive_sig_level, anno_sig_level] + additional_line )
         if additional_line_color is None:
             additional_line_color = ["grey"]
     lines_to_plot = -np.log10(lines_to_plot)
 
 # Step 3: Select layout ####################################################################
     # ax1 : manhattanplot / brisbane plot
-    # ax2 : qq plot 
+    # ax2 : qq plot
     # ax3 : gene track
     # ax4 : recombination rate
     # cbar : color bar
@@ -907,18 +920,17 @@ def _mqqplot(insumstats,
     # "m" : Manhattan plot
     # "qq": QQ plot
     # "r" : regional plot
-    
+
     # Check if ld_block is requested for regional plots
     ld_block_enabled = (ld_block and "r" in mode and vcf_path is not None and region is not None)
     if ld_block:
-        log.write("ld_block requested: ld_block={}, mode={}, vcf_path={}, region={}".format(
-            ld_block, mode, vcf_path is not None, region is not None), verbose=verbose)
-        log.write("ld_block_enabled: {}".format(ld_block_enabled), verbose=verbose)
-    
-    layout_result = _process_layout(mode=mode, 
-                                         figax=figax, 
-                                         fig_kwargs=fig_kwargs, 
-                                         mqqratio=mqqratio, 
+        log.write(f"ld_block requested: ld_block={ld_block}, mode={mode}, vcf_path={vcf_path is not None}, region={region is not None}", verbose=verbose)
+        log.write(f"ld_block_enabled: {ld_block_enabled}", verbose=verbose)
+
+    layout_result = _process_layout(mode=mode,
+                                         figax=figax,
+                                         fig_kwargs=fig_kwargs,
+                                         mqqratio=mqqratio,
                                          region_hspace=region_hspace,
                                          ld_block=ld_block_enabled)
     if ld_block_enabled:
@@ -928,85 +940,85 @@ def _mqqplot(insumstats,
         ax_pos = None
         ax_ld_block = None
     highlight_i = []
-    
+
 # mode specific settings ####################################################################
     if mode=="b":
         sig_level=1,
         sig_line=False,
-        #windowsizekb = 100000000   
+        #windowsizekb = 100000000
         mode="mb"
         scatter_kwargs={"marker":"s"}
         marker_size= (marker_size[1],marker_size[1])
 
 # Step 4: Load sumstats #################################################################################################
 
-    usecols = _configure_cols_to_use(insumstats=insumstats, 
-                                     snpid=snpid,  
-                                     chrom=chrom, 
-                                     pos=pos, 
-                                     ea=ea, 
-                                     nea=nea, 
-                                     eaf=eaf, 
-                                     p=p, 
+    usecols = _configure_cols_to_use(insumstats=insumstats,
+                                     snpid=snpid,
+                                     chrom=chrom,
+                                     pos=pos,
+                                     ea=ea,
+                                     nea=nea,
+                                     eaf=eaf,
+                                     p=p,
                                      mlog10p=mlog10p,
-                                     scaled=scaled, 
+                                     scaled=scaled,
                                      mode=mode,
                                      stratified=stratified,
-                                     anno=anno, 
-                                     anno_set=anno_set, 
+                                     anno=anno,
+                                     anno_set=anno_set,
                                      anno_alias=anno_alias,
                                      _chrom_df_for_i=_chrom_df_for_i,
                                      highlight=highlight,
                                      pinpoint=pinpoint,
                                      density_color=density_color)
-    
+
     sumstats = insumstats[usecols].copy()
-    
+
     #################################################################################################
-    
+
     # Step 5: Standardize and QC
     #Standardize
     ## Annotation
     if (anno == "GENENAME"):
         anno_sig=True
     elif isinstance(anno,str):
-        sumstats["Annotation"]=sumstats[anno].astype("string")   
-      
+        sumstats["Annotation"]=sumstats[anno].astype("string")
+
     ## P value
     ## m, qq, r
-    if "b" not in mode:   
+    if "b" not in mode:
         if scaled is True:
-            sumstats["raw_P"] = pd.to_numeric(sumstats[mlog10p], errors='coerce')
+            sumstats["raw_P"] = pd.to_numeric(sumstats[mlog10p], errors="coerce")
         else:
             sumstats["raw_P"] = sumstats[p].astype("float64")
-    
+
     ## CHR & POS
     ## m, qq, b
-    if "m" in mode or "r" in mode or "b" in mode: 
+    if "m" in mode or "r" in mode or "b" in mode:
         # convert CHR to int
         ## CHR X,Y,MT conversion ############################
         sumstats[pos] = _quick_fix_pos(sumstats[pos], verbose=verbose, log=log)
         sumstats[chrom] = _quick_fix_chr(sumstats[chrom], chr_dict=chr_dict, verbose=verbose, log=log)
 
     ## r
-    
+
     if region is not None:
         region = _normalize_region(region, chr_dict=chr_dict, sumstats=sumstats, snpid=snpid, rsid="rsID", chrom_col=chrom, pos_col=pos, ea=ea, nea=nea, log=log, verbose=verbose)
         sumstats = _filter_region(sumstats, region, log=log, verbose=verbose)
-  
+
         if len(sumstats)==0:
             log.warning("No valid data! Please check the input.")
             if _get_region_lead==True:
                 return None, log, [], []
             return None, log
-    
+
     ## EAF
     eaf_raw = pd.Series(dtype="float64")
-    if stratified is True: 
+    if stratified is True:
         sumstats["MAF"] = _quick_fix_eaf(sumstats[eaf], verbose=verbose, log=log)
         # for stratified qq plot
         eaf_raw = sumstats["MAF"].copy()
-        
+
     if len(highlight)>0 and ("m" in mode):
         sumstats["HUE"] = pd.NA
         sumstats["HUE"] = sumstats["HUE"].astype("Int64")
@@ -1016,34 +1028,34 @@ def _mqqplot(insumstats,
 
 #sanity check############################################################################################################
     log.write("Start data conversion and sanity check:",verbose=verbose)
-    
+
     if _if_quick_qc == False:
         log.write(" -Sanity check will be skipped.", verbose=verbose)
     else:
-        sumstats = _sanity_check(sumstats=sumstats, 
+        sumstats = _sanity_check(sumstats=sumstats,
                                  mode=mode,
-                                 chrom =chrom, 
-                                 pos=pos, 
-                                 stratified=stratified, 
-                                 _if_quick_qc=_if_quick_qc, 
-                                 log=log, 
+                                 chrom =chrom,
+                                 pos=pos,
+                                 stratified=stratified,
+                                 _if_quick_qc=_if_quick_qc,
+                                 log=log,
                                  verbose=verbose)
-            
+
     # Step 6: Transform data (highlight/density/p/mlog10p)
     ## configure highlight regions
     if len(highlight)>0 and ("m" in mode):
         # add HUE
-        sumstats = _process_highlight(sumstats=sumstats, 
-                                                    highlight=highlight, 
-                                                    highlight_chrpos=highlight_chrpos, 
-                                                    highlight_windowkb=highlight_windowkb, 
-                                                    highlight_lim = highlight_lim, 
+        sumstats = _process_highlight(sumstats=sumstats,
+                                                    highlight=highlight,
+                                                    highlight_chrpos=highlight_chrpos,
+                                                    highlight_windowkb=highlight_windowkb,
+                                                    highlight_lim = highlight_lim,
                                                     highlight_lim_mode = highlight_lim_mode,
-                                                    snpid=snpid, 
-                                                    chrom=chrom, 
+                                                    snpid=snpid,
+                                                    chrom=chrom,
                                                     pos=pos)
 
-# Density mode setup #####################################################################################################              
+# Density mode setup #####################################################################################################
     if "b" in mode:
         from gwaslab.viz.viz_plot_density_mode import b_mode_setup
         sumstats, bmean, bmedian = b_mode_setup(
@@ -1056,40 +1068,40 @@ def _mqqplot(insumstats,
             verbose=verbose,
         )
         lines_to_plot = pd.Series(lines_to_plot.to_list() + [bmean, bmedian])
-    
+
     else:
-        bmean, bmedian=0,0 
-    
-# P value conversion #####################################################################################################  
-    
+        bmean, bmedian=0,0
+
+# P value conversion #####################################################################################################
+
     # add raw_P and scaled_P
-    sumstats =  _process_p_value(sumstats=sumstats, 
+    sumstats =  _process_p_value(sumstats=sumstats,
                                  mode=mode,
-                                 p=p, 
-                                 mlog10p=mlog10p, 
-                                 scaled=scaled, 
-                                 log=log, 
+                                 p=p,
+                                 mlog10p=mlog10p,
+                                 scaled=scaled,
+                                 log=log,
                                  verbose=verbose )
-    
+
     # raw -log10(P) per chromosome for QQ panel
     p_toplot_raw = sumstats[["CHR","scaled_P"]].copy()
-    
+
     # filter out variants with -log10p < skip
     sumstats = sumstats.loc[sumstats["scaled_P"]>=skip,:]
     garbage_collect.collect()
-    
+
     # Shrink variants above cut line #########################################################################################
     # Initialize transformed_anno_sig_level (will be updated after _cut if successful)
     transformed_anno_sig_level = -np.log10(anno_sig_level)
     try:
-        sumstats["scaled_P"], maxy, maxticker, cut, cutfactor,ylabels_converted, lines_to_plot = _cut(series = sumstats["scaled_P"], 
-                                                                        mode =mode, 
+        sumstats["scaled_P"], maxy, maxticker, cut, cutfactor,ylabels_converted, lines_to_plot = _cut(series = sumstats["scaled_P"],
+                                                                        mode =mode,
                                                                         cut=cut,
                                                                         skip=skip,
                                                                         cutfactor = cutfactor,
                                                                         ylabels=ylabels,
                                                                         cut_log = cut_log,
-                                                                        verbose =verbose, 
+                                                                        verbose =verbose,
                                                                         lines_to_plot=lines_to_plot,
                                                                         log = log
                                                                         )
@@ -1106,22 +1118,22 @@ def _mqqplot(insumstats,
         if _get_region_lead==True:
             return None, log, [], []
         return None, log
-    
+
     log.write("Finished data conversion and sanity check.",verbose=verbose)
-    
+
     # default: no annotations when not creating Manhattan/Regional panel
-    
-    
+
+
     # Step 7: Assign x-axis index (i) and create panels ##########################################################################################################
-    log.write("Start to create {} with ".format(plot_label)+str(len(sumstats))+" variants...",verbose=verbose)
+    log.write(f"Start to create {plot_label} with "+str(len(sumstats))+" variants...",verbose=verbose)
     ## regional data sources
     if vcf_path is not None:
         if tabix is None:
             vcf_chr_dict, tabix = prepare_vcf_context(vcf_path=vcf_path, vcf_chr_dict=vcf_chr_dict, log=log, verbose=verbose)
-        sumstats = process_vcf(sumstats=sumstats, 
+        sumstats = process_vcf(sumstats=sumstats,
                                vcf_path=vcf_path,
-                               region=region, 
-                               region_ref=region_ref, 
+                               region=region,
+                               region_ref=region_ref,
                                log=log ,
                                pos=pos,
                                ea=ea,
@@ -1133,10 +1145,10 @@ def _mqqplot(insumstats,
     elif ld_path is not None:
         sumstats = process_ld(
             ld_path=ld_path,
-            ld_map_path = ld_map_path, 
-            sumstats=sumstats, 
-            region=region, 
-            region_ref=region_ref, 
+            ld_map_path = ld_map_path,
+            sumstats=sumstats,
+            region=region,
+            region_ref=region_ref,
             log=log ,
             pos=pos,
             ea=ea,
@@ -1151,7 +1163,7 @@ def _mqqplot(insumstats,
         )
     #sort & add id
     ## Manhatann plot ###################################################
-    if ("m" in mode) or ("r" in mode): 
+    if ("m" in mode) or ("r" in mode):
         # Assign index i and tick positions for x-axis
         if _chrom_df_for_i is None:
             sumstats,chrom_df=_quick_assign_i_with_rank(sumstats, chrpad=chrpad, use_rank=use_rank, chrom="CHR",pos="POS",drop_chr_start=drop_chr_start,_posdiccul=_posdiccul)
@@ -1170,11 +1182,11 @@ def _mqqplot(insumstats,
                 sumstats["LD"]=100
                 sumstats["SHAPE"]=1
             sumstats["chr_hue"]=sumstats["LD"]
-                
+
         ## default seetings
         # assign to_plot for scatter plot
         to_plot = None
-        palette = sns.color_palette(colors,n_colors=sumstats[chrom].nunique())  
+        palette = sns.color_palette(colors,n_colors=sumstats[chrom].nunique())
 
         legend = None
         style=None
@@ -1227,10 +1239,10 @@ def _mqqplot(insumstats,
             log=log,
             verbose=verbose,
         )
-            
+
         # Step 9: Add region panel if specified ##################################################
         if (region is not None) and ("r" in mode):
-            
+
             ax1, ax3, ax4, cbar, lead_snp_is, lead_snp_is_color = _plot_regional(
                                 sumstats=sumstats,
                                 fig=fig,
@@ -1247,7 +1259,7 @@ def _mqqplot(insumstats,
                                 cbar_w_scale=cbar_w_scale,
                                 cbar_h_scale=cbar_h_scale,
                                 cbar_equal_aspect=cbar_equal_aspect,
-                                cbar_downward_offset =cbar_downward_offset, 
+                                cbar_downward_offset =cbar_downward_offset,
                                 cbar_borderpad=cbar_borderpad,
                                 cut_line_color=cut_line_color,
                                 gtf_path=gtf_path,
@@ -1292,7 +1304,7 @@ def _mqqplot(insumstats,
                                 verbose=verbose,
                                 log=log
                             )
-            
+
             # After _plot_regional sets ticks on ax3, hide tick labels on ax1 and ax_pos (if they exist)
             # Only ax3 should show x-axis tick labels
             # Do this immediately after _plot_regional sets ticks, before LD block is plotted
@@ -1301,13 +1313,13 @@ def _mqqplot(insumstats,
             if ld_block_enabled and ax_ld_block is not None:
                 from gwaslab.viz.viz_plot_ld_block import plot_ld_block as _plot_ld_block
                 log.write("Adding LD block plot with position bar...", verbose=verbose)
-                
+
                 # Ensure ax_pos shares x-axis with ax1 (regional plot)
                 # ax_ld_block does NOT share x-axis (uses rank-based coordinate system)
                 if ax_pos is not None:
-                    if not hasattr(ax_pos, '_shared_axes') or 'x' not in ax_pos._shared_axes:
+                    if not hasattr(ax_pos, "_shared_axes") or "x" not in ax_pos._shared_axes:
                         ax_pos.sharex(ax1)
-                
+
                 # Plot LD block with position bar in regional mode
                 _plot_ld_block(
                     vcf_path=vcf_path,
@@ -1334,21 +1346,21 @@ def _mqqplot(insumstats,
                     ld_block_anno_set=ld_block_anno_set,
                     ld_block_anno_max_rows=ld_block_anno_max_rows
                 )
-                
+
                 # Note: Spacing adjustment will be done before saving (after all plots are complete)
-            
+
             if ld_block_enabled and ax_pos is not None:
                 # Hide x-axis tick labels on ax1 and ax_pos (only show on ax3)
                 # Keep tick marks visible, just hide labels
-                ax1.tick_params(axis='x', which='both', labelbottom=False)
-                ax_pos.tick_params(axis='x', which='both', labelbottom=False)
-            
+                ax1.tick_params(axis="x", which="both", labelbottom=False)
+                ax_pos.tick_params(axis="x", which="both", labelbottom=False)
+
         else:
             lead_snp_is =[]
             lead_snp_is_color = []
-        
-        log.write("Finished creating {} successfully".format(plot_label),verbose=verbose)
-        
+
+        log.write(f"Finished creating {plot_label} successfully",verbose=verbose)
+
         # Use transformed anno_sig_level threshold (after _cut transformation) for annotation
         if "b" in mode:
             from gwaslab.viz.viz_plot_density_mode import b_scaled_threshold
@@ -1485,13 +1497,13 @@ def _mqqplot(insumstats,
             ax1 = _jagged_y(cut=cut,skip=skip,ax1=ax1,mode=1,mqqratio=mqqratio,jagged_len=jagged_len,jagged_wid=jagged_wid,log=log, verbose=verbose)
             if "qq" in mode:
                 ax2 = _jagged_y(cut=cut,skip=skip,ax1=ax2,mode=2,mqqratio=mqqratio,jagged_len=jagged_len,jagged_wid=jagged_wid,log=log, verbose=verbose)
-        
+
         # XY lim
         if ylim is not None and  ylim != []:
             ax1.set_ylim(ylim)
             if "qq" in mode:
                 ax2.set_ylim(ylim)
-        
+
         ax1 = _add_pad_to_x_axis(ax1, xpad, xpadl, xpadr, sumstats, pos, chrpad, xtight, log = log, verbose=verbose)
     # Step 11: Add QQ panel if specified #########################################################################################################
     if "qq" in mode:
@@ -1533,7 +1545,7 @@ def _mqqplot(insumstats,
                     expected_min_mlog10p=expected_min_mlog10p,
                     log=log
                 )
-    
+
     # Step 12: Annotation
     if (anno is not None):
         ax1 = annotate_single(
@@ -1580,17 +1592,17 @@ def _mqqplot(insumstats,
         # Ensure all content (including annotations) is rendered
         fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
-        
+
         _title_kwargs = dict(title_kwargs) if title_kwargs is not None else {}
         if "family" not in _title_kwargs:
             _title_kwargs["family"] = font_family
         if "fontsize" not in _title_kwargs:
             _title_kwargs["fontsize"] = title_fontsize
-        
+
         # Calculate pad_points for both mtitle and qtitle to ensure consistent y positioning
         pad_points_m = 5  # default padding
         pad_points_q = 5  # default padding
-        
+
         if mtitle and ax1 is not None:
             try:
                 highest_y_pixels = _get_highest_y_pixels(ax1, renderer, fig)
@@ -1600,7 +1612,7 @@ def _mqqplot(insumstats,
                 pad_points_m = content_extends_above * 72 / fig.dpi + 5
             except Exception:
                 pass
-        
+
         if qtitle and ax2 is not None:
             try:
                 highest_y_pixels = _get_highest_y_pixels(ax2, renderer, fig)
@@ -1610,7 +1622,7 @@ def _mqqplot(insumstats,
                 pad_points_q = content_extends_above * 72 / fig.dpi + 5
             except Exception:
                 pass
-        
+
         # Use the maximum pad to ensure both titles are at the same y level
         if mtitle and qtitle:
             pad_points = max(pad_points_m, pad_points_q)
@@ -1618,21 +1630,21 @@ def _mqqplot(insumstats,
             pad_points = pad_points_m
         else:
             pad_points = pad_points_q
-        
+
         # Add mtitle (Manhattan/axes title) - positioned above ax1 content
         if mtitle and ax1 is not None:
             try:
                 ax1.set_title(mtitle, pad=pad_points, **_title_kwargs)
             except Exception:
                 ax1.set_title(mtitle, **_title_kwargs)
-        
+
         # Add qtitle (QQ plot title) - positioned at same y level as mtitle
         if qtitle and ax2 is not None:
             try:
                 ax2.set_title(qtitle, pad=pad_points, **_title_kwargs)
             except Exception:
                 ax2.set_title(qtitle, **_title_kwargs)
-        
+
         # Add figure-level title - positioned above all content
         if title:
             # Find the highest point of any content in the figure
@@ -1643,22 +1655,22 @@ def _mqqplot(insumstats,
                     highest_y_pixels = max(highest_y_pixels, ax_highest)
                 except Exception:
                     pass
-            
+
             # Convert pixels to figure coordinates
             fig_height_pixels = fig.get_figheight() * fig.dpi
             highest_y_fig = highest_y_pixels / fig_height_pixels
-            
+
             # Add padding above the highest content (in figure coordinates)
             padding = 0.04  # 4% of figure height
             title_y = highest_y_fig + padding  # Don't cap - let title go above figure if needed
-            
+
             fig.suptitle(title, x=0.5, y=title_y, **_title_kwargs)
-    
+
     # Step 12.6: Adjust spacing for ax3 tick labels (if ld_block is enabled)
     # This must happen after all plots are done but before saving
     if ld_block_enabled and ax_pos is not None and ax_ld_block is not None:
         _adjust_spacing_for_ax3_labels(fig, ax3, ax_pos, ax_ld_block, log=log, verbose=verbose)
-    
+
     # Step 13: Save figure
     save_figure(fig = fig, save = save, keyword=mode, save_kwargs=save_kwargs, log = log, verbose=verbose)
 
@@ -1666,23 +1678,8 @@ def _mqqplot(insumstats,
     # Return matplotlib figure object #######################################################################################
     if _get_region_lead==True:
         return fig, log, lead_snp_is, lead_snp_is_color
-    
+
     log.write("Finished creating plot successfully",verbose=verbose)
     return fig, log
 
 ##############################################################################################################################################################################
-from gwaslab.viz.viz_plot_manhattan_like import _configure_fig_save_kwargs as _configure_fig_save_kwargs
-from gwaslab.viz.viz_plot_manhattan_like import _add_pad_to_x_axis as _add_pad_to_x_axis
-from gwaslab.viz.viz_plot_manhattan_like import _configure_cols_to_use as _configure_cols_to_use
-from gwaslab.viz.viz_plot_manhattan_like import _sanity_check as _sanity_check
-from gwaslab.viz.viz_plot_manhattan_like import _process_p_value as _process_p_value
-from gwaslab.viz.viz_plot_manhattan_like import _process_highlight as _process_highlight
-from gwaslab.viz.viz_plot_manhattan_like import _process_line as _process_line
-from gwaslab.viz.viz_plot_manhattan_like import _process_cbar as _process_cbar
-from gwaslab.viz.viz_plot_manhattan_like import _process_xtick as _process_xtick
-from gwaslab.viz.viz_plot_manhattan_like import _process_ytick as _process_ytick
-from gwaslab.viz.viz_plot_manhattan_like import _process_xlabel as _process_xlabel
-from gwaslab.viz.viz_plot_manhattan_like import _process_ylabel as _process_ylabel
-from gwaslab.viz.viz_plot_manhattan_like import _process_spine as _process_spine
-from gwaslab.viz.viz_plot_manhattan_like import _process_layout as _process_layout
-from gwaslab.viz.viz_plot_manhattan_like import _adjust_spacing_for_ax3_labels as _adjust_spacing_for_ax3_labels

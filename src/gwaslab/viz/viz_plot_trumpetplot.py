@@ -1,18 +1,16 @@
 import matplotlib
 import matplotlib.colors as mc
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
 import scipy as sp
 import seaborn as sns
 from adjustText import adjust_text
+from matplotlib import patches, ticker
 from matplotlib.collections import LineCollection
+
 from gwaslab.info.g_Log import Log
-from gwaslab.util.util_in_calculate_power import get_beta
-from gwaslab.util.util_in_calculate_power import get_beta_binary
-from gwaslab.util.util_in_calculate_power import get_power
+from gwaslab.util.util_in_calculate_power import get_beta, get_beta_binary, get_power
 from gwaslab.util.util_in_fill_data import _fill_data
 from gwaslab.util.util_in_get_sig import _anno_gene
 from gwaslab.viz.viz_aux_annotate_plot import annotate_single
@@ -20,6 +18,7 @@ from gwaslab.viz.viz_aux_reposition_text import adjust_text_position
 from gwaslab.viz.viz_aux_save_figure import save_figure
 from gwaslab.viz.viz_aux_style_options import set_plot_style
 from gwaslab.viz.viz_plot_mqqplot import _process_highlight
+
 
 def _plot_trumpet(insumstats,
                 snpid="SNPID",
@@ -36,13 +35,13 @@ def _plot_trumpet(insumstats,
                 prevalence=None,
                 or_to_rr=False,
                 ncase=None,
-                ncontrol=None, 
+                ncontrol=None,
                 sig_level=5e-8,
                 p_level=5e-8,
                 anno_y = 1,
-                anno_x = 0.01,                
+                anno_x = 0.01,
                 maf_range=None,
-                beta_range=None, 
+                beta_range=None,
                 n_matrix=1000,
                 xscale="log",
                 yscale_factor=1,
@@ -218,16 +217,16 @@ def _plot_trumpet(insumstats,
     highlight_lim_mode : str, optional
         Highlight limit mode. Default is "absolute"
     """
-    
+
     # Extract dataframe if Sumstats object is passed
-    if hasattr(insumstats, 'data') and not isinstance(insumstats, pd.DataFrame):
+    if hasattr(insumstats, "data") and not isinstance(insumstats, pd.DataFrame):
         insumstats = insumstats.data
-    
+
     # Create working copy to preserve original (plotting functions should not modify input)
     mysumstats = insumstats.copy()
-    
+
     #Checking columns#################################################################################################################
-    matplotlib.rc('font', family=font_family)
+    matplotlib.rc("font", family=font_family)
     if sizes is None:
         sizes = (20,80)
     if anno_kwargs is None:
@@ -246,7 +245,7 @@ def _plot_trumpet(insumstats,
             xticklabels = xticks
         else:
             xticks = [0,0.01,0.05,0.1,0.2,0.5]
-            xticklabels = xticks            
+            xticklabels = xticks
     style = set_plot_style(
         plot="plot_trumpet",
         mode=mode,
@@ -275,10 +274,10 @@ def _plot_trumpet(insumstats,
     if highlight is None:
         highlight = list()
     if pinpoint is None:
-        pinpoint = list()  
+        pinpoint = list()
     #Checking columns#################################################################################################################
     log.write("Start to create trumpet plot...", verbose=verbose)
-    
+
     #parameter check##################################################################################################################
     if (beta not in mysumstats.columns) or (eaf not in mysumstats.columns):
         log.write(" -No EAF or BETA columns. Skipping...", verbose=verbose)
@@ -289,34 +288,34 @@ def _plot_trumpet(insumstats,
             return None
         if prevalence is None:
                 prevalence= ncase/(ncase + ncontrol)
-                log.write(" -Prevalence is not given. Estimating based on scase and scontrol :{}...".format(prevalence), verbose=verbose)
-    
+                log.write(f" -Prevalence is not given. Estimating based on scase and scontrol :{prevalence}...", verbose=verbose)
+
     #print settings##################################################################################################################
 
     log.write(" -Settings:", verbose=verbose)
-    log.write("  -Mode: {}".format(mode), verbose=verbose)
+    log.write(f"  -Mode: {mode}", verbose=verbose)
     if mode == "q" :
-        log.write("  -N: {}".format(n), verbose=verbose)
+        log.write(f"  -N: {n}", verbose=verbose)
     if mode == "b" :
-        log.write("  -N_CASE: {}".format(ncase), verbose=verbose)
-        log.write("  -N_CONTROL: {}".format(ncontrol), verbose=verbose)
-        log.write("  -PREVALENCE: {}".format(prevalence), verbose=verbose)
-    log.write("  -BETA: {}".format(beta), verbose=verbose)
-    log.write("  -Significance level: {}".format(sig_level), verbose=verbose)
-    log.write("  -Power thresholds: {}".format(ts), verbose=verbose)
-    log.write("  -Power line smoothness: {}".format(n_matrix), verbose=verbose)
-    
+        log.write(f"  -N_CASE: {ncase}", verbose=verbose)
+        log.write(f"  -N_CONTROL: {ncontrol}", verbose=verbose)
+        log.write(f"  -PREVALENCE: {prevalence}", verbose=verbose)
+    log.write(f"  -BETA: {beta}", verbose=verbose)
+    log.write(f"  -Significance level: {sig_level}", verbose=verbose)
+    log.write(f"  -Power thresholds: {ts}", verbose=verbose)
+    log.write(f"  -Power line smoothness: {n_matrix}", verbose=verbose)
+
     #loading columns #################################################################################################################
     cols_to_use = [snpid, beta, eaf, n, p]
-    
-    if len(highlight)>0: 
+
+    if len(highlight)>0:
         cols_to_use.append(pos)
         cols_to_use.append(chrom)
-    
+
     if anno is not None:
         if anno != "GENENAME":
             if anno!=True:
-                log.write(" -Loading column {} for annotation...".format(anno), verbose=verbose)
+                log.write(f" -Loading column {anno} for annotation...", verbose=verbose)
                 if anno not in cols_to_use:
                     if anno!=False:
                         cols_to_use.append(anno)
@@ -329,38 +328,38 @@ def _plot_trumpet(insumstats,
             cols_to_use.append(size)
     if "hue" in scatter_kwargs.keys():
         if scatter_kwargs["hue"] not in cols_to_use:
-            cols_to_use.append(scatter_kwargs["hue"]) 
+            cols_to_use.append(scatter_kwargs["hue"])
     #filter by p #################################################################################################################
     if p in mysumstats.columns:
         sumstats = mysumstats.loc[mysumstats[p]< p_level,cols_to_use ].copy()
-        log.write(" -Excluding variants with P values > {}".format(p_level), verbose=verbose)
+        log.write(f" -Excluding variants with P values > {p_level}", verbose=verbose)
     else:
         cols_to_use.remove(p)
         sumstats = mysumstats[[beta,eaf,n]].copy()
-    log.write(" -Plotting {} variants...".format(len(sumstats)), verbose=verbose)
-    
+    log.write(f" -Plotting {len(sumstats)} variants...", verbose=verbose)
+
     #add maf column #################################################################################################################
     if maf not in sumstats.columns:
         sumstats = _fill_data(sumstats,to_fill=["MAF"],verbose=False)
         is_filpped = (sumstats["MAF"] < sumstats[eaf]) & (sumstats[eaf] > 0.5)& (sumstats["MAF"] < 0.5)
-        log.write(" -Flipping {} variants...".format(sum(is_filpped)), verbose=verbose)
+        log.write(f" -Flipping {sum(is_filpped)} variants...", verbose=verbose)
         sumstats.loc[is_filpped, beta] = -sumstats.loc[is_filpped, beta]
-    
+
     #configure n #################################################################################################################
     if mode=="q":
         if n == "N":
-            n = sumstats["N"].median() 
+            n = sumstats["N"].median()
         elif n == "max":
-            n = sumstats["N"].max() 
+            n = sumstats["N"].max()
         elif n == "min":
-            n = sumstats["N"].min() 
+            n = sumstats["N"].min()
         elif n == "median":
-            n = sumstats["N"].median() 
+            n = sumstats["N"].median()
         elif n == "mean":
-            n = sumstats["N"].mean() 
+            n = sumstats["N"].mean()
         else:
             n = n
-        log.write(" -N for power calculation: {}".format(n), verbose=verbose)
+        log.write(f" -N for power calculation: {n}", verbose=verbose)
 
     #configure beta and maf range ###################################################################################################
     if maf_range is None:
@@ -371,18 +370,18 @@ def _plot_trumpet(insumstats,
             beta_range=(0.0001,sumstats[beta].max())
         else:
             beta_range=(0.0001,3)
-    
+
     #configure power threshold###################################################################################################
     if ts is None:
         ts=[0.3,0.5,0.8]
-    
+
     #configure colormap##########################################################################################################
     cmap_to_use = matplotlib.colormaps.get_cmap(cmap)
     if cmap_to_use.N >100:
         rgba = cmap_to_use(ts)
     else:
         rgba = cmap_to_use(range(len(ts)))
-    
+
     output_hex_colors=[]
     for i in range(len(rgba)):
         output_hex_colors.append(mc.to_hex(rgba[i]))
@@ -391,49 +390,49 @@ def _plot_trumpet(insumstats,
     if len(highlight)>0:
         sumstats["HUE"] = pd.NA
         sumstats["HUE"] = sumstats["HUE"].astype("Int64")
-        sumstats = _process_highlight(sumstats=sumstats, 
-                                                    highlight=highlight, 
-                                                    highlight_chrpos=highlight_chrpos, 
-                                                    highlight_windowkb=highlight_windowkb, 
+        sumstats = _process_highlight(sumstats=sumstats,
+                                                    highlight=highlight,
+                                                    highlight_chrpos=highlight_chrpos,
+                                                    highlight_windowkb=highlight_windowkb,
                                                     highlight_lim=highlight_lim,
                                                     highlight_lim_mode=highlight_lim_mode,
-                                                    snpid=snpid, 
-                                                    chrom=chrom, 
+                                                    snpid=snpid,
+                                                    chrom=chrom,
                                                     pos=pos)
     ##################################################################################################
 
     fig, ax = plt.subplots(**fig_kwargs)
-    
+
     ##creating power line############################################################################################
     if mode=="q":
         for i,t in enumerate(ts):
-            xpower = get_beta(mode="q",          
+            xpower = get_beta(mode="q",
                             eaf_range=maf_range,
-                            beta_range=beta_range, 
+                            beta_range=beta_range,
                             n=n,
                             t=t,
                             sig_level=sig_level,
                             n_matrix=n_matrix)
             xpower2 = xpower.copy()
-            xpower2[1] = -xpower2[1] 
+            xpower2[1] = -xpower2[1]
             xpower2[1] = xpower2[1] * yscale_factor
             xpower[1] = xpower[1] * yscale_factor
             lines = LineCollection([xpower2,xpower], label=t,color=output_hex_colors[i],zorder=0)
             ax.add_collection(lines)
     else:
         for i,t in enumerate(ts):
-            xpower = get_beta_binary(        
+            xpower = get_beta_binary(
                             eaf_range=maf_range,
-                            beta_range=beta_range, 
+                            beta_range=beta_range,
                             prevalence=prevalence,
                             or_to_rr = or_to_rr,
-                            ncase=ncase, 
-                            ncontrol=ncontrol, 
+                            ncase=ncase,
+                            ncontrol=ncontrol,
                             t=t,
                             sig_level=sig_level,
                             n_matrix=n_matrix)
             xpower2 = xpower.copy()
-            xpower2[1] = -xpower2[1] 
+            xpower2[1] = -xpower2[1]
             xpower2[1] = xpower2[1] * yscale_factor
             xpower[1] = xpower[1] * yscale_factor
             lines = LineCollection([xpower2,xpower], label=t,color=output_hex_colors[i])
@@ -457,18 +456,18 @@ def _plot_trumpet(insumstats,
     dots = sns.scatterplot(data=sumstats,
                     x=maf,
                     y=beta,
-                    size=size, 
-                    ax=ax, 
+                    size=size,
+                    ax=ax,
                     sizes=sizes,
                     size_norm=size_norm,
-                    legend=True, 
+                    legend=True,
                     edgecolor="black",
                     alpha=0.8,
                     zorder=2,
                     **scatter_kwargs)
     log.write(" -Finished screating scatter plot...", verbose=verbose)
     if len(highlight) >0:
-        
+
         legend = None
         style=None
         linewidth=0
@@ -477,7 +476,7 @@ def _plot_trumpet(insumstats,
         if pd.api.types.is_list_like(highlight[0]) and highlight_chrpos==False:
             for i, highlight_set in enumerate(highlight):
                 scatter_kwargs["color"]=highlight_color[i%len(highlight_color)]
-                log.write(" -Highlighting set {} target loci...".format(i+1),verbose=verbose)
+                log.write(f" -Highlighting set {i+1} target loci...",verbose=verbose)
                 sns.scatterplot(data=sumstats.loc[sumstats["HUE"]==i], x=maf,
                     y=beta,
                     legend=legend,
@@ -487,7 +486,7 @@ def _plot_trumpet(insumstats,
                     size_norm=size_norm,
                     linewidth=linewidth,
                     zorder=3+i,
-                    ax=ax,edgecolor=edgecolor,**scatter_kwargs)  
+                    ax=ax,edgecolor=edgecolor,**scatter_kwargs)
 
         else:
             log.write(" -Highlighting target loci...",verbose=verbose)
@@ -501,7 +500,7 @@ def _plot_trumpet(insumstats,
                 zorder=3,
                 ax=ax,
                 edgecolor="black",
-                **scatter_kwargs)  
+                **scatter_kwargs)
     ####################################################################################################################
     if len(pinpoint)>0:
         legend = None
@@ -514,8 +513,8 @@ def _plot_trumpet(insumstats,
                 scatter_kwargs["color"]=pinpoint_color[i%len(pinpoint_color)]
                 if sum(sumstats[snpid].isin(pinpoint_set))>0:
                     to_pinpoint = sumstats.loc[sumstats[snpid].isin(pinpoint_set),:]
-                    log.write(" -Pinpointing set {} target variants...".format(i+1),verbose=verbose)
-                    sns.scatterplot(data=to_pinpoint, 
+                    log.write(f" -Pinpointing set {i+1} target variants...",verbose=verbose)
+                    sns.scatterplot(data=to_pinpoint,
                     x=maf,
                     y=beta,
                     legend=legend,
@@ -525,7 +524,7 @@ def _plot_trumpet(insumstats,
                     zorder=3,
                     ax=ax,
                     edgecolor="black",
-                    **scatter_kwargs)  
+                    **scatter_kwargs)
                     #ax.scatter(to_pinpoint[maf],to_pinpoint[beta],color=pinpoint_color[i%len(pinpoint_color)],zorder=100,s=to_pinpoint[size])
                 else:
                     log.write(" -Target variants to pinpoint were not found. Skip pinpointing process...",verbose=verbose)
@@ -543,21 +542,21 @@ def _plot_trumpet(insumstats,
                     zorder=3,
                     ax=ax,
                     edgecolor="black",
-                    **scatter_kwargs)  
+                    **scatter_kwargs)
                 #ax.scatter(to_pinpoint[maf],to_pinpoint[beta],color=pinpoint_color[i%len(pinpoint_color)],zorder=100,s=to_pinpoint[size])
             else:
                 log.write(" -Target variants to pinpoint were not found. Skip pinpointing process...",verbose=verbose)
-    
+
     ####################################################################################################################
-    
+
     #second_legend = ax.legend(title="Power", loc="upper right",fontsize =fontsize,title_fontsize=fontsize)
     log.write(" -Creating legends...")
     # curve, size,  hue
     h,l = ax.get_legend_handles_labels()
-    
+
     if len(ts)>0:
         # power curves
-        l1 = ax.legend(h[:int(len(ts))],l[:int(len(ts))], title="Power", loc="upper right",fontsize =fontsize,title_fontsize=fontsize)
+        l1 = ax.legend(h[:len(ts)],l[:len(ts)], title="Power", loc="upper right",fontsize =fontsize,title_fontsize=fontsize)
         for line in l1.get_lines():
             line.set_linewidth(5.0)
     ## hue
@@ -569,8 +568,8 @@ def _plot_trumpet(insumstats,
             hue_size_legend_title = hue
         else:
             hue_size_legend_title = None
-        l2 = ax.legend(h[int(len(ts)):],l[int(len(ts)):], title=hue_size_legend_title, loc="lower right",fontsize =fontsize,title_fontsize=fontsize)
-    
+        l2 = ax.legend(h[len(ts):],l[len(ts):], title=hue_size_legend_title, loc="lower right",fontsize =fontsize,title_fontsize=fontsize)
+
     ## hue
     if len(ts)>0:
         ax.add_artist(l1)
@@ -580,23 +579,23 @@ def _plot_trumpet(insumstats,
     #ax.add_artist(first_legend)
     ##################################################################################################
 
-    ax.tick_params(axis='y', labelsize=fontsize)
+    ax.tick_params(axis="y", labelsize=fontsize)
 
     ax.axhline(y=0,color="grey",linestyle="dashed")
-    
+
     if xscale== "log":
-        ax.set_xscale('log')
+        ax.set_xscale("log")
         rotation=0
         ax.set_xticks(xticks,xticklabels,fontsize=fontsize,rotation=rotation)
         ax.set_xlim(sumstats[maf].min()/2,0.52)
     else:
-        rotation=90    
+        rotation=90
         ax.set_xticks(xticks,xticklabels,fontsize=fontsize,rotation=rotation)
         ax.set_xlim(-0.01,0.52)
-        
+
     if xlim is not None:
         ax.set_xlim(xlim)
-    
+
     if ylim is not None:
         ax.set_ylim(ylim)
 
@@ -605,7 +604,7 @@ def _plot_trumpet(insumstats,
 
     ax.set_ylabel(ylabel,fontsize=fontsize)
     ax.set_xlabel(xlabel,fontsize=fontsize)
-    
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(True)
@@ -632,21 +631,21 @@ def _plot_trumpet(insumstats,
             if len(variants_toanno)>0:
                 maxy = variants_toanno[beta].abs().max()
                 #maxy = max(variants_toanno[beta].abs().max(),1.5)
-                variants_toanno["ADJUSTED_i"] = np.nan 
+                variants_toanno["ADJUSTED_i"] = np.nan
                 y_span = 0.5
-                
-                if sort == "beta" : 
+
+                if sort == "beta" :
                     variants_toanno = variants_toanno.sort_values(by=beta, key= np.abs, ascending = False)
                 else:
                     variants_toanno = variants_toanno.sort_values(by=maf, key= np.abs, ascending = True)
-                
+
                 if anno_style == "expand":
 
                     min_factor=None
-                    
+
                     if len(variants_toanno.loc[variants_toanno[beta]>0, "ADJUSTED_i"])>1:
-                        variants_toanno.loc[variants_toanno[beta]>0, "ADJUSTED_i"] = adjust_text_position(variants_toanno.loc[variants_toanno[beta]>0,maf].values.copy(), 
-                                                                                y_span, 
+                        variants_toanno.loc[variants_toanno[beta]>0, "ADJUSTED_i"] = adjust_text_position(variants_toanno.loc[variants_toanno[beta]>0,maf].values.copy(),
+                                                                                y_span,
                                                                                 repel_force=repel_force,
                                                                                 max_iter=anno_max_iter,
                                                                                 log=log,
@@ -654,21 +653,21 @@ def _plot_trumpet(insumstats,
                                                                                 verbose=verbose,min_factor=min_factor)
 
                     if len(variants_toanno.loc[variants_toanno[beta]<0, "ADJUSTED_i"])>1:
-                        variants_toanno.loc[variants_toanno[beta]<0, "ADJUSTED_i"] = adjust_text_position(variants_toanno.loc[variants_toanno[beta]<0,maf].values.copy(), 
-                                                                y_span, 
+                        variants_toanno.loc[variants_toanno[beta]<0, "ADJUSTED_i"] = adjust_text_position(variants_toanno.loc[variants_toanno[beta]<0,maf].values.copy(),
+                                                                y_span,
                                                                 repel_force=repel_force,
                                                                 max_iter=anno_max_iter,
                                                                 log=log,
                                                                 amode=xscale,
                                                                 verbose=verbose,min_factor=min_factor)
 
-                
+
                 for variants_toanno_half in [variants_toanno.loc[variants_toanno[beta]<0,:], variants_toanno.loc[variants_toanno[beta]>0,:]]:
                     if len(variants_toanno_half)<1:
                         continue
                     last_pos = min(variants_toanno_half[maf])/2
                     for index, row in variants_toanno_half.iterrows():
-                        
+
                         armB_length_in_point = ax.transData.transform((0,1.1*maxy))[1]-ax.transData.transform((0, abs(row[beta])))[1]
                         armB_length_in_point = armB_length_in_point*arm_scale
 
@@ -684,31 +683,31 @@ def _plot_trumpet(insumstats,
                         if anno_style == "right"  or anno_style == "expand":
                             if row[beta] >0 :
                                 texts_u.append(ax.annotate(row[anno], xy=(row[maf], row[beta]),xytext=(last_pos , 1.2*maxy),
-                                                        arrowprops=dict(relpos=(0,0),arrowstyle="-|>",facecolor='black',connectionstyle="arc,angleA=-90,armA={},angleB=0,armB=0,rad=0".format(armB_length_in_point)),rotation=90,
+                                                        arrowprops=dict(relpos=(0,0),arrowstyle="-|>",facecolor="black",connectionstyle=f"arc,angleA=-90,armA={armB_length_in_point},angleB=0,armB=0,rad=0"),rotation=90,
                                                         ha="left",va="bottom",**anno_kwargs))
                             else:
                                 texts_d.append(ax.annotate(row[anno], xy=(row[maf], row[beta]),xytext=(last_pos , -1.2*maxy),
-                                                        arrowprops=dict(relpos=(0,1),arrowstyle="-|>",facecolor='black',connectionstyle="arc,angleA=90,armA={},angleB=0,armB=0,rad=0".format(armB_length_in_point)),rotation=90,
+                                                        arrowprops=dict(relpos=(0,1),arrowstyle="-|>",facecolor="black",connectionstyle=f"arc,angleA=90,armA={armB_length_in_point},angleB=0,armB=0,rad=0"),rotation=90,
                                                         ha="left",va="top",**anno_kwargs))
-                        
+
                         if anno_style=="tight":
                             texts_d.append(ax.text(row[maf], row[beta], row[anno]))
 
                 if anno_style=="tight":
-                    adjust_text(texts_d, 
+                    adjust_text(texts_d,
                                 autoalign =True,
                                 precision =0.001,
-                                lim=1000, 
-                                expand_text=(0.5,0.5), 
+                                lim=1000,
+                                expand_text=(0.5,0.5),
                                 expand_points=(0.5,0.5),
-                                force_objects=(0.5,0.5), 
+                                force_objects=(0.5,0.5),
                                 ax=ax)
-    
+
 
     ############  Annotation ##################################################################################################
     if title:
         ax.set_title(title,fontsize=title_fontsize,family=font_family)
-    
+
     if mode=="q":
         save_figure(fig, save, keyword="trumpet_q",save_kwargs=save_kwargs, log=log, verbose=verbose)
     elif mode=="b":
@@ -726,10 +725,10 @@ def plot_power(ns=1000,
                 prevalences=0.1,
                 or_to_rr=False,
                 ncases=5000,
-                ncontrols=5000, 
-                sig_levels=5e-8,       
+                ncontrols=5000,
+                sig_levels=5e-8,
                 maf_range=None,
-                beta_range=None, 
+                beta_range=None,
                 n_matrix=1000,
                 xscale="log",
                 yscale_factor=1,
@@ -818,9 +817,9 @@ def plot_power(ns=1000,
     matplotlib.figure.Figure
         The generated power curve plot figure
     """
-    
+
     #Checking columns#################################################################################################################
-    matplotlib.rc('font', family=font_family)
+    matplotlib.rc("font", family=font_family)
     if sizes is None:
         sizes = (20,80)
     if ts is None:
@@ -831,22 +830,22 @@ def plot_power(ns=1000,
             xticklabels = xticks
         else:
             xticks = [0,0.01,0.05,0.1,0.2,0.5]
-            xticklabels = xticks            
+            xticklabels = xticks
 
     #Checking columns#################################################################################################################
     log.write("Start to create trumpet plot...", verbose=verbose)
-    
+
     if mode=="b":
         if ncases is None or ncontrols is None:
             log.write(" -No scase or scontrol. Skipping...", verbose=verbose)
             return None
-        
+
     #configure beta and maf range ###################################################################################################
     if maf_range is None:
         maf_range=(np.power(10.0,-3),0.5)
     if beta_range is None:
         beta_range=(0.0001,3)
-    
+
     #configure power threshold###################################################################################################
 
     if type(ns) is list:
@@ -857,19 +856,19 @@ def plot_power(ns=1000,
         legend_title = "Power"
     if type(ncases) is list:
         var_to_change = ncases
-        legend_title = "Number of cases"    
+        legend_title = "Number of cases"
     if type(ncontrols) is list:
         var_to_change = ncontrols
-        legend_title = "Number of controls"  
+        legend_title = "Number of controls"
     if type(sig_levels) is list:
         var_to_change = sig_levels
-        legend_title = "Significance level" 
+        legend_title = "Significance level"
     if type(prevalences) is list:
         var_to_change = prevalences
-        legend_title = "Prevalence" 
-    
+        legend_title = "Prevalence"
+
     #Print settings#############################################################################
-    
+
     #configure colormap##########################################################################################################
     cmap_to_use = matplotlib.colormaps.get_cmap(cmap)
     if cmap_to_use.N >100:
@@ -881,7 +880,7 @@ def plot_power(ns=1000,
         rgba = cmap_to_use(list(map(norm, var_to_change)))
     else:
         rgba = cmap_to_use(range(len(var_to_change)))
-    
+
     output_hex_colors=[]
     for i in range(len(rgba)):
         output_hex_colors.append(mc.to_hex(rgba[i]))
@@ -889,44 +888,44 @@ def plot_power(ns=1000,
 
     ##################################################################################################
     fig, ax = plt.subplots(figsize=(10,10))
-    
+
     ##creating power line############################################################################################
     if mode=="q":
         for i,value in enumerate(var_to_change):
-            
+
             n = ns
             t = ts
             sig_level = sig_levels
-            
+
             if legend_title == "N":
                 n = value
             elif legend_title == "Power":
                 t = value
             elif legend_title == "Significance level":
                 sig_level = value
-                    
-            xpower = get_beta(mode="q",          
+
+            xpower = get_beta(mode="q",
                             eaf_range=maf_range,
-                            beta_range=beta_range, 
+                            beta_range=beta_range,
                             n=n,
                             t=t,
                             sig_level=sig_level,
                             n_matrix=n_matrix)
             xpower2 = xpower.copy()
-            xpower2[1] = -xpower2[1] 
+            xpower2[1] = -xpower2[1]
             xpower2[1] = xpower2[1] * yscale_factor
             xpower[1] = xpower[1] * yscale_factor
             lines = LineCollection([xpower2,xpower], label=value,color=output_hex_colors[i],zorder=0)
             ax.add_collection(lines)
     else:
         for i,value in enumerate(var_to_change):
-            
+
             ncase = ncases
             ncontrol = ncontrols
             t = ts
             prevalence = prevalences
             sig_level = sig_levels
-            
+
             if legend_title == "Prevalence":
                 prevalence = value
             elif legend_title == "Power":
@@ -938,41 +937,41 @@ def plot_power(ns=1000,
             elif legend_title == "Number of controls":
                 ncontrol = value
 
-            xpower = get_beta_binary(        
+            xpower = get_beta_binary(
                             eaf_range=maf_range,
-                            beta_range=beta_range, 
+                            beta_range=beta_range,
                             prevalence=prevalence,
                             or_to_rr = or_to_rr,
-                            ncase=ncase, 
-                            ncontrol=ncontrol, 
+                            ncase=ncase,
+                            ncontrol=ncontrol,
                             t=t,
                             sig_level=sig_level,
                             n_matrix=n_matrix)
             xpower2 = xpower.copy()
-            xpower2[1] = -xpower2[1] 
+            xpower2[1] = -xpower2[1]
             xpower2[1] = xpower2[1] * yscale_factor
             xpower[1] = xpower[1] * yscale_factor
             lines = LineCollection([xpower2,xpower], label=value,color=output_hex_colors[i])
             ax.add_collection(lines)
     ###################################################################################################
 
-    ax.tick_params(axis='y', labelsize=fontsize)
+    ax.tick_params(axis="y", labelsize=fontsize)
     leg = ax.legend(title=legend_title,fontsize =fontsize,title_fontsize=fontsize)
 
     for line in leg.get_lines():
         line.set_linewidth(5.0)
     ax.axhline(y=0,color="grey",linestyle="dashed")
-    
+
     if xscale== "log":
-        ax.set_xscale('log')
+        ax.set_xscale("log")
         rotation=0
         ax.set_xticks(xticks,xticklabels,fontsize=fontsize,rotation=rotation)
         ax.set_xlim(maf_range[0]/2,0.52)
     else:
-        rotation=90    
+        rotation=90
         ax.set_xticks(xticks,xticklabels,fontsize=fontsize,rotation=rotation)
         ax.set_xlim(-0.01,0.52)
-    
+
     if ylim is not None:
         ax.set_ylim(ylim)
     if yticks is not None:
@@ -980,13 +979,13 @@ def plot_power(ns=1000,
 
     ax.set_ylabel(ylabel,fontsize=fontsize)
     ax.set_xlabel(xlabel,fontsize=fontsize)
-    
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(True)
 
     ############  Annotation ##################################################################################################
- 
+
     if mode=="q":
         save_figure(fig, save, keyword="power_q",save_kwargs=save_kwargs, log=log, verbose=verbose)
     elif mode=="b":
@@ -997,7 +996,7 @@ def plot_power(ns=1000,
 
 
 def plot_power_x(
-                x=None, 
+                x=None,
                 ts=None,
                 mode="q",
                 ns=10000,
@@ -1006,10 +1005,10 @@ def plot_power_x(
                 prevalences=0.1,
                 or_to_rr=False,
                 ncases=5000,
-                ncontrols=5000, 
-                sig_levels=5e-8,       
+                ncontrols=5000,
+                sig_levels=5e-8,
                 maf_range=None,
-                beta_range=None, 
+                beta_range=None,
                 n_range=None,
                 prevalence_range=None,
                 n_matrix=1000,
@@ -1029,7 +1028,7 @@ def plot_power_x(
                 yticklabels=None,
                 verbose=True,
                 log=Log()):
-    
+
     #Checking columns#################################################################################################################
     """
     Create power cure with user-specified x axis
@@ -1044,30 +1043,30 @@ def plot_power_x(
     """
 
     log.write("Start to create power plot...", verbose=verbose)
-    matplotlib.rc('font', family=font_family)
+    matplotlib.rc("font", family=font_family)
 
     log.write(" -Settings:", verbose=verbose)
-    log.write("  -Mode: {}".format(mode), verbose=verbose)
-    
+    log.write(f"  -Mode: {mode}", verbose=verbose)
+
     if mode == "q" :
-        log.write("  -X axis: {}".format(x), verbose=verbose)
+        log.write(f"  -X axis: {x}", verbose=verbose)
         if x!="N":
-            log.write("  -N: {}".format(ns), verbose=verbose)
+            log.write(f"  -N: {ns}", verbose=verbose)
         if x!="MAF":
-            log.write("  -MAF: {}".format(mafs), verbose=verbose)
+            log.write(f"  -MAF: {mafs}", verbose=verbose)
 
     if mode == "b" :
-        log.write("  -X axis: {}".format(x), verbose=verbose)
+        log.write(f"  -X axis: {x}", verbose=verbose)
         if x!="N_CASE":
-            log.write("  -N_CASE: {}".format(ncases), verbose=verbose)
+            log.write(f"  -N_CASE: {ncases}", verbose=verbose)
         if x!="N_CASE":
-            log.write("  -N_CONTROL: {}".format(ncontrols), verbose=verbose)
+            log.write(f"  -N_CONTROL: {ncontrols}", verbose=verbose)
         if x!="PREVALENCE":
-            log.write("  -PREVALENCE: {}".format(prevalences), verbose=verbose)
+            log.write(f"  -PREVALENCE: {prevalences}", verbose=verbose)
     if x!="BETA":
-        log.write("  -BETA: {}".format(betas), verbose=verbose)
+        log.write(f"  -BETA: {betas}", verbose=verbose)
 
-    log.write(" -Significance level: {}".format(sig_levels), verbose=verbose)
+    log.write(f" -Significance level: {sig_levels}", verbose=verbose)
 
     if x is None:
         if mode=="b":
@@ -1081,8 +1080,8 @@ def plot_power_x(
     if ts is None:
         ts = [0.8]
     #Checking columns#################################################################################################################
-    
-    
+
+
     if mode=="b":
         if ncases is None or ncontrols is None:
             log.write(" -No scase or scontrol. Skipping...", verbose=verbose)
@@ -1098,7 +1097,7 @@ def plot_power_x(
         beta_range = np.linspace(0.0001,3,n_matrix)
     else:
         beta_range = np.linspace(beta_range[0],beta_range[1],n_matrix)
-    
+
     if maf_range is None:
         if mode=="q":
             maf_range = np.linspace(0.0001,0.5,n_matrix)
@@ -1106,13 +1105,13 @@ def plot_power_x(
             maf_range = np.linspace(0.0001,0.9999,n_matrix)
     else:
         maf_range = np.linspace(maf_range[0],maf_range[1],n_matrix)
-    
+
     if prevalence_range is None:
         prevalence_range = np.linspace(0.01,0.99,n_matrix)
     else:
         prevalence_range = np.linspace(prevalence_range[0],prevalence_range[1],n_matrix)
-    
-    
+
+
     #configure power threshold###################################################################################################
     # for hue
     # which is the variable
@@ -1127,19 +1126,19 @@ def plot_power_x(
         legend_title = "MAF"
     if type(ncases) is list:
         var_to_change = ncases
-        legend_title = "Number of cases"    
+        legend_title = "Number of cases"
     if type(ncontrols) is list:
         var_to_change = ncontrols
-        legend_title = "Number of controls"  
+        legend_title = "Number of controls"
     if type(sig_levels) is list:
         var_to_change = sig_levels
-        legend_title = "Significance level" 
+        legend_title = "Significance level"
     if type(prevalences) is list:
         var_to_change = prevalences
-        legend_title = "Prevalence" 
-    
+        legend_title = "Prevalence"
+
     #Print settings#############################################################################
-    
+
     #configure colormap##########################################################################################################
     cmap_to_use = matplotlib.colormaps.get_cmap(cmap)
     if cmap_to_use.N >100:
@@ -1151,7 +1150,7 @@ def plot_power_x(
         rgba = cmap_to_use(list(map(norm, var_to_change)))
     else:
         rgba = cmap_to_use(range(len(var_to_change)))
-    
+
     output_hex_colors=[]
     for i in range(len(rgba)):
         output_hex_colors.append(mc.to_hex(rgba[i]))
@@ -1159,7 +1158,7 @@ def plot_power_x(
 
     ##################################################################################################
     fig, ax = plt.subplots(figsize=(10,10))
-    
+
     ##creating power line############################################################################################
     if mode=="q":
         for i,value in enumerate(var_to_change):
@@ -1168,7 +1167,7 @@ def plot_power_x(
             beta = betas
             maf = mafs
             sig_level = sig_levels
-            
+
             # update the variable
             if legend_title == "BETA":
                 beta = value
@@ -1190,25 +1189,25 @@ def plot_power_x(
                 x_values = beta_range
                 beta = x_values
 
-            xpower = get_power(mode="q",          
+            xpower = get_power(mode="q",
                               eaf=maf,
-                              beta=beta, 
+                              beta=beta,
                               n=n,
                               sig_level=sig_level,
                               verbose=False)
-            
+
             ax.plot(x_values, xpower, label=value,color=output_hex_colors[i],zorder=0)
 
     else:
         for i,value in enumerate(var_to_change):
-            
+
             beta = betas
             maf = mafs
             ncase = ncases
             ncontrol = ncontrols
             prevalence = prevalences
             sig_level = sig_levels
-            
+
             if legend_title == "BETA":
                 beta = value
             elif legend_title == "MAF":
@@ -1221,7 +1220,7 @@ def plot_power_x(
                 ncase = value
             elif legend_title == "Number of controls":
                 ncontrol = value
-            
+
             if x == "N_CASE":
                 x_values = n_range
                 ncase = x_values
@@ -1238,29 +1237,29 @@ def plot_power_x(
                 x_values = prevalence_range
                 prevalence = x_values
 
-            xpower = get_power(mode="b",          
-                              beta = beta, 
+            xpower = get_power(mode="b",
+                              beta = beta,
                               daf = maf,
                               ncase=ncase,
-                              ncontrol=ncontrol, 
+                              ncontrol=ncontrol,
                               prevalence=prevalence,
                               sig_level=sig_level,
                               or_to_rr = or_to_rr,
                               verbose=False)
-            
+
             ax.plot(x_values, xpower, label=value,color=output_hex_colors[i],zorder=0)
     ###################################################################################################
 
-    ax.tick_params(axis='y', labelsize=fontsize)
+    ax.tick_params(axis="y", labelsize=fontsize)
     leg = ax.legend(title=legend_title,fontsize =fontsize,title_fontsize=fontsize)
 
     for line in leg.get_lines():
         line.set_linewidth(5.0)
     ax.axhline(y=0,color="grey",linestyle="dashed")
-    
+
     for i in ts:
         ax.axhline(y=i,color="grey",linestyle="dashed")
-    
+
 
     #if xscale== "log":
     #    ax.set_xscale('log')
@@ -1268,17 +1267,17 @@ def plot_power_x(
     #    ax.set_xticks(xticks,xticklabels,fontsize=fontsize,rotation=rotation)
     #    ax.set_xlim(0,max(ns))
     #else:
-    #    rotation=90    
+    #    rotation=90
     #    ax.set_xticks(xticks,xticklabels,fontsize=fontsize,rotation=rotation)
     #    ax.set_xlim(0,max(ns))
-    
+
     if ylim is not None:
         ax.set_ylim(ylim)
     if yticks is not None:
         ax.set_yticks(yticks, yticklabels)
 
     ax.set_ylabel(ylabel,fontsize=fontsize)
-    
+
     if x == "N_CASE":
         xlabel = "Number of cases"
     elif x== "N_CONTROL":
@@ -1292,13 +1291,13 @@ def plot_power_x(
     elif x=="PREVALENCE":
         xlabel = "Prevalence"
     ax.set_xlabel(xlabel,fontsize=fontsize)
-    
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(True)
 
     ############  Annotation ##################################################################################################
- 
+
     if mode=="q":
         save_figure(fig, save, keyword="power_xq",save_kwargs=save_kwargs, log=log, verbose=verbose)
     elif mode=="b":

@@ -1,22 +1,20 @@
-import pandas as pd
-import numpy as np
-import scipy.stats as ss
-import gzip
+import gc
 import glob
+import gzip
 import os
 import re
-import gc
+
+import numpy as np
+import pandas as pd
+import scipy.stats as ss
+
 from gwaslab.bd.bd_common_data import get_format_dict
 from gwaslab.bd.bd_sumstats_formats import detect_sumstats_format
-from gwaslab.qc.qc_fix_sumstats import _sort_column
-from gwaslab.qc.qc_fix_sumstats import _process_build
-from gwaslab.qc.qc_check_datatype import check_datatype
-from gwaslab.qc.qc_check_datatype import quick_convert_datatype
-from gwaslab.qc.qc_check_datatype import check_dataframe_memory_usage
-from gwaslab.qc.qc_reserved_headers import _check_overlap_with_reserved_keys
-from gwaslab.info.g_vchange_status import STATUS_CATEGORIES
 from gwaslab.info.g_Log import Log
-
+from gwaslab.info.g_vchange_status import STATUS_CATEGORIES
+from gwaslab.qc.qc_check_datatype import check_dataframe_memory_usage, check_datatype, quick_convert_datatype
+from gwaslab.qc.qc_fix_sumstats import _process_build, _sort_column
+from gwaslab.qc.qc_reserved_headers import _check_overlap_with_reserved_keys
 
 #### Helper functions for _preformat #######################################################################
 
@@ -27,17 +25,17 @@ def _initialize_preformat_parameters(*, readargs=None, kwreadargs=None, log=None
     if kwreadargs is None:
         kwreadargs = dict()
     readargs = readargs | kwreadargs
-    
+
     if log is None:
         log = Log()
-    
+
     if other is None:
         other = list()
     if exclude is None:
         exclude = list()
     if include is None:
         include = list()
-    
+
     return readargs, log, other, exclude, include
 
 
@@ -45,34 +43,34 @@ def _load_format_config(*, fmt=None, readargs=None, other=None, log=None, verbos
     """Load format configuration from formatbook if format is specified."""
     meta_data = None
     rename_dictionary = {}
-    
+
     if fmt is not None:
         log.write("Start to load format from formatbook....", verbose=verbose)
         meta_data, rename_dictionary = get_format_dict(fmt)
-        
-        _print_format_info(fmt=fmt, meta_data=meta_data, rename_dictionary=rename_dictionary, 
+
+        _print_format_info(fmt=fmt, meta_data=meta_data, rename_dictionary=rename_dictionary,
                          verbose=verbose, log=log)
-        
+
         # Apply format-specific readargs
         if "format_separator" in meta_data:
             if "sep" not in readargs:
                 readargs["sep"] = meta_data["format_separator"]
             elif readargs["sep"] != meta_data["format_separator"]:
                 log.write('  - format_separator will be changed to: "{}"'.format(readargs["sep"]), verbose=verbose)
-        
+
         if "format_na" in meta_data:
             readargs["na_values"] = meta_data["format_na"]
-        
+
         if "format_comment" in meta_data:
             readargs["comment"] = meta_data["format_comment"]
-        
+
         if "format_other_cols" in meta_data:
             other += meta_data["format_other_cols"]
-    
+
     # When fmt="auto", detect separator from file
     if fmt == "auto" and sumstats_path is not None and isinstance(sumstats_path, str):
         from gwaslab.bd.bd_sumstats_formats import read_header_and_rows
-        
+
         # Handle glob pattern (e.g. trait_*.txt) and "@" pattern for multi-chromosome files
         detection_path = sumstats_path
         if "*" in sumstats_path or "?" in sumstats_path:
@@ -92,16 +90,16 @@ def _load_format_config(*, fmt=None, readargs=None, other=None, log=None, verbos
                     if result:
                         detection_path = os.path.join(dirname, file)
                         break
-        
+
         _, _, meta = read_header_and_rows(detection_path)
         detected_sep = meta.get("delimiter", "\t")
         if "sep" not in readargs:
             readargs["sep"] = detected_sep
-            log.write('  - Detected separator: "{}"'.format(repr(detected_sep)), verbose=verbose)
-    
+            log.write(f'  - Detected separator: "{detected_sep!r}"', verbose=verbose)
+
     if "sep" not in readargs:
         readargs["sep"] = "\t"
-    
+
     return meta_data, rename_dictionary, readargs, other
 
 
@@ -141,45 +139,45 @@ def _build_column_mappings(*, column_params=None, rename_dictionary=None, usecol
             # Also remove from usecols if present
             if key in usecols:
                 usecols.remove(key)
-    
+
     # Standard column mappings
     column_mappings = [
-        ('snpid', "SNPID", None),
-        ('rsid', "rsID", None),
-        ('chrom', "CHR", "string"),
-        ('pos', "POS", None),
-        ('ea', "EA", "string"),
-        ('nea', "NEA", "string"),
-        ('ref', "REF", "string"),
-        ('alt', "ALT", "string"),
-        ('maf', "MAF", None),
-        ('beta', "BETA", None),
-        ('beta_95L', "BETA_95L", None),
-        ('beta_95U', "BETA_95U", None),
-        ('se', "SE", None),
-        ('chisq', "CHISQ", None),
-        ('z', "Z", None),
-        ('q', "Q", None),
-        ('p', "P", None),
-        ('t', "T", None),
-        ('f', "F", None),
-        ('mlog10p', "MLOG10P", None),
-        ('test', "TEST", None),
-        ('info', "INFO", None),
-        ('OR', "OR", None),
-        ('OR_95L', "OR_95L", None),
-        ('OR_95U', "OR_95U", None),
-        ('HR', "HR", None),
-        ('HR_95L', "HR_95L", None),
-        ('HR_95U', "HR_95U", None),
-        ('phet', "P_HET", None),
-        ('i2', "I2", None),
-        ('snpr2', "SNPR2", None),
-        ('dof', "DOF", None),
-        ('direction', "DIRECTION", None),
-        ('status', "STATUS", "Int64"),
+        ("snpid", "SNPID", None),
+        ("rsid", "rsID", None),
+        ("chrom", "CHR", "string"),
+        ("pos", "POS", None),
+        ("ea", "EA", "string"),
+        ("nea", "NEA", "string"),
+        ("ref", "REF", "string"),
+        ("alt", "ALT", "string"),
+        ("maf", "MAF", None),
+        ("beta", "BETA", None),
+        ("beta_95L", "BETA_95L", None),
+        ("beta_95U", "BETA_95U", None),
+        ("se", "SE", None),
+        ("chisq", "CHISQ", None),
+        ("z", "Z", None),
+        ("q", "Q", None),
+        ("p", "P", None),
+        ("t", "T", None),
+        ("f", "F", None),
+        ("mlog10p", "MLOG10P", None),
+        ("test", "TEST", None),
+        ("info", "INFO", None),
+        ("OR", "OR", None),
+        ("OR_95L", "OR_95L", None),
+        ("OR_95U", "OR_95U", None),
+        ("HR", "HR", None),
+        ("HR_95L", "HR_95L", None),
+        ("HR_95U", "HR_95U", None),
+        ("phet", "P_HET", None),
+        ("i2", "I2", None),
+        ("snpr2", "SNPR2", None),
+        ("dof", "DOF", None),
+        ("direction", "DIRECTION", None),
+        ("status", "STATUS", "Int64"),
     ]
-    
+
     for param_name, target_name, dtype in column_mappings:
         col_name = column_params.get(param_name)
         if col_name:
@@ -189,10 +187,10 @@ def _build_column_mappings(*, column_params=None, rename_dictionary=None, usecol
             rename_dictionary[col_name] = target_name
             if dtype:
                 dtype_dictionary[col_name] = dtype
-    
+
     # Handle EAF/NEAF (special case: neaf can be converted to eaf)
-    eaf = column_params.get('eaf')
-    neaf = column_params.get('neaf')
+    eaf = column_params.get("eaf")
+    neaf = column_params.get("neaf")
     if eaf:
         # Remove any existing mappings to EAF
         _remove_conflicting_mappings("EAF", rename_dictionary, usecols)
@@ -203,15 +201,15 @@ def _build_column_mappings(*, column_params=None, rename_dictionary=None, usecol
         _remove_conflicting_mappings("EAF", rename_dictionary, usecols)
         usecols.append(neaf)
         rename_dictionary[neaf] = "EAF"
-    
+
     # Handle numeric columns that can be str or int
     numeric_columns = [
-        ('n', "N"),
-        ('ncase', "N_CASE"),
-        ('ncontrol', "N_CONTROL"),
-        ('neff', "N_EFF"),
+        ("n", "N"),
+        ("ncase", "N_CASE"),
+        ("ncontrol", "N_CONTROL"),
+        ("neff", "N_EFF"),
     ]
-    
+
     for param_name, target_name in numeric_columns:
         col_name = column_params.get(param_name)
         if col_name and isinstance(col_name, str):
@@ -219,13 +217,13 @@ def _build_column_mappings(*, column_params=None, rename_dictionary=None, usecol
             _remove_conflicting_mappings(target_name, rename_dictionary, usecols)
             usecols.append(col_name)
             rename_dictionary[col_name] = target_name
-    
+
     # Handle other columns
-    other = column_params.get('other', [])
+    other = column_params.get("other", [])
     if other:
         overlapped = _check_overlap_with_reserved_keys(other)
         if overlapped:
-            log.warning("Columns with headers overlapping with GWASLab reserved keywords:{}".format(overlapped), verbose=verbose)
+            log.warning(f"Columns with headers overlapping with GWASLab reserved keywords:{overlapped}", verbose=verbose)
         usecols.extend(other)
         for col in other:
             rename_dictionary[col] = col
@@ -267,9 +265,9 @@ def _apply_column_filters(*, include=None, exclude=None, usecols=None, rename_di
         if standard_name not in standard_to_original:
             standard_to_original[standard_name] = []
         standard_to_original[standard_name].append(original_col)
-    
+
     usecols_set = set(usecols)
-    
+
     def _find_matching_columns(column_names):
         """
         Find all original column names that match the given column names.
@@ -281,7 +279,7 @@ def _apply_column_filters(*, include=None, exclude=None, usecols=None, rename_di
         matching_cols = []
         for col_name in column_names:
             found_any = False
-            
+
             # Check if it's a gwaslab standard name
             if col_name in standard_to_original:
                 # Find all original columns that map to this standard name
@@ -289,32 +287,32 @@ def _apply_column_filters(*, include=None, exclude=None, usecols=None, rename_di
                     if original_col in usecols_set:
                         matching_cols.append(original_col)
                         found_any = True
-            
+
             # Also check if it directly matches an original column name
             if not found_any and col_name in usecols_set:
                 matching_cols.append(col_name)
-        
+
         # Remove duplicates while preserving order
         seen = set()
         return [col for col in matching_cols if not (col in seen or seen.add(col))]
-    
+
     # Apply include filter: keep only specified columns
     if include:
         included_cols = _find_matching_columns(include)
         log.write(f' -Include columns :{",".join(included_cols)}', verbose=verbose)
         usecols = included_cols
-    
+
     # Apply exclude filter: remove specified columns
     if exclude:
         excluded_cols = _find_matching_columns(exclude)
         log.write(f' -Exclude columns :{",".join(excluded_cols)}', verbose=verbose)
         excluded_set = set(excluded_cols)
         usecols = [col for col in usecols if col not in excluded_set]
-    
+
     return usecols
 
 
-def _load_sumstats_data(*, sumstats=None, inpath=None, inpath_chr_list=None, inpath_chr_num_list=None, 
+def _load_sumstats_data(*, sumstats=None, inpath=None, inpath_chr_list=None, inpath_chr_num_list=None,
                         usecols=None, dtype_dictionary=None, readargs=None, rename_dictionary=None,
                         chrom_pat=None, snpid_pat=None, log=None, verbose=False):
     """Load sumstats data from file path or DataFrame."""
@@ -326,7 +324,7 @@ def _load_sumstats_data(*, sumstats=None, inpath=None, inpath_chr_list=None, inp
         )
     elif isinstance(sumstats, pd.DataFrame):
         return _load_sumstats_from_dataframe(
-            sumstats=sumstats, dtype_dictionary=dtype_dictionary, rename_dictionary=rename_dictionary, 
+            sumstats=sumstats, dtype_dictionary=dtype_dictionary, rename_dictionary=rename_dictionary,
             log=log, verbose=verbose
         )
     else:
@@ -340,7 +338,7 @@ def _load_sumstats_from_path(*, inpath=None, inpath_chr_list=None, inpath_chr_nu
     if inpath_chr_list:
         # Load multiple files (glob pattern or @ chromosome pattern)
         add_file_column = "*" in inpath or "?" in inpath  # only for glob, not for @
-        log.write("Start to initialize gl.Sumstats from {} file(s) :".format(len(inpath_chr_list)) + inpath, verbose=verbose)
+        log.write(f"Start to initialize gl.Sumstats from {len(inpath_chr_list)} file(s) :" + inpath, verbose=verbose)
         sumstats_chr_list = []
         for i in inpath_chr_list:
             log.write(" -Loading:" + i, verbose=verbose)
@@ -353,7 +351,7 @@ def _load_sumstats_from_path(*, inpath=None, inpath_chr_list=None, inpath_chr_nu
             if add_file_column:
                 sumstats_chr["FILE"] = i
             sumstats_chr_list.append(sumstats_chr)
-        log.write(" -Merging sumstats from {} file(s)".format(len(inpath_chr_list)), verbose=verbose)
+        log.write(f" -Merging sumstats from {len(inpath_chr_list)} file(s)", verbose=verbose)
         sumstats = pd.concat(sumstats_chr_list, axis=0, ignore_index=True)
         del sumstats_chr_list
         gc.collect()
@@ -363,7 +361,7 @@ def _load_sumstats_from_path(*, inpath=None, inpath_chr_list=None, inpath_chr_nu
         skip_rows = _get_skip_rows(inpath)
         readargs["skiprows"] = skip_rows
         log.write("Start to initialize gl.Sumstats from file :" + inpath, verbose=verbose)
-        
+
         if chrom_pat is not None:
             sumstats = _load_single_chr(
                 inpath=inpath, usecols=usecols, dtype_dictionary=dtype_dictionary, readargs=readargs,
@@ -406,17 +404,17 @@ def _postprocess_sumstats(*, sumstats=None, fmt=None, format_cols=None, study=No
     if fmt == "vcf":
         sumstats = _parse_vcf_study(sumstats, format_cols, study, vcf_usecols, log=log, verbose=verbose)
         usecols = vcf_usecols
-    
+
     # Log column information
     usecols_set = set(usecols)
     converted_columns = [rename_dictionary[x] for x in usecols_set]
     log.write(" -Reading columns          :", ",".join(usecols_set), verbose=verbose)
     log.write(" -Renaming columns to      :", ",".join(converted_columns), verbose=verbose)
     log.write(" -Current Dataframe shape :", len(sumstats), " x ", len(sumstats.columns), verbose=verbose)
-    
+
     # Rename columns
     sumstats = sumstats.rename(columns=rename_dictionary)
-    
+
     # Add constant numeric values if provided
     if isinstance(n, int):
         sumstats["N"] = n
@@ -424,29 +422,29 @@ def _postprocess_sumstats(*, sumstats=None, fmt=None, format_cols=None, study=No
         sumstats["N_CASE"] = ncase
     if isinstance(ncontrol, int):
         sumstats["N_CONTROL"] = ncontrol
-    
+
     # Process status
     sumstats = _process_status(sumstats=sumstats, build=build, status=status, log=log, verbose=verbose)
-    
+
     # Process alleles
     sumstats = _process_allele(sumstats=sumstats, log=log, rename_dictionary=rename_dictionary, verbose=verbose)
-    
+
     # Process NEAF to EAF
     if neaf is not None or ("NEAF" in sumstats.columns and "EAF" not in sumstats.columns):
         sumstats = _process_neaf(sumstats=sumstats, log=log, verbose=verbose)
-    
+
     # Sort columns and convert datatypes
     sumstats = _sort_column(sumstats_obj=sumstats, log=log, verbose=verbose)
     sumstats = quick_convert_datatype(sumstats, log=log, verbose=verbose)
-    
+
     # Create SNPID if missing
     sumstats = _ensure_snpid_column(sumstats=sumstats, log=log, verbose=verbose)
-    
+
     # Final checks
     check_datatype(sumstats, log=log, verbose=verbose)
     gc.collect()
     check_dataframe_memory_usage(sumstats, log=log, verbose=verbose)
-    
+
     return sumstats
 
 
@@ -691,49 +689,49 @@ def _preformat(sumstats,
     readargs, log, other, exclude, include = _initialize_preformat_parameters(
         readargs=readargs, kwreadargs=kwreadargs, log=log, other=other, exclude=exclude, include=include
     )
-    
+
     # Step 2: Handle parquet format (must be done before other processing)
     if tab_fmt == "parquet":
         if isinstance(sumstats, str):
             log.write("Start to load data from parquet file....", verbose=verbose)
-            log.write(" -path: {}".format(sumstats), verbose=verbose)
+            log.write(f" -path: {sumstats}", verbose=verbose)
             sumstats = pd.read_parquet(sumstats, **readargs)
             log.write("Finished loading parquet file into pd.DataFrame....", verbose=verbose)
         else:
             raise ValueError("Please input a path for parquet file.")
-    
+
     # Step 3: Load format configuration
     # Pass sumstats path for separator detection when fmt="auto"
     sumstats_path_for_detection = sumstats if isinstance(sumstats, str) else None
     meta_data, rename_dictionary, readargs, other = _load_format_config(
         fmt=fmt, readargs=readargs, other=other, log=log, verbose=verbose, sumstats_path=sumstats_path_for_detection
     )
-    
+
     # Initialize data structures
     usecols = []
     dtype_dictionary = {}
-    
+
     # Step 4: Check path and header, get available columns
     inpath, inpath_chr_list, inpath_chr_num_list, format_cols, raw_cols, usecols, dtype_dictionary = _check_path_and_header(
         sumstats, fmt, meta_data, readargs, usecols, dtype_dictionary, rename_dictionary, log, verbose
     )
-    
+
     # Step 5: Build column mappings from user parameters
     column_params = {
-        'snpid': snpid, 'rsid': rsid, 'chrom': chrom, 'pos': pos, 'ea': ea, 'nea': nea,
-        'ref': ref, 'alt': alt, 'eaf': eaf, 'neaf': neaf, 'maf': maf, 'n': n,
-        'ncase': ncase, 'ncontrol': ncontrol, 'neff': neff, 'beta': beta,
-        'beta_95L': beta_95L, 'beta_95U': beta_95U, 'se': se, 'chisq': chisq,
-        'z': z, 'q': q, 'p': p, 't': t, 'f': f, 'mlog10p': mlog10p, 'test': test,
-        'info': info, 'OR': OR, 'OR_95L': OR_95L, 'OR_95U': OR_95U, 'HR': HR,
-        'HR_95L': HR_95L, 'HR_95U': HR_95U, 'i2': i2, 'snpr2': snpr2, 'phet': phet,
-        'dof': dof, 'direction': direction, 'status': status, 'other': other
+        "snpid": snpid, "rsid": rsid, "chrom": chrom, "pos": pos, "ea": ea, "nea": nea,
+        "ref": ref, "alt": alt, "eaf": eaf, "neaf": neaf, "maf": maf, "n": n,
+        "ncase": ncase, "ncontrol": ncontrol, "neff": neff, "beta": beta,
+        "beta_95L": beta_95L, "beta_95U": beta_95U, "se": se, "chisq": chisq,
+        "z": z, "q": q, "p": p, "t": t, "f": f, "mlog10p": mlog10p, "test": test,
+        "info": info, "OR": OR, "OR_95L": OR_95L, "OR_95U": OR_95U, "HR": HR,
+        "HR_95L": HR_95L, "HR_95U": HR_95U, "i2": i2, "snpr2": snpr2, "phet": phet,
+        "dof": dof, "direction": direction, "status": status, "other": other
     }
     _build_column_mappings(
-        column_params=column_params, rename_dictionary=rename_dictionary, 
+        column_params=column_params, rename_dictionary=rename_dictionary,
         usecols=usecols, dtype_dictionary=dtype_dictionary, log=log, verbose=verbose
     )
-    
+
     # Step 6: Handle VCF format special case
     vcf_usecols = None
     if fmt == "vcf":
@@ -744,44 +742,44 @@ def _preformat(sumstats,
         else:
             study = raw_cols[9]
             usecols = usecols + [study]
-    
+
     # Step 7: Apply include/exclude filters
     usecols = _apply_column_filters(
-        include=include, exclude=exclude, usecols=usecols, 
+        include=include, exclude=exclude, usecols=usecols,
         rename_dictionary=rename_dictionary, log=log, verbose=verbose
     )
-    
+
     # Step 8: Load data
     sumstats = _load_sumstats_data(
         sumstats=sumstats, inpath=inpath, inpath_chr_list=inpath_chr_list, inpath_chr_num_list=inpath_chr_num_list,
         usecols=usecols, dtype_dictionary=dtype_dictionary, readargs=readargs, rename_dictionary=rename_dictionary,
         chrom_pat=chrom_pat, snpid_pat=snpid_pat, log=log, verbose=verbose
     )
-    
+
     # Step 9: Post-process data (rename, transform, validate)
     sumstats = _postprocess_sumstats(
         sumstats=sumstats, fmt=fmt, format_cols=format_cols, study=study, vcf_usecols=vcf_usecols, usecols=usecols,
-        rename_dictionary=rename_dictionary, n=n, ncase=ncase, ncontrol=ncontrol, 
+        rename_dictionary=rename_dictionary, n=n, ncase=ncase, ncontrol=ncontrol,
         build=build, status=status, neaf=neaf, log=log, verbose=verbose
     )
-    
+
     log.write("Finished loading data successfully!", verbose=verbose)
     return sumstats
 
 
 #### helper #######################################################################
 def _isfile_casesensitive(path):
-    if not os.path.isfile(path): 
+    if not os.path.isfile(path):
         return False   # exit early
     directory, filename = os.path.split(path)
     return filename in os.listdir(directory)
 
 def _get_readargs_header(inpath,readargs):
     if "vcf.gz" in inpath:
-        with gzip.open(inpath,'r') as file:      
+        with gzip.open(inpath,"r") as file:
             skip=0
-            for line in file:        
-                if line.decode('utf-8').startswith('##'):
+            for line in file:
+                if line.decode("utf-8").startswith("##"):
                     skip+=1
                 else:
                     readargs["skiprows"]=skip
@@ -794,10 +792,10 @@ def _get_readargs_header(inpath,readargs):
 
 def _get_skip_rows(inpath):
     if "vcf.gz" in inpath:
-        with gzip.open(inpath,'r') as file:      
+        with gzip.open(inpath,"r") as file:
             skip=0
-            for line in file:        
-                if line.decode('utf-8').startswith('##'):
+            for line in file:
+                if line.decode("utf-8").startswith("##"):
                     skip+=1
                 else:
                     return skip
@@ -814,7 +812,7 @@ def _parse_vcf_study(sumstats,format_cols,study,vcf_usecols,log,verbose=True):
     return sumstats
 
 def _print_format_info(fmt,meta_data, rename_dictionary, verbose, log,output=False, skip_meta_records=None):
-    log.write(" -"+fmt+" format meta info:",verbose=verbose)   
+    log.write(" -"+fmt+" format meta info:",verbose=verbose)
     if skip_meta_records is None:
         skip_meta_records =[]
     for key,value in meta_data.items():
@@ -827,15 +825,15 @@ def _print_format_info(fmt,meta_data, rename_dictionary, verbose, log,output=Fal
                 value_first_line=value.split("\n")[0]
                 log.write("  -",key," : "+value_first_line.strip()+"...",verbose=verbose)
             elif value==" ":
-                log.write('  -',key,' : \\s ',verbose=verbose)     
+                log.write("  -",key," : \\s ",verbose=verbose)
             elif value=="\t":
-                log.write('  -',key,' : \\t',verbose=verbose)    
+                log.write("  -",key," : \\t",verbose=verbose)
             else:
-                log.write("  -",key," : "+value.strip(),verbose=verbose)  
+                log.write("  -",key," : "+value.strip(),verbose=verbose)
         elif type(value) is list:
-            log.write("  -",key," : "+','.join(value),verbose=verbose)  
+            log.write("  -",key," : "+",".join(value),verbose=verbose)
         else:
-            log.write("  -",key," : ",value,verbose=verbose)  
+            log.write("  -",key," : ",value,verbose=verbose)
     keys=[]
     values=[]
     for key,value in rename_dictionary.items():
@@ -844,79 +842,79 @@ def _print_format_info(fmt,meta_data, rename_dictionary, verbose, log,output=Fal
     if fmt!="gwaslab":
         if output == False:
             if fmt!="auto":
-                log.write(" -"+fmt+" to gwaslab format dictionary:",verbose=verbose)  
-                log.write("  - "+fmt+" keys:",",".join(keys),verbose=verbose) 
-                log.write("  - gwaslab values:",",".join(values),verbose=verbose) 
+                log.write(" -"+fmt+" to gwaslab format dictionary:",verbose=verbose)
+                log.write("  - "+fmt+" keys:",",".join(keys),verbose=verbose)
+                log.write("  - gwaslab values:",",".join(values),verbose=verbose)
             else:
                 log.write("  - Auto-detection mode. Note: auto-detection assumes A1=EA; Alt=EA and Frq=EAF...",verbose=verbose)
-                log.write("  - Header conversion source: https://github.com/Cloufield/formatbook/blob/main/formats/auto.json",verbose=verbose)  
+                log.write("  - Header conversion source: https://github.com/Cloufield/formatbook/blob/main/formats/auto.json",verbose=verbose)
         else:
-            log.write(" -gwaslab to "+fmt+" format dictionary:",verbose=verbose)  
+            log.write(" -gwaslab to "+fmt+" format dictionary:",verbose=verbose)
             keys=[]
             values=[]
             for key,value in rename_dictionary.items():
                 keys.append(key)
                 values.append(value)
-            log.write("  - gwaslab keys:",  ','.join(keys),verbose=verbose) 
-            log.write("  - "+fmt+" values:"  , ','.join(values),verbose=verbose)       
+            log.write("  - gwaslab keys:",  ",".join(keys),verbose=verbose)
+            log.write("  - "+fmt+" values:"  , ",".join(values),verbose=verbose)
 
 def _process_neaf(sumstats,log,verbose):
-    log.write(" -NEAF is specified...",verbose=verbose) 
+    log.write(" -NEAF is specified...",verbose=verbose)
     pre_number=len(sumstats)
-    log.write(" -Checking if 0<= NEAF <=1 ...",verbose=verbose) 
+    log.write(" -Checking if 0<= NEAF <=1 ...",verbose=verbose)
     if "NEAF" in sumstats.columns:
-        sumstats["NEAF"] = pd.to_numeric(sumstats["NEAF"], errors='coerce')
+        sumstats["NEAF"] = pd.to_numeric(sumstats["NEAF"], errors="coerce")
         sumstats = sumstats.loc[(sumstats["NEAF"]>=0) & (sumstats["NEAF"]<=1),:].copy()
         sumstats.loc[:, "EAF"] = 1 - sumstats["NEAF"]
         sumstats.drop(columns=["NEAF"], inplace=True)
     else:
-        sumstats["EAF"] = pd.to_numeric(sumstats["EAF"], errors='coerce')
+        sumstats["EAF"] = pd.to_numeric(sumstats["EAF"], errors="coerce")
         sumstats = sumstats.loc[(sumstats["EAF"]>=0) & (sumstats["EAF"]<=1),:].copy()
         sumstats.loc[:, "EAF"] = 1 - sumstats["EAF"]
-    log.write(" -Converted NEAF to EAF.",verbose=verbose) 
+    log.write(" -Converted NEAF to EAF.",verbose=verbose)
     after_number=len(sumstats)
     removed_count = pre_number - after_number
-    log.write(" -Removed "+str(removed_count)+" variants with bad NEAF.",verbose=verbose if removed_count > 0 else False) 
+    log.write(" -Removed "+str(removed_count)+" variants with bad NEAF.",verbose=verbose if removed_count > 0 else False)
     return sumstats
 
 def _process_allele(sumstats,
                    log,
                    rename_dictionary,
                    verbose):
-    
+
     if "EA" in sumstats.columns:
 
         if "REF" in sumstats.columns and "ALT" in sumstats.columns:
 
             if "NEA" not in sumstats.columns:
-                log.write(" NEA not available: assigning REF to NEA...",verbose=verbose) 
-                sumstats["NEA"]=sumstats["REF"]    
-            
-            log.write(" -EA,REF and ALT columns are available: assigning NEA...",verbose=verbose) 
+                log.write(" NEA not available: assigning REF to NEA...",verbose=verbose)
+                sumstats["NEA"]=sumstats["REF"]
+
+            log.write(" -EA,REF and ALT columns are available: assigning NEA...",verbose=verbose)
             ea_alt = sumstats["EA"]==sumstats["ALT"]
-            
-            log.write(" -For variants with EA == ALT : assigning REF to NEA ...",verbose=verbose) 
+
+            log.write(" -For variants with EA == ALT : assigning REF to NEA ...",verbose=verbose)
             sumstats.loc[ea_alt,"NEA"] = sumstats.loc[ea_alt,"REF"]
-            
+
             ea_not_alt = sumstats["EA"]!=sumstats["ALT"]
-            log.write(" -For variants with EA != ALT : assigning ALT to NEA ...",verbose=verbose) 
+            log.write(" -For variants with EA != ALT : assigning ALT to NEA ...",verbose=verbose)
             sumstats.loc[ea_not_alt,"NEA"] = sumstats.loc[ea_not_alt,"ALT"]
 
             #sumstats = sumstats.drop(labels=["REF","ALT"],axis=1)
-            sumstats["REF"]=sumstats["REF"].astype("category") 
-            sumstats["ALT"]=sumstats["ALT"].astype("category") 
-            
-        sumstats["EA"]=sumstats["EA"].astype("category")     
+            sumstats["REF"]=sumstats["REF"].astype("category")
+            sumstats["ALT"]=sumstats["ALT"].astype("category")
+
+        sumstats["EA"]=sumstats["EA"].astype("category")
     if "NEA" in sumstats.columns:
-        sumstats["NEA"]=sumstats["NEA"].astype("category")  
+        sumstats["NEA"]=sumstats["NEA"].astype("category")
 
     if "NEA" not in sumstats.columns and "EA" not in sumstats.columns:
         if "REF" in sumstats.columns and "ALT" in sumstats.columns:
             log.write(" -Converting REF and ALT to NEA and EA ...")
-            sumstats["REF"]=sumstats["REF"].astype("category") 
-            sumstats["ALT"]=sumstats["ALT"].astype("category") 
-            sumstats["NEA"]=sumstats["REF"].astype("category") 
-            sumstats["EA"]=sumstats["ALT"].astype("category") 
+            sumstats["REF"]=sumstats["REF"].astype("category")
+            sumstats["ALT"]=sumstats["ALT"].astype("category")
+            sumstats["NEA"]=sumstats["REF"].astype("category")
+            sumstats["EA"]=sumstats["ALT"].astype("category")
             sumstats = sumstats.drop(columns=["ALT","REF"])
     return sumstats
 
@@ -929,11 +927,11 @@ def _process_status(sumstats,build,status, log,verbose):
         sumstats["STATUS"] = int(build + "99999")
 
     # Convert STATUS to integer if it's string (for backward compatibility)
-    if sumstats["STATUS"].dtype == 'object' or sumstats["STATUS"].dtype.name == 'category':
+    if sumstats["STATUS"].dtype == "object" or sumstats["STATUS"].dtype.name == "category":
         sumstats["STATUS"] = sumstats["STATUS"].astype(str).astype(int)
-    elif sumstats["STATUS"].dtype not in ['int64', 'Int64', 'int32', 'Int32']:
+    elif sumstats["STATUS"].dtype not in ["int64", "Int64", "int32", "Int32"]:
         sumstats["STATUS"] = sumstats["STATUS"].astype(int)
-    
+
     return sumstats
 
 
@@ -942,21 +940,21 @@ def _load_single_chr(*, inpath=None, usecols=None, dtype_dictionary=None, readar
     readargs = {k: v for k, v in readargs.items() if k not in explicit}
     sumstats_iter = pd.read_table(inpath,
                 usecols=set(usecols),
-                dtype=dtype_dictionary, 
-                iterator=True, 
+                dtype=dtype_dictionary,
+                iterator=True,
                 chunksize=500000,
                 **readargs)
-    # get chr 
+    # get chr
     for k,v in rename_dictionary.items():
         if v=="CHR":
             if k in usecols:
-                log.write(" -Columns used to filter variants: {}".format(k),verbose=verbose)
+                log.write(f" -Columns used to filter variants: {k}",verbose=verbose)
                 chunk_chrom = k
                 break
 
-    log.write(" -Loading only variants on chromosome with pattern : {} ...".format(chrom_pat),verbose=verbose)
+    log.write(f" -Loading only variants on chromosome with pattern : {chrom_pat} ...",verbose=verbose)
     sumstats_filtered = pd.concat([chunk[chunk[chunk_chrom].str.match(chrom_pat, case=False,na=False) ] for chunk in sumstats_iter])
-    log.write(" -Loaded {} variants on chromosome with pattern :{} ...".format(len(sumstats_filtered), chrom_pat),verbose=verbose)
+    log.write(f" -Loaded {len(sumstats_filtered)} variants on chromosome with pattern :{chrom_pat} ...",verbose=verbose)
     return sumstats_filtered
 
 def _load_variants_with_pattern(*, inpath=None, usecols=None, dtype_dictionary=None, readargs=None, rename_dictionary=None, snpid_pat=None, log=None, verbose=False):
@@ -964,55 +962,55 @@ def _load_variants_with_pattern(*, inpath=None, usecols=None, dtype_dictionary=N
     readargs = {k: v for k, v in readargs.items() if k not in explicit}
     sumstats_iter = pd.read_table(inpath,
                 usecols=set(usecols),
-                dtype=dtype_dictionary, 
-                iterator=True, 
+                dtype=dtype_dictionary,
+                iterator=True,
                 chunksize=500000,
                 **readargs)
-    # get chr 
+    # get chr
     for k,v in rename_dictionary.items():
         if v=="SNPID":
             if k in usecols:
-                log.write(" -Columns used to filter variants: {}".format(k),verbose=verbose)
+                log.write(f" -Columns used to filter variants: {k}",verbose=verbose)
                 chunk_snpid = k
                 break
 
-    log.write(" -Loading only variants with pattern :  {} ...".format(snpid_pat),verbose=verbose)
+    log.write(f" -Loading only variants with pattern :  {snpid_pat} ...",verbose=verbose)
     sumstats_filtered = pd.concat([chunk[chunk[chunk_snpid].str.match(snpid_pat, case=False,na=False) ] for chunk in sumstats_iter])
-    log.write(" -Loaded {} variants with pattern : {} ...".format(len(sumstats_filtered), snpid_pat),verbose=verbose)
+    log.write(f" -Loaded {len(sumstats_filtered)} variants with pattern : {snpid_pat} ...",verbose=verbose)
     return sumstats_filtered
 
 
-def _check_path_and_header(sumstats=None, 
-                          fmt=None, 
-                          meta_data=None, 
-                          readargs=None, 
-                          usecols=None, 
-                          dtype_dictionary=None, 
-                          rename_dictionary=None, 
-                          log=None, 
+def _check_path_and_header(sumstats=None,
+                          fmt=None,
+                          meta_data=None,
+                          readargs=None,
+                          usecols=None,
+                          dtype_dictionary=None,
+                          rename_dictionary=None,
+                          log=None,
                           verbose=None):
-    
+
 
     if isinstance(sumstats, str):
         ## loading data from path #################################################
         inpath = sumstats
-        
+
         try:
             format_cols, raw_cols, inpath_chr_list, inpath_chr_num_list = _process_inpath_and_load_header(inpath, fmt, meta_data,  readargs, log, verbose)
-        
+
         except (FileNotFoundError, IndexError):
-            log.warning("Loading {} failed...Tesing if compressed/uncompressed...".format(inpath),verbose=verbose)
+            log.warning(f"Loading {inpath} failed...Tesing if compressed/uncompressed...",verbose=verbose)
             try:
                 if inpath[-3:]==".gz":
                     inpath = inpath[:-3]
-                    log.write(" -Trying to load {}...".format(inpath),verbose=verbose)
+                    log.write(f" -Trying to load {inpath}...",verbose=verbose)
                     format_cols, raw_cols, inpath_chr_list, inpath_chr_num_list = _process_inpath_and_load_header(inpath, fmt, meta_data,  readargs, log, verbose)
                 else:
                     inpath = inpath+".gz"
-                    log.write(" -Trying to load {}...".format(inpath),verbose=verbose)
+                    log.write(f" -Trying to load {inpath}...",verbose=verbose)
                     format_cols, raw_cols, inpath_chr_list, inpath_chr_num_list = _process_inpath_and_load_header(inpath, fmt, meta_data,  readargs, log, verbose)
             except:
-                raise ValueError("Please input a valid path, and make sure the separator is correct and the columns you specified are in the file.") 
+                raise ValueError("Please input a valid path, and make sure the separator is correct and the columns you specified are in the file.")
 
         # Always detect format (even when fmt is specified, for validation)
         if inpath is not None:
@@ -1021,7 +1019,7 @@ def _check_path_and_header(sumstats=None,
                 # For multi-chromosome files, use the first file; otherwise use the single file path
                 detection_path = inpath_chr_list[0] if (inpath_chr_list and len(inpath_chr_list) > 0) else inpath
                 detection_result = detect_sumstats_format(detection_path)
-                
+
                 # Show top 3 matching formats in one line
                 if "top" in detection_result and len(detection_result["top"]) > 0:
                     top_formats = detection_result["top"][:3]
@@ -1033,14 +1031,14 @@ def _check_path_and_header(sumstats=None,
                         if detection_result.get("best_format") == fmt_name:
                             markers.append("[DETECTED]")
                         marker_str = " " + " ".join(markers) if markers else ""
-                        format_list.append("{}. {}{} (score: {:.3f})".format(i, fmt_name, marker_str, score))
+                        format_list.append(f"{i}. {fmt_name}{marker_str} (score: {score:.3f})")
                     log.write(" -Top 3 inferred source formats:", verbose=verbose)
                     log.write("   " + " | ".join(format_list), verbose=verbose)
             except Exception:
                 # Silently fail format detection if it errors (don't interrupt loading)
                 pass
 
-        ###################################################################################### 
+        ######################################################################################
     elif isinstance(sumstats, pd.DataFrame):
         inpath = None
         format_cols = None
@@ -1052,20 +1050,20 @@ def _check_path_and_header(sumstats=None,
     ################################################
     for key,value in rename_dictionary.items():
         # check available keys  key->raw header
-        # usecols : a list of raw headers to load from file/DataFrame 
+        # usecols : a list of raw headers to load from file/DataFrame
         if key in raw_cols:
             usecols.append(key)
         if value in ["EA","NEA"]:
             dtype_dictionary[key]="category"
         if value in ["STATUS"]:
-            dtype_dictionary[key]="string"     
+            dtype_dictionary[key]="string"
         if value in ["CHR"]:
-            dtype_dictionary[key]="string"  
+            dtype_dictionary[key]="string"
 
     return inpath, inpath_chr_list, inpath_chr_num_list, format_cols, raw_cols, usecols, dtype_dictionary
 
 def _process_inpath_and_load_header(inpath, fmt, meta_data,  readargs, log, verbose):
-    
+
     format_cols = None
     inpath_chr_list = None
     inpath_chr_num_list = None
@@ -1074,8 +1072,8 @@ def _process_inpath_and_load_header(inpath, fmt, meta_data,  readargs, log, verb
     if "*" in inpath or "?" in inpath:
         expanded = sorted(glob.glob(inpath))
         if not expanded:
-            raise FileNotFoundError("No files match pattern: {}".format(inpath))
-        log.write(" -Detected glob pattern: loading {} matching file(s)...".format(len(expanded)), verbose=verbose)
+            raise FileNotFoundError(f"No files match pattern: {inpath}")
+        log.write(f" -Detected glob pattern: loading {len(expanded)} matching file(s)...", verbose=verbose)
         inpath_chr_list = expanded
         inpath_chr_num_list = [os.path.basename(p) for p in expanded]
         readargs_header = _get_readargs_header(inpath=inpath_chr_list[0], readargs=readargs)
@@ -1090,16 +1088,16 @@ def _process_inpath_and_load_header(inpath, fmt, meta_data,  readargs, log, verb
         log.write(" -Detected @ in path: load sumstats by each chromosome...",verbose=verbose)
         inpath_chr_list=[]
         inpath_chr_num_list=[]
-        
+
         # create a regex pattern for matching
         pat = os.path.basename(inpath).replace("@", r"(\w+)")
-        
+
         # get dir
         dirname = os.path.dirname(inpath)
-        
+
         # all files in the directory
         files = os.listdir(dirname)
-        
+
         files.sort()
 
         for file in files:
@@ -1110,7 +1108,7 @@ def _process_inpath_and_load_header(inpath, fmt, meta_data,  readargs, log, verb
                 chr_matched = str(result.group(1))
                 inpath_chr_num_list.append(chr_matched)
                 inpath_chr_list.append(inpath.replace("@",str(chr_matched))  )
-        
+
         log.write(" -Chromosomes detected:",",".join(inpath_chr_num_list),verbose=verbose)
 
         #if inpath_chr_list is empty-> IndexError

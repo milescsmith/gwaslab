@@ -1,20 +1,20 @@
-import numpy as np
-from tqdm import tqdm
-import scipy.linalg as la
-import sys
-import numba
 import copy
-import random
 import functools
-from scipy.optimize import minimize_scalar
-from scipy.optimize import minimize
+import random
+import sys
+
+import numba
+import numpy as np
+import scipy.linalg as la
+from scipy.optimize import minimize, minimize_scalar
+from tqdm import tqdm
 
 
-class S: 
+class S:
     def __init__(
-            self, pop_sizes, L, XTX_list, scaled_prior_variance, 
+            self, pop_sizes, L, XTX_list, scaled_prior_variance,
             residual_variance, varY, prior_weights, float_type = np.float32):
-        
+
         #code from init_setup
         num_pop = len(pop_sizes)
         p = XTX_list[0].shape[0]
@@ -26,7 +26,7 @@ class S:
         self.pi = prior_weights.astype(float_type)
         self.n = np.array(pop_sizes)
         self.L = L
-        
+
         #code from init_finalize
         self.V = scaled_prior_variance * varY + np.zeros((num_pop, L), dtype=float_type)
         self.V = self.V.astype(float_type)
@@ -34,7 +34,7 @@ class S:
         self.ER2 = np.zeros(num_pop, dtype=float_type) + np.nan
         self.KL = np.zeros(L, dtype=float_type) + np.nan
         self.lbf = np.zeros(L, dtype=float_type) + np.nan
-        
+
         self.converged = False
 
 class SER_RESULTS:
@@ -57,11 +57,11 @@ def multisusie_rss(
     L = 10,
     scaled_prior_variance = 0.2,
     prior_weights = None,
-    standardize = False, 
+    standardize = False,
     pop_spec_standardization = True,
     estimate_residual_variance = True,
     estimate_prior_variance = True,
-    estimate_prior_method = 'early_EM',
+    estimate_prior_method = "early_EM",
     pop_spec_effect_priors = True,
     iter_before_zeroing_effects = 5,
     prior_tol = 1e-9,
@@ -250,17 +250,17 @@ def multisusie_rss(
         - Implement missing functionality for individual-level multisusie
     """
 
-    
+
     # provide exactly one of (b_list and s_list) and z_list
     if (z_list is not None) & ((b_list is not None) or (s_list is not None)):
-        raise ValueError('provide either (b_list and s_list) or z_list, but not both. ' + \
-                         'See the parameters section of help(multisusie_rss) for more information')
+        raise ValueError("provide either (b_list and s_list) or z_list, but not both. " \
+                         "See the parameters section of help(multisusie_rss) for more information")
     if (z_list is None) & (b_list is None) & (s_list is None):
-        raise ValueError('provide either (b_list and s_list) or z_list, but not both')
+        raise ValueError("provide either (b_list and s_list) or z_list, but not both")
     if (b_list is not None) & ((s_list is None) | (varY_list is None)):
-        raise ValueError('if b_list is provided, s_list and varY_list must also be provided')
+        raise ValueError("if b_list is provided, s_list and varY_list must also be provided")
     if population_sizes is None:
-        raise ValueError('population_sizes must be provided')
+        raise ValueError("population_sizes must be provided")
 
 
     # check input list lengths
@@ -275,7 +275,7 @@ def multisusie_rss(
     assert len(population_sizes) == K
     assert np.isscalar(rho) | ((rho.shape[0] == K) & (rho.shape[1] == K))
 
-    # make copies of R if low_memory_mode=False to avoid modifying the input data 
+    # make copies of R if low_memory_mode=False to avoid modifying the input data
     if low_memory_mode:
         R_list_copy = R_list
         if z_list is None:
@@ -283,11 +283,11 @@ def multisusie_rss(
             s_list_copy = s_list
         else:
             z_list_copy = z_list
-        print('low memory mode is on. THE INPUT R MATRICES HAVE BEEN ' +
-            'TRANSFORMED INTO XTX AND CENSORED BASED ON MISSINGNESS. ' +
-            'THE INPUT R MATRICES HAVE BEEN CHANGED. The datatypes of ' +
-            'b_list, s_list, and R_list have been mutated in place ' +
-            'to match float_type')
+        print("low memory mode is on. THE INPUT R MATRICES HAVE BEEN "
+            "TRANSFORMED INTO XTX AND CENSORED BASED ON MISSINGNESS. "
+            "THE INPUT R MATRICES HAVE BEEN CHANGED. The datatypes of "
+            "b_list, s_list, and R_list have been mutated in place "
+            "to match float_type")
     else:
         R_list_copy = [np.copy(R) for R in R_list]
         if z_list is None:
@@ -303,9 +303,8 @@ def multisusie_rss(
                 b_list_copy[i] = b_list_copy[i].astype(float_type, copy = False)
             if s_list_copy[i].dtype != float_type:
                 s_list_copy[i] = s_list_copy[i].astype(float_type, copy = False)
-        else:
-            if z_list_copy[i].dtype != float_type:
-                z_list_copy[i] = z_list_copy[i].astype(float_type, copy = False)
+        elif z_list_copy[i].dtype != float_type:
+            z_list_copy[i] = z_list_copy[i].astype(float_type, copy = False)
         if R_list_copy[i].dtype != float_type:
             R_list_copy[i] = R_list_copy[i].astype(float_type, copy = False)
         if (not np.isscalar(rho)) and (rho.dtype != float_type):
@@ -362,15 +361,15 @@ def multisusie_rss(
                 maf = 1 / 2 - np.sqrt(1 - 2 * var_x) / 2
                 mac = np.minimum(2 * n * maf, 2 * n - 2 * n * maf)
             else:
-                print(f'Skipping MAC filtering because mac_list is not provided,' +
-                      'maf_list is not provided, and z-scores are being used')
+                print("Skipping MAC filtering because mac_list is not provided,"
+                      "maf_list is not provided, and z-scores are being used")
                 continue
             low_mac_mask = mac < single_population_mac_thresh
             XTX_list[i][low_mac_mask, :] = 0
             XTX_list[i][:, low_mac_mask] = 0
             XTY_list[i][low_mac_mask] = 0
-            print(f'Censored {np.sum(low_mac_mask)} variants in population {i}' +
-                  ' due to low population-specific MAC')
+            print(f"Censored {np.sum(low_mac_mask)} variants in population {i}"
+                  " due to low population-specific MAC")
 
     # do minor allele frequency filtering across populations. this filter
     # only censors a variant if it has low MAF in all populations
@@ -386,11 +385,11 @@ def multisusie_rss(
                 var_x = np.minimum(np.diag(XTX_list[i]) / (n - 1), .5)
                 maf = 1 / 2 - np.sqrt(1 - 2 * var_x) / 2
             else:
-                print(f'Skipping MAF filtering because mac_list is not provided,' +
-                      'maf_list is not provided, and z-scores are being used')
+                print("Skipping MAF filtering because mac_list is not provided,"
+                      "maf_list is not provided, and z-scores are being used")
             low_maf_across_populations_mask = low_maf_across_populations_mask & (maf < multi_population_maf_thresh)
-        print(f'Censored {np.sum(low_maf_across_populations_mask)} variants in' +
-            ' all populations due to low MAF across all populations')
+        print(f"Censored {np.sum(low_maf_across_populations_mask)} variants in"
+            " all populations due to low MAF across all populations")
         for i in range(K):
             XTX_list[i][low_maf_across_populations_mask, :] = 0
             XTX_list[i][:, low_maf_across_populations_mask] = 0
@@ -401,14 +400,14 @@ def multisusie_rss(
     if np.isscalar(rho):
         rho = np.ones((K, K), dtype=float_type) * rho
         rho[np.diag_indices(K)] = 1
-    
+
     s = susie_multi_ss(
         XTX_list = XTX_list,
-        XTY_list = XTY_list, 
-        YTY_list = YTY_list, 
-        rho = rho, 
+        XTY_list = XTY_list,
+        YTY_list = YTY_list,
+        rho = rho,
         population_sizes = population_sizes,
-        L = L, 
+        L = L,
         scaled_prior_variance = scaled_prior_variance,
         prior_weights = prior_weights,
         standardize = standardize,
@@ -504,7 +503,7 @@ def susie_multi_ss(
     pop_spec_standardization = False,
     estimate_residual_variance=True,
     estimate_prior_variance=True,
-    estimate_prior_method='early_EM',
+    estimate_prior_method="early_EM",
     pop_spec_effect_priors = True,
     iter_before_zeroing_effects = 5,
     prior_tol=1e-9,
@@ -608,16 +607,16 @@ def susie_multi_ss(
     #check input dimensions
     assert len(XTX_list) == len(XTY_list)
     assert np.all([XTX.shape[1] == XTX_list[0].shape[1] for XTX in XTX_list])
-    assert np.all([XTX.shape[0] == XTY.shape[0] for (XTX,XTY) in zip(XTX_list, XTY_list)])
+    assert np.all([XTX.shape[0] == XTY.shape[0] for (XTX,XTY) in zip(XTX_list, XTY_list, strict=False)])
     if prior_weights is not None:
         prior_weights = prior_weights.astype(float_type)
 
     assert not np.any([np.any(np.isnan(XTX)) for XTX in XTX_list])
-        
+
     #compute w_pop (the relative size of each population)
     population_sizes = np.array(population_sizes)
     w_pop = (population_sizes/ population_sizes.sum()).astype(float_type)
-    
+
     #compute rho properties
     rho = rho.astype(float_type)
     logdet_rho_sign, logdet_rho = np.linalg.slogdet(rho)
@@ -638,7 +637,7 @@ def susie_multi_ss(
         X_l2_arr = np.array([np.diag(XTX) for XTX in XTX_list], dtype = float_type)
     else:
         csd = np.ones((len(XTX_list), XTX_list[0].shape[1]), dtype = float_type)
-    varY = np.array([YTY/(n-1) for (YTY, n) in zip(YTY_list, population_sizes)], dtype = float_type)
+    varY = np.array([YTY/(n-1) for (YTY, n) in zip(YTY_list, population_sizes, strict=False)], dtype = float_type)
     varY_pooled = (np.sum(YTY_list) / (np.sum(population_sizes) - 1)).astype(float_type)
     residual_variance = varY
 
@@ -652,7 +651,7 @@ def susie_multi_ss(
     else:
         prior_weights = (prior_weights / np.sum(prior_weights)).astype(float_type)
     assert prior_weights.shape[0] == p
-    if p<L: L=p
+    L = min(L, p)
 
     # initialize s, which tracks the current model parameter estimates
     s = S(
@@ -663,23 +662,23 @@ def susie_multi_ss(
     elbo = np.zeros(max_iter+1) + np.nan
     elbo[0] = -np.inf
     check_null_threshold = 0.0
-    
+
     ### start iterations ###
     tqdm_iter = tqdm(list(range(max_iter)), disable=not verbose, file=sys.stdout)
     for i in tqdm_iter:
-        tqdm_iter.set_description('iteration %d/%d'%(i+1, max_iter))
+        tqdm_iter.set_description("iteration %d/%d"%(i+1, max_iter))
 
         # set the prior variance estimation method for this iteration
-        if estimate_prior_method == 'early_EM':
-            if i == 0: 
+        if estimate_prior_method == "early_EM":
+            if i == 0:
                 current_estimate_prior_method = None
             else:
-                current_estimate_prior_method = 'early_EM'
-        elif (estimate_prior_method is not None) and (estimate_prior_method.split('_')[-1] == 'init'):
+                current_estimate_prior_method = "early_EM"
+        elif (estimate_prior_method is not None) and (estimate_prior_method.split("_")[-1] == "init"):
             if i == 0:
-                current_estimate_prior_method = estimate_prior_method.split('_')[0]
+                current_estimate_prior_method = estimate_prior_method.split("_")[0]
             else:
-                current_estimate_prior_method = 'EM'
+                current_estimate_prior_method = "EM"
         else:
             current_estimate_prior_method = estimate_prior_method
 
@@ -698,13 +697,13 @@ def susie_multi_ss(
             float_type = float_type
         )
 
-        # update the ER2 parameter of s. Used by get_objective and 
+        # update the ER2 parameter of s. Used by get_objective and
         # estimate_resdiaul_variance_func
         s.ER2 = update_ER2(XTX_list, XTY_list, YTY_list, s, X_l2_arr)
 
         # update the ELBO and check for convergence
         elbo[i+1] = get_objective(XTX_list, XTY_list, s, YTY_list, X_l2_arr)
-        tqdm_iter.set_postfix(objective="{:.6f}".format(elbo[i]))
+        tqdm_iter.set_postfix(objective=f"{elbo[i]:.6f}")
         if ((elbo[i+1] - elbo[i]) < tol) and (i >= (iter_before_zeroing_effects + 1)):
             s.converged = True
             tqdm_iter.close()
@@ -712,19 +711,19 @@ def susie_multi_ss(
 
         if estimate_residual_variance:
             s.sigma2 = estimate_residual_variance_func(
-                XTX_list, XTY_list, YTY_list, s, X_l2_arr, population_sizes, 
+                XTX_list, XTY_list, YTY_list, s, X_l2_arr, population_sizes,
                 float_type = float_type
             )
             if np.any(s.sigma2 < 0):
-                print('minimum resdiual variance less than 0. Is there mismatch between the correlation matrix and association statistics?')
+                print("minimum resdiual variance less than 0. Is there mismatch between the correlation matrix and association statistics?")
 
     elbo = elbo[1:i+2] # Remove first (infinite) entry, and trailing NAs.
     s.elbo = elbo
     s.niter = i+1
 
     if not s.converged:
-        print('IBSS algorithm did not converge in %d iterations'%(max_iter))
-        
+        print("IBSS algorithm did not converge in %d iterations"%(max_iter))
+
     s.fitted = s.Xr_list
 
     s.pip = susie_get_pip(s, prior_tol=prior_tol)
@@ -737,8 +736,8 @@ def susie_multi_ss(
         R_list = XTX_list
 
     s.sets = susie_get_cs(
-        s = s, R_list = R_list, coverage = coverage, min_abs_corr = min_abs_corr, 
-        dedup = True, n_purity = np.inf, 
+        s = s, R_list = R_list, coverage = coverage, min_abs_corr = min_abs_corr,
+        dedup = True, n_purity = np.inf,
         calculate_purity = (not low_memory_mode) or (min_abs_corr > 0) or recover_R
     )
 
@@ -753,7 +752,7 @@ def susie_multi_ss(
 
 def update_each_effect(
     XTX_list, XTY_list, s, X_l2_arr, w_pop, rho,
-    estimate_prior_variance=False, estimate_prior_method='optim',
+    estimate_prior_variance=False, estimate_prior_method="optim",
     check_null_threshold=0.0, pop_spec_effect_priors = True, float_type = np.float32):
     """ Update each single effect regression
 
@@ -782,7 +781,7 @@ def update_each_effect(
     Nothing. S is modified in place.
     """
 
-        
+
     if not estimate_prior_variance:
         estimate_prior_method = None
     L = s.alpha.shape[0]
@@ -796,19 +795,19 @@ def update_each_effect(
         for k in range(len(XTX_list)):
             s.Xr_list[k] -= XTX_list[k].dot(s.alpha[l] * s.mu[k,l])
             R_list.append(XTY_list[k] - s.Xr_list[k])
-        
-        # get the currrent single effect model parameter estimates after 
+
+        # get the currrent single effect model parameter estimates after
         # residualizing all other effects
         res = single_effect_regression(
             R_list, XTX_list, s.V[:,l], X_l2_arr, w_pop, rho,
             residual_variance=s.sigma2, prior_weights=s.pi,
-            optimize_V=estimate_prior_method, 
-            check_null_threshold=check_null_threshold, 
+            optimize_V=estimate_prior_method,
+            check_null_threshold=check_null_threshold,
             pop_spec_effect_priors = pop_spec_effect_priors,
             alpha = s.alpha[l,:], mu2 = s.mu2[:,:,l,:],
             float_type = float_type
         )
-              
+
         # Update the variational estimate of the posterior mean.
         s.mu[:,l,:] = res.mu
         s.alpha[l,:] = res.alpha
@@ -821,7 +820,7 @@ def update_each_effect(
 
 def single_effect_regression(
     XTY_list, XTX_list, V, X_l2_arr, w_pop, rho,
-    residual_variance, prior_weights=None, optimize_V=None, 
+    residual_variance, prior_weights=None, optimize_V=None,
     check_null_threshold=0,  pop_spec_effect_priors = True,
     alpha = None, mu2 = None, float_type = np.float32):
     """ Fit a multi-population single effect regression model
@@ -865,29 +864,29 @@ def single_effect_regression(
             aggregating over variants
         V: length K numpy array of floats representing the effect size prior
     """
-    
+
     compute_lbf_params = (XTY_list, XTX_list, X_l2_arr, rho,
         residual_variance, False, float_type)
 
-    if optimize_V not in ['EM', 'EM_corrected', None]:
+    if optimize_V not in ["EM", "EM_corrected", None]:
         V = optimize_prior_variance(
-            optimize_V, prior_weights, rho.shape[0], 
-            compute_lbf_params=compute_lbf_params, alpha=alpha, post_mean2=mu2, 
-            w_pop=w_pop, check_null_threshold=check_null_threshold, 
+            optimize_V, prior_weights, rho.shape[0],
+            compute_lbf_params=compute_lbf_params, alpha=alpha, post_mean2=mu2,
+            w_pop=w_pop, check_null_threshold=check_null_threshold,
             pop_spec_effect_priors = pop_spec_effect_priors, current_V = V,
             float_type = float_type
         )
-        
-    # compute the log Bayes factor for each variant being the causal variant 
-    # and posterior mean estimates for each variant  under the assumption 
+
+    # compute the log Bayes factor for each variant being the causal variant
+    # and posterior mean estimates for each variant  under the assumption
     # that it is the causal variant
     lbf, post_mean, post_mean2 = compute_lbf(
-        V = V, XTY_list = XTY_list, XTX_list = XTX_list, X_l2_arr = X_l2_arr, 
-        rho = rho, residual_variance = residual_variance, return_moments=True, 
+        V = V, XTY_list = XTY_list, XTX_list = XTX_list, X_l2_arr = X_l2_arr,
+        rho = rho, residual_variance = residual_variance, return_moments=True,
         float_type = float_type
     )
 
-    
+
     # compute posterior inclusion probabilities (not combined over single effect regressions)
     maxlbf = np.max(lbf)
     w = np.exp(lbf - maxlbf)
@@ -895,17 +894,17 @@ def single_effect_regression(
     weighted_sum_w = w_weighted.sum()
     alpha = w_weighted / weighted_sum_w
     lbf_model = maxlbf + np.log(weighted_sum_w)
-        
-    if optimize_V in ['EM', 'EM_corrected']:
+
+    if optimize_V in ["EM", "EM_corrected"]:
         V = optimize_prior_variance(
-            optimize_V, prior_weights, rho.shape[0], 
-            compute_lbf_params=compute_lbf_params, alpha=alpha, 
-            post_mean2=post_mean2, w_pop=w_pop, 
-            check_null_threshold=check_null_threshold, 
-            pop_spec_effect_priors = pop_spec_effect_priors, 
+            optimize_V, prior_weights, rho.shape[0],
+            compute_lbf_params=compute_lbf_params, alpha=alpha,
+            post_mean2=post_mean2, w_pop=w_pop,
+            check_null_threshold=check_null_threshold,
+            pop_spec_effect_priors = pop_spec_effect_priors,
             float_type = float_type
         )
-        
+
     res = SER_RESULTS(alpha=alpha, mu=post_mean, mu2=post_mean2, lbf=lbf, lbf_model=lbf_model, V=V)
 
 
@@ -921,32 +920,32 @@ def loglik(V, prior_weights, compute_lbf_params):
     return loglik
 
 def optimize_prior_variance(
-    optimize_V, prior_weights, num_pops, compute_lbf_params=None, alpha=None, post_mean2=None, w_pop=None, check_null_threshold=0, 
+    optimize_V, prior_weights, num_pops, compute_lbf_params=None, alpha=None, post_mean2=None, w_pop=None, check_null_threshold=0,
     pop_spec_effect_priors = False, current_V = None, float_type = np.float32, loglik_function = loglik):
 
-    if optimize_V == 'optim':
+    if optimize_V == "optim":
         if pop_spec_effect_priors:
-            raise Exception('estimate_prior_method="optim" with ' +
+            raise Exception('estimate_prior_method="optim" with '
                             'pop_spec_effect_priors=True has not been implemented')
         else:
             neg_loglik_logscale = lambda lV: -loglik_function(np.array([np.exp(lV) for i in range(num_pops)]), prior_weights, compute_lbf_params)
             opt_obj = minimize_scalar(neg_loglik_logscale, bounds=(-30,15))
             lV = opt_obj.x
             V = np.exp(lV)
-    elif optimize_V in ['EM', 'early_EM']:
+    elif optimize_V in ["EM", "early_EM"]:
         V = np.array([np.sum(alpha * post_mean2[i, i]) for i in range(num_pops)], dtype=float_type)
         if not pop_spec_effect_priors:
             V = (w_pop.dot(V)).astype(float_type)
-    elif optimize_V == 'grid':
+    elif optimize_V == "grid":
         if pop_spec_effect_priors:
-            raise Exception('estimate_prior_method="grid" with ' +
+            raise Exception('estimate_prior_method="grid" with '
                             'pop_spec_effect_priors=True has not been implemented')
         else:
             V_arr = np.logspace(-7, -1, 13)
             llik_arr = np.array([loglik_function(V, prior_weights, compute_lbf_params) for V in V_arr])
             V = V_arr[np.argmax(llik_arr)]
     else:
-        raise ValueError('unknown optimization method')
+        raise ValueError("unknown optimization method")
 
     if not pop_spec_effect_priors:
         V = V * np.ones(post_mean2.shape[0], dtype = float_type)
@@ -959,7 +958,7 @@ def optimize_prior_variance(
             return V
         elif np.all(np.isclose(V, 0)):
             return 0
-        # Compare our current effect prior to null models 
+        # Compare our current effect prior to null models
         else:
             V_list = [V]
             # zero out each population, one at a time
@@ -981,9 +980,9 @@ def optimize_prior_variance(
 
 def compute_lbf(
     V, XTY_list, XTX_list, X_l2_arr, rho,
-    residual_variance, return_moments=False,  
+    residual_variance, return_moments=False,
     float_type = np.float32):
-    
+
     num_variables = XTX_list[0].shape[0]
     num_pops = len(XTX_list)
 
@@ -996,13 +995,13 @@ def compute_lbf(
     elif np.any(np.isclose(V, 0)):
         nonzero_pops = np.flatnonzero(~np.isclose(V, 0))
         lbf_out = compute_lbf(
-            V = V[nonzero_pops], 
-            XTY_list = [XTY_list[i] for i in nonzero_pops], 
-            XTX_list = [XTX_list[i] for i in nonzero_pops], 
-            X_l2_arr = X_l2_arr[nonzero_pops], 
+            V = V[nonzero_pops],
+            XTY_list = [XTY_list[i] for i in nonzero_pops],
+            XTX_list = [XTX_list[i] for i in nonzero_pops],
+            X_l2_arr = X_l2_arr[nonzero_pops],
             rho = rho[nonzero_pops, :][:, nonzero_pops],
-            residual_variance = residual_variance[nonzero_pops], 
-            return_moments = return_moments, 
+            residual_variance = residual_variance[nonzero_pops],
+            return_moments = return_moments,
             float_type = float_type
         )
         if return_moments:
@@ -1040,13 +1039,13 @@ def compute_lbf(
 @numba.jit(nopython=True, cache=True)
 def compute_lbf_no_moments(
     V, XTY, X_l2_arr, rho, residual_variance, float_type = np.float32):
-    
-    
+
+
     num_pops = XTY.shape[1]
     num_variables = XTY.shape[0]
 
     lbf = np.zeros(num_variables, dtype=float_type)
-    
+
     YT_invD_Z = XTY / residual_variance
 
     #compute a (the effects covariance matrix) and its inverse and log-determinant
@@ -1055,7 +1054,7 @@ def compute_lbf_no_moments(
     logdet_A_sign, logdetA = np.linalg.slogdet(A)
 
     for i in range(num_variables):
-    
+
         #compute the diagonal of q = z.t * inv(d) * z (this is a diagonal matrix)
         # this is (n_pop)
         Q_diag = X_l2_arr[:,i]/residual_variance
@@ -1065,7 +1064,7 @@ def compute_lbf_no_moments(
         Ainv_plus_Q = inv_A + np.diag(Q_diag)
         logdet_Ainv_plus_Q_sign, logdet_Ainv_plus_Q = np.linalg.slogdet(Ainv_plus_Q)
         assert logdet_Ainv_plus_Q_sign>0
-    
+
         #compute inv_ainv_plus_q_times_zt_invd_y
         inv_Ainv_plus_Q_times_ZT_invD_Y = np.linalg.solve(Ainv_plus_Q, YT_invD_Z[i,:])
 
@@ -1073,7 +1072,7 @@ def compute_lbf_no_moments(
         lbf_1 = 0.5 * YT_invD_Z[i,:].dot(inv_Ainv_plus_Q_times_ZT_invD_Y)
         lbf_2 = -0.5 * (logdetA + logdet_Ainv_plus_Q)
         lbf[i] = lbf_1 + lbf_2
-        
+
     return lbf
 
 @numba.jit(nopython=True, cache=True)
@@ -1087,7 +1086,7 @@ def compute_lbf_and_moments(
     lbf = np.zeros(num_variables, dtype=float_type)
     post_mean = np.zeros((num_pops, num_variables), dtype=float_type)
     post_mean2 = np.zeros((num_pops, num_pops, num_variables), dtype=float_type)
-        
+
 
     YT_invD_Z = XTY / residual_variance
 
@@ -1097,7 +1096,7 @@ def compute_lbf_and_moments(
     logdet_A_sign, logdetA = np.linalg.slogdet(A)
 
     for i in range(num_variables):
-    
+
         #compute the diagonal of q = z.t * inv(d) * z (this is a diagonal matrix)
         Q_diag = X_l2_arr[:,i] / residual_variance
 
@@ -1105,7 +1104,7 @@ def compute_lbf_and_moments(
         Ainv_plus_Q = inv_A + np.diag(Q_diag)
         logdet_Ainv_plus_Q_sign, logdet_Ainv_plus_Q = np.linalg.slogdet(Ainv_plus_Q)
         assert logdet_Ainv_plus_Q_sign>0
-    
+
         #compute inv_ainv_plus_q_times_zt_invd_y
         inv_Ainv_plus_Q_times_ZT_invD_Y = np.linalg.solve(Ainv_plus_Q, YT_invD_Z[i, :])
 
@@ -1132,7 +1131,7 @@ def compute_lbf_and_moments_safe(
     lbf = np.zeros(num_variables, dtype=float_type)
     post_mean = np.zeros((num_pops, num_variables), dtype=float_type)
     post_mean2 = np.zeros((num_pops, num_pops, num_variables), dtype=float_type)
-        
+
 
     YT_invD_Z = XTY / residual_variance
 
@@ -1180,7 +1179,7 @@ def update_ER2(XTX_list, XTY_list, YTY_list, s, X_l2_arr):
     ER2 = np.zeros(len(XTX_list))
     for i in range(len(XTX_list)):
         ER2[i] = get_ER2(
-            XTX_list[i], XTY_list[i], YTY_list[i], s.alpha, s.mu[i], 
+            XTX_list[i], XTY_list[i], YTY_list[i], s.alpha, s.mu[i],
             s.mu2[i, i], X_l2_arr[i]
         )
     return ER2
@@ -1191,8 +1190,8 @@ def get_ER2(XTX, XTY, YTY, alpha, mu, mu2, X_l2):
     betabar = np.sum(B, axis = 0)
     postb2 = alpha * mu2
 
-    result = YTY - 2 * betabar.dot(XTY) + betabar.dot(np.dot(XTX, betabar)) - XB2 + np.sum(X_l2 * postb2) 
-    return result     
+    result = YTY - 2 * betabar.dot(XTY) + betabar.dot(np.dot(XTX, betabar)) - XB2 + np.sum(X_l2 * postb2)
+    return result
 
 def SER_posterior_e_loglik(X_l2_arr, XTY_list, s2, Eb, Eb2):
     result = 0
@@ -1201,7 +1200,7 @@ def SER_posterior_e_loglik(X_l2_arr, XTY_list, s2, Eb, Eb2):
     return result
 
 def estimate_residual_variance_func(
-        XTX_list, XTY_list, YTY_list, s, X_l2_arr, population_sizes, 
+        XTX_list, XTY_list, YTY_list, s, X_l2_arr, population_sizes,
         float_type = np.float32):
 
     sigma2_arr = np.zeros(len(XTX_list), dtype=float_type)
@@ -1280,7 +1279,7 @@ def get_purity_x(cs, R_list, min_abs_cor, n_purity, X_list):
 def recover_R_from_XTX(XTX, X_l2):
     assert((XTX[:,np.flatnonzero(X_l2 == 0)] == 0).all())
     assert((XTX[np.flatnonzero(X_l2 == 0),:] == 0).all())
-    with np.errstate(divide='ignore', invalid = 'ignore'):
+    with np.errstate(divide="ignore", invalid = "ignore"):
         XTX /= np.sqrt(np.nan_to_num(X_l2, 1))
         XTX /= np.sqrt(np.expand_dims(np.nan_to_num(X_l2, 1), 1))
 

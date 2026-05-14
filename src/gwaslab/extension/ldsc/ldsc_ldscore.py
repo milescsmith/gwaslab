@@ -1,12 +1,12 @@
-from __future__ import division
-import numpy as np
 import bitarray as ba
+import numpy as np
+
 
 def xrange(*args):
     return range(*args)
 
 def getBlockLefts(coords, max_dist):
-    '''
+    """
     Converts coordinates + max block length to the a list of coordinates of the leftmost
     SNPs to be included in blocks.
 
@@ -22,7 +22,7 @@ def getBlockLefts(coords, max_dist):
     block_left : 1D np.ndarray with same length as block_left
         block_left[j] :=  min{k | dist(j, k) < max_dist}.
 
-    '''
+    """
     M = len(coords)
     j = 0
     block_left = np.zeros(M)
@@ -36,7 +36,7 @@ def getBlockLefts(coords, max_dist):
 
 
 def block_left_to_right(block_left):
-    '''
+    """
     Converts block lefts to block rights.
 
     Parameters
@@ -49,7 +49,7 @@ def block_left_to_right(block_left):
     block_right : 1D np.ndarray with same length as block_left
         block_right[j] := max {k | block_left[k] <= j}
 
-    '''
+    """
     M = len(block_left)
     j = 0
     block_right = np.zeros(M)
@@ -62,54 +62,54 @@ def block_left_to_right(block_left):
     return block_right
 
 
-class __GenotypeArrayInMemory__(object):
-    '''
+class __GenotypeArrayInMemory__:
+    """
     Parent class for various classes containing interfaces for files with genotype
     matrices, e.g., plink .bed files, etc
-    '''
+    """
     def __init__(self, fname, n, snp_list, keep_snps=None, keep_indivs=None, mafMin=None):
         self.m = len(snp_list.IDList)
         self.n = n
         self.keep_snps = keep_snps
         self.keep_indivs = keep_indivs
-        self.df = np.array(snp_list.df[['CHR', 'SNP', 'BP', 'CM']])
-        self.colnames = ['CHR', 'SNP', 'BP', 'CM']
+        self.df = np.array(snp_list.df[["CHR", "SNP", "BP", "CM"]])
+        self.colnames = ["CHR", "SNP", "BP", "CM"]
         self.mafMin = mafMin if mafMin is not None else 0
         self._currentSNP = 0
         (self.nru, self.geno) = self.__read__(fname, self.m, n)
         # filter individuals
         if keep_indivs is not None:
-            keep_indivs = np.array(keep_indivs, dtype='int')
+            keep_indivs = np.array(keep_indivs, dtype="int")
             if np.any(keep_indivs > self.n):
-                raise ValueError('keep_indivs indices out of bounds')
+                raise ValueError("keep_indivs indices out of bounds")
 
             (self.geno, self.m, self.n) = self.__filter_indivs__(self.geno, keep_indivs, self.m,
                 self.n)
 
             if self.n > 0:
-                print( 'After filtering, {n} individuals remain'.format(n=self.n))
+                print( f"After filtering, {self.n} individuals remain")
             else:
-                raise ValueError('After filtering, no individuals remain')
+                raise ValueError("After filtering, no individuals remain")
 
         # filter SNPs
         if keep_snps is not None:
-            keep_snps = np.array(keep_snps, dtype='int')
+            keep_snps = np.array(keep_snps, dtype="int")
             if np.any(keep_snps > self.m):  # if keep_snps is None, this returns False
-                raise ValueError('keep_snps indices out of bounds')
+                raise ValueError("keep_snps indices out of bounds")
 
         (self.geno, self.m, self.n, self.kept_snps, self.freq) = self.__filter_snps_maf__(
             self.geno, self.m, self.n, self.mafMin, keep_snps)
 
         if self.m > 0:
-            print( 'After filtering, {m} SNPs remain'.format(m=self.m))
+            print( f"After filtering, {self.m} SNPs remain")
         else:
-            raise ValueError('After filtering, no SNPs remain')
+            raise ValueError("After filtering, no SNPs remain")
 
         self.df = self.df[self.kept_snps, :]
         self.maf = np.minimum(self.freq, np.ones(self.m)-self.freq)
         self.sqrtpq = np.sqrt(self.freq*(np.ones(self.m)-self.freq))
         self.df = np.c_[self.df, self.maf]
-        self.colnames.append('MAF')
+        self.colnames.append("MAF")
 
     def __read__(self, fname, m, n):
         raise NotImplementedError
@@ -121,7 +121,7 @@ class __GenotypeArrayInMemory__(object):
         raise NotImplementedError
 
     def ldScoreVarBlocks(self, block_left, c, annot=None):
-        '''Computes an unbiased estimate of L2(j) for j=1,..,M.'''
+        """Computes an unbiased estimate of L2(j) for j=1,..,M."""
         func = lambda x: self.__l2_unbiased__(x, self.n)
         snp_getter = self.nextSNPs
         return self.__corSumVarBlocks__(block_left, c, func, snp_getter, annot)
@@ -138,7 +138,7 @@ class __GenotypeArrayInMemory__(object):
 
     # general methods for calculating sums of Pearson correlation coefficients
     def __corSumVarBlocks__(self, block_left, c, func, snp_getter, annot=None):
-        '''
+        """
         Parameters
         ----------
         block_left : np.ndarray with shape (M, )
@@ -164,7 +164,7 @@ class __GenotypeArrayInMemory__(object):
         cor_sum : np.ndarray with shape (M, num_annots)
             Estimates.
 
-        '''
+        """
         m, n = self.m, self.n
         block_sizes = np.array(np.arange(m) - block_left)
         block_sizes = np.ceil(block_sizes / c)*c
@@ -173,7 +173,7 @@ class __GenotypeArrayInMemory__(object):
         else:
             annot_m = annot.shape[0]
             if annot_m != self.m:
-                raise ValueError('Incorrect number of SNPs in annot')
+                raise ValueError("Incorrect number of SNPs in annot")
 
         n_a = annot.shape[1]  # number of annotations
         cor_sum = np.zeros((m, n_a))
@@ -244,25 +244,25 @@ class __GenotypeArrayInMemory__(object):
 
 
 class PlinkBEDFile(__GenotypeArrayInMemory__):
-    '''
+    """
     Interface for Plink .bed format
-    '''
+    """
     def __init__(self, fname, n, snp_list, keep_snps=None, keep_indivs=None, mafMin=None):
         self._bedcode = {
-            2: ba.bitarray('11'),
-            9: ba.bitarray('10'),
-            1: ba.bitarray('01'),
-            0: ba.bitarray('00')
+            2: ba.bitarray("11"),
+            9: ba.bitarray("10"),
+            1: ba.bitarray("01"),
+            0: ba.bitarray("00")
             }
 
         __GenotypeArrayInMemory__.__init__(self, fname, n, snp_list, keep_snps=keep_snps,
             keep_indivs=keep_indivs, mafMin=mafMin)
 
     def __read__(self, fname, m, n):
-        if not fname.endswith('.bed'):
-            raise ValueError('.bed filename must end in .bed')
+        if not fname.endswith(".bed"):
+            raise ValueError(".bed filename must end in .bed")
 
-        fh = open(fname, 'rb')
+        fh = open(fname, "rb")
         magicNumber = ba.bitarray(endian="little")
         magicNumber.fromfile(fh, 2)
         bedMode = ba.bitarray(endian="little")
@@ -271,11 +271,11 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
         nru = n + e
         self.nru = nru
         # check magic number
-        if magicNumber != ba.bitarray('0011011011011000'):
-            raise IOError("Magic number from Plink .bed file not recognized")
+        if magicNumber != ba.bitarray("0011011011011000"):
+            raise OSError("Magic number from Plink .bed file not recognized")
 
-        if bedMode != ba.bitarray('10000000'):
-            raise IOError("Plink .bed file must be in default SNP-major mode")
+        if bedMode != ba.bitarray("10000000"):
+            raise OSError("Plink .bed file must be in default SNP-major mode")
 
         # check file length
         self.geno = ba.bitarray(endian="little")
@@ -288,7 +288,7 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
         real_len = len(geno)
         if real_len != exp_len:
             s = "Plink .bed file has {n1} bits, expected {n2}"
-            raise IOError(s.format(n1=real_len, n2=exp_len))
+            raise OSError(s.format(n1=real_len, n2=exp_len))
 
     def __filter_indivs__(self, geno, keep_indivs, m, n):
         n_new = len(keep_indivs)
@@ -360,7 +360,7 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
         return (y, m_poly, n, kept_snps, freq)
 
     def nextSNPs(self, b, minorRef=None):
-        '''
+        """
         Unpacks the binary array of genotypes and returns an n x b matrix of floats of
         normalized genotypes for the next b SNPs, where n := number of samples.
 
@@ -379,7 +379,7 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
             not None, then the minor allele will be the positive allele (i.e., two copies
             of the minor allele --> a positive number).
 
-        '''
+        """
 
         try:
             b = int(b)
@@ -389,7 +389,7 @@ class PlinkBEDFile(__GenotypeArrayInMemory__):
             raise TypeError("b must be an integer")
 
         if self._currentSNP + b > self.m:
-            s = '{b} SNPs requested, {k} SNPs remain'
+            s = "{b} SNPs requested, {k} SNPs remain"
             raise ValueError(s.format(b=b, k=(self.m-self._currentSNP)))
 
         c = self._currentSNP

@@ -1,58 +1,61 @@
-from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Any, Union
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-import scipy as sp
 from math import ceil
-from gwaslab.info.g_Log import Log
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from gwaslab.viz.viz_aux_quickfix import _set_yticklabels
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import scipy as sp
+import seaborn as sns
+
+from gwaslab.info.g_Log import Log
 from gwaslab.util.util_in_calculate_gc import _lambda_GC
+from gwaslab.viz.viz_aux_quickfix import _set_yticklabels
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
 # qq plot module for mqqplot
 from gwaslab.viz.viz_aux_save_figure import safefig
+
+
 @safefig
 def _plot_qq(
     sumstats: pd.DataFrame,
     p_toplot_raw: pd.DataFrame,
-    ax2: 'Axes',
+    ax2: "Axes",
     maxticker: int,
-    marker_size: Tuple[int, int],
+    marker_size: tuple[int, int],
     gc: bool,
-    cut: Optional[float],
-    cutfactor: Optional[float],
+    cut: float | None,
+    cutfactor: float | None,
     cut_log: bool,
     skip: float,
     maxy: float,
     ystep: float,
-    colors: List[str],
+    colors: list[str],
     qq_line_color: str,
     stratified: bool,
     eaf_raw: pd.Series,
-    maf_bins: List[Tuple[float, float]],
-    maf_bin_colors: List[str],
+    maf_bins: list[tuple[float, float]],
+    maf_bin_colors: list[str],
     fontsize: float,
     font_family: str,
-    qtitle: Optional[str],
+    qtitle: str | None,
     qtitle_pad: float,
     title_fontsize: float,
     include_chrXYMT: bool,
     cut_line_color: str,
     linewidth: float,
-    ytick3: Optional[List[float]],
-    ylabels: Optional[List[str]],
-    xlabels: Optional[List[float]],
-    xlim: Optional[Tuple[float, float]],
-    ylabels_converted: Optional[List[str]],
-    qq_scatter_kwargs: Dict[str, Any],
+    ytick3: list[float] | None,
+    ylabels: list[str] | None,
+    xlabels: list[float] | None,
+    xlim: tuple[float, float] | None,
+    ylabels_converted: list[str] | None,
+    qq_scatter_kwargs: dict[str, Any],
     expected_min_mlog10p: float,
     verbose: bool = True,
     log: Log = Log()
-) -> 'Axes':
+) -> "Axes":
     """
     Generate a QQ plot to visualize the distribution of p-values from GWAS results.
     
@@ -97,20 +100,20 @@ def _plot_qq(
     matplotlib.axes.Axes
         Modified axes object with the QQ plot.
     """
-            
+
     # QQ plot #########################################################################################################
     # ax2 qqplot
     log.write("Start to create QQ plot with "+str(len(sumstats))+" variants:",verbose=verbose )
-    
+
     # plotting qq plots using processed data after cut and skip
-    
+
     # select -log10 scaled p to plot
     p_toplot = sumstats["scaled_P"]
-    
-    # min p value for uniform distribution 
+
+    # min p value for uniform distribution
     minit=1/len(p_toplot)
-    
-    
+
+
     upper_bound_p = np.power(10.0, -expected_min_mlog10p)
 
     explicit = {"color","marker_size"}
@@ -120,13 +123,13 @@ def _plot_qq(
         # sort x,y for qq plot
         # high to low
         observed = p_toplot.sort_values(ascending=False)
-        
+
         # uniform distribution using raw number -> -log10 -> observed number (omit variants with low -log10p)
         #expected = -np.log10(np.linspace(minit,1,len(p_toplot_raw)))[:len(observed)]
-    
+
         expected_all = -np.log10(np.linspace(minit,upper_bound_p,len(p_toplot_raw)))[:len(observed)]
 
-        log.write(" -Expected range of P: (0,{})".format(upper_bound_p),verbose=verbose)
+        log.write(f" -Expected range of P: (0,{upper_bound_p})",verbose=verbose)
         #p_toplot = sumstats["scaled_P"]
         ax2.scatter(expected_all,observed,s=marker_size[1],color=colors[0],**qq_scatter_kwargs)
 
@@ -138,17 +141,17 @@ def _plot_qq(
 
         for i,(lower, upper) in enumerate(maf_bins):
             # extract data for a maf_bin
-            
+
             databin = sumstats.loc[(sumstats["MAF"]>lower) &( sumstats["MAF"]<=upper),["MAF","scaled_P"]]
             # raw data : variants with maf(eaf_raw) in maf_bin
-            
+
             databin_raw = eaf_raw[(eaf_raw>lower) & (eaf_raw<=upper)]
             # sort x,y for qq plot
             # high to low
-            
+
             observed = databin["scaled_P"].sort_values(ascending=False)
             # uniform distribution using raw number -> -log10 -> observed number (omit variants with low -log10p)
-            
+
             expected = -np.log10(np.linspace(minit,upper_bound_p,max(len(databin_raw),len(databin))))[:len(observed)]
 
             label ="( "+str(lower)+","+str(upper) +" ]"
@@ -158,38 +161,38 @@ def _plot_qq(
 
     qq_x = max(skip, expected_min_mlog10p)
     ax2.plot([qq_x,-np.log10(minit)],[qq_x,-np.log10(minit)],linestyle="--",color=qq_line_color)
-    ax2.set_xlabel("Expected $\mathregular{-log_{10}(P)}$",fontsize=fontsize,family=font_family)
-    ax2.set_ylabel("Observed $\mathregular{-log_{10}(P)}$",fontsize=fontsize,family=font_family)
+    ax2.set_xlabel(r"Expected $\mathregular{-log_{10}(P)}$",fontsize=fontsize,family=font_family)
+    ax2.set_ylabel(r"Observed $\mathregular{-log_{10}(P)}$",fontsize=fontsize,family=font_family)
     ax2.spines["top"].set_visible(False)
     ax2.spines["right"].set_visible(False)
     ax2.spines["left"].set_visible(True)
-    
+
     # calculate genomic inflation factor and add annotation
     if gc == True:
         # gc was calculated using raw data (before cut and skip)
         p_toplot_raw = p_toplot_raw.rename(columns={"scaled_P":"MLOG10P"})
-        
+
         level = 0.5
 
         if expected_min_mlog10p!=0:
             level = 1 -  np.power(10.0,-np.nanmedian(expected_all))
-            log.write(" -Level for calculating lambda GC : {}".format(1 - level),verbose=verbose)
+            log.write(f" -Level for calculating lambda GC : {1 - level}",verbose=verbose)
 
         if not include_chrXYMT : log.write(" -Excluding chrX,Y, MT from calculation of lambda GC.",verbose=verbose)
-        lambdagc = _lambda_GC(p_toplot_raw, 
-                            mode="MLOG10P", 
-                            level=level, 
+        lambdagc = _lambda_GC(p_toplot_raw,
+                            mode="MLOG10P",
+                            level=level,
                             include_chrXYMT=include_chrXYMT,
                             log=log,
                             verbose=verbose)
-        
+
         # annotate lambda gc to qq plot
-        ax2.text(0.10, 1.03,"$\mathregular{\\lambda_{GC}}$ = "+"{:.4f}".format(lambdagc),
-                    horizontalalignment='left',
-                    verticalalignment='top',
+        ax2.text(0.10, 1.03,r"$\mathregular{\\lambda_{GC}}$ = "+f"{lambdagc:.4f}",
+                    horizontalalignment="left",
+                    verticalalignment="top",
                     transform=ax2.transAxes,
                     fontsize=fontsize,family=font_family)
-    
+
     ax2 = _set_yticklabels(cut=cut,
                         cutfactor=cutfactor,
                         cut_log=cut_log,
@@ -210,15 +213,15 @@ def _plot_qq(
                         )
     if xlim is not None:
         ax2.set_xlim(xlim)
-        
+
     if xlabels is not None:
         ax2.set_xticks(xlabels)
         ax2.set_xticklabels(xlabels,fontsize=fontsize,family=font_family)
 
-    ax2.tick_params(axis='both', which='both', labelsize=fontsize,labelfontfamily=font_family)
+    ax2.tick_params(axis="both", which="both", labelsize=fontsize,labelfontfamily=font_family)
     # Note: qtitle is set in viz_plot_mqqplot.py to align with mtitle positioning
 
     log.write("Finished creating QQ plot successfully!",verbose=verbose)
-    
+
     # Creating QQ plot Finished #############################################################################################
     return ax2

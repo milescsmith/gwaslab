@@ -1,18 +1,18 @@
 import os
-import pandas as pd
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
+
 import numpy as np
-from typing import TYPE_CHECKING, Optional, List, Tuple, Any, Union
+import pandas as pd
 
 if TYPE_CHECKING:
     from gwaslab.g_SumstatsPair import SumstatsPair
 
+from gwaslab.extension import _check_susie_version, _checking_r_version
 from gwaslab.info.g_Log import Log
-from gwaslab.extension import _checking_r_version
-from gwaslab.extension import _check_susie_version
-from gwaslab.util.util_in_convert_h2 import _get_per_snp_r2
-from gwaslab.util.rwrapper.util_ex_r_runner import RScriptRunner
-from gwaslab.util.general.util_ex_result_manager import ResultManager
 from gwaslab.qc.qc_decorator import with_logging
+from gwaslab.util.general.util_ex_result_manager import ResultManager
+from gwaslab.util.rwrapper.util_ex_r_runner import RScriptRunner
+from gwaslab.util.util_in_convert_h2 import _get_per_snp_r2
 
 
 @with_logging(
@@ -23,42 +23,42 @@ from gwaslab.qc.qc_decorator import with_logging
     check_tools=["r", "r:TwoSampleMR"]
 )
 def _run_two_sample_mr(
-    sumstatspair_object: 'SumstatsPair',
+    sumstatspair_object: "SumstatsPair",
     r: str,
     out: str = "./",
     clump: bool = False,
     f_check: float = 10,
     exposure1: str = "Trait1",
     outcome2: str = "Trait2",
-    n1: Optional[int] = None,
-    n2: Optional[int] = None,
+    n1: int | None = None,
+    n2: int | None = None,
     binary1: bool = False,
-    cck1: Optional[Tuple[int, int, float]] = None,
-    cck2: Optional[Tuple[int, int, float]] = None,
-    ncase1: Optional[int] = None,
-    ncontrol1: Optional[int] = None,
-    prevalence1: Optional[float] = None,
+    cck1: tuple[int, int, float] | None = None,
+    cck2: tuple[int, int, float] | None = None,
+    ncase1: int | None = None,
+    ncontrol1: int | None = None,
+    prevalence1: float | None = None,
     binary2: bool = False,
-    ncase2: Optional[int] = None,
-    ncontrol2: Optional[int] = None,
-    prevalence2: Optional[float] = None,
-    methods: Optional[List[str]] = None,
+    ncase2: int | None = None,
+    ncontrol2: int | None = None,
+    prevalence2: float | None = None,
+    methods: list[str] | None = None,
     log: Log = Log()
 ) -> None:
 
     if methods is None:
         methods = ["mr_ivw","mr_simple_mode","mr_weighted_median","mr_egger_regression","mr_ivw_mre", "mr_weighted_mode"]
         methods_string = '"{}"'.format('","'.join(methods))
-    
+
     if cck1 is not None:
-        log.write(" - ncase1, ncontrol1, prevalence1:{}".format(cck1))
+        log.write(f" - ncase1, ncontrol1, prevalence1:{cck1}")
         binary1 = True
         ncase1 = cck1[0]
         ncontrol1 = cck1[1]
         prevalence1 =  cck1[2]
         n1 = ncase1 + ncontrol1
     if cck2 is not None:
-        log.write(" - ncase2, ncontrol2, prevalence2:{}".format(cck2))
+        log.write(f" - ncase2, ncontrol2, prevalence2:{cck2}")
         binary2 = True
         ncase2 = cck2[0]
         ncontrol2 = cck2[1]
@@ -67,23 +67,23 @@ def _run_two_sample_mr(
 
     if clump==True:
         sumstatspair = sumstatspair_object.clumps["clumps"]
-    else: 
+    else:
         sumstatspair = sumstatspair_object.data
-    
+
     if n1 is not None:
         sumstatspair["N_1"] = n1
     if n2 is not None:
         sumstatspair["N_2"] = n2
-    
+
     sumstatspair = _filter_by_f(sumstatspair, f_check, n1, binary1, ncase1, prevalence1)
 
     log = _checking_r_version(r, log)
-    #log = _check_susie_version(r,log)       
+    #log = _check_susie_version(r,log)
 
     cols_for_trait1, cols_for_trait2 = _sort_columns_to_load(sumstatspair)
     cols_for_trait1_script = _cols_list_to_r_script(cols_for_trait1)
     cols_for_trait2_script = _cols_list_to_r_script(cols_for_trait2)
-    
+
     # Initialize runners and managers
     runner = RScriptRunner(
         r=r,
@@ -96,44 +96,44 @@ def _run_two_sample_mr(
 
     # Prepare output paths
     memory_id = id(sumstatspair)
-    prefix = "{exposure}_{outcome}_{memory_id}".format(exposure=exposure1, outcome=outcome2, memory_id=memory_id)
-    prefix = "{}{}".format(out.rstrip('/') + "/", prefix)
+    prefix = f"{exposure1}_{outcome2}_{memory_id}"
+    prefix = "{}{}".format(out.rstrip("/") + "/", prefix)
     temp_sumstats_path = "{out}twosample_mr_{exposure}_{outcome}_{memory_id}.csv.gz".format(
-        out=out.rstrip('/') + "/",
-        exposure=exposure1, 
-        outcome=outcome2, 
+        out=out.rstrip("/") + "/",
+        exposure=exposure1,
+        outcome=outcome2,
         memory_id=memory_id
     )
-    
+
     if len(sumstatspair) > 0:
         sumstatspair.to_csv(temp_sumstats_path, index=None)
     else:
         return 0
     ###
     calculate_r_script = ""
-    
+
     if binary1==True:
         calculate_r_script+= _make_script_for_calculating_r("exposure", ncase1, ncontrol1, prevalence1)
     else:
         calculate_r_script+= _make_script_for_calculating_r_quant("exposure")
-    
+
     if binary2==True:
         calculate_r_script+= _make_script_for_calculating_r("outcome", ncase2, ncontrol2, prevalence2)
     else:
         calculate_r_script+= _make_script_for_calculating_r_quant("outcome")
-    
+
     # create scripts
-    directionality_test_script='''
+    directionality_test_script=f"""
     results_directionality <- directionality_test(harmonized_data)
     write.csv(results_directionality, "{prefix}.directionality", row.names = FALSE)
-    '''.format(prefix = prefix)
-    
+    """
+
     # Two Sample MR
     # Tests
     ## Pleiotropy
     ## Heterogeneity
     ## Reverse causality
-    rscript='''
+    rscript="""
     library(TwoSampleMR)
     sumstats <- read.csv("{temp_sumstats_path}")
 
@@ -190,10 +190,10 @@ def _run_two_sample_mr(
     {calculate_r}
     {directionality_test}
 
-    '''.format(
+    """.format(
         temp_sumstats_path = temp_sumstats_path,
-        pheno1 = 'sumstats$PHENO_1 <- "{}"'.format(exposure1) if exposure1 is not None else "", 
-        pheno2 = 'sumstats$PHENO_2 <- "{}"'.format(outcome2) if outcome2 is not None else "", 
+        pheno1 = f'sumstats$PHENO_1 <- "{exposure1}"' if exposure1 is not None else "",
+        pheno2 = f'sumstats$PHENO_2 <- "{outcome2}"' if outcome2 is not None else "",
         cols_for_trait1 = cols_for_trait1_script,
         cols_for_trait2 = cols_for_trait2_script,
         methods_string=methods_string,
@@ -201,17 +201,17 @@ def _run_two_sample_mr(
         calculate_r = calculate_r_script,
         directionality_test = directionality_test_script
     )
-        
+
     # Prepare expected output files
     expected_outputs = [
-        "{}.mr".format(prefix),
-        "{}.pleiotropy".format(prefix),
-        "{}.heterogeneity".format(prefix),
-        "{}.singlesnp".format(prefix),
-        "{}.leaveoneout".format(prefix),
-        "{}.directionality".format(prefix)
+        f"{prefix}.mr",
+        f"{prefix}.pleiotropy",
+        f"{prefix}.heterogeneity",
+        f"{prefix}.singlesnp",
+        f"{prefix}.leaveoneout",
+        f"{prefix}.directionality"
     ]
-    
+
     # Execute R script
     log.write(" Running TwoSampleMR from command line...")
     result = runner.execute(
@@ -221,9 +221,9 @@ def _run_two_sample_mr(
         temp_suffix=".R",
         timeout=None,
         verbose=True,
-        working_dir=out.rstrip('/') + "/"
+        working_dir=out.rstrip("/") + "/"
     )
-    
+
     # Trace result
     result_manager.trace(
         result=result,
@@ -236,18 +236,18 @@ def _run_two_sample_mr(
             "f_check": f_check
         }
     )
-    
+
     # Process results
     if result.success:
         # Read output files from result
         for suffix in ["mr", "pleiotropy", "heterogeneity", "singlesnp", "leaveoneout", "directionality"]:
-            expected_file = "{}.{}".format(prefix, suffix)
+            expected_file = f"{prefix}.{suffix}"
             if expected_file in result.output_files:
                 try:
                     sumstatspair_object.mr[suffix] = pd.read_csv(result.output_files[expected_file])
                 except Exception as e:
-                    log.warning(f"Error reading {suffix} output: {str(e)}")
-        
+                    log.warning(f"Error reading {suffix} output: {e!s}")
+
         # Store R log
         sumstatspair_object.mr["r_log"] = result.output
     else:
@@ -263,7 +263,7 @@ def _run_two_sample_mr(
 
 
 
-def _sort_columns_to_load(sumstatspair: pd.DataFrame) -> Tuple[List[str], List[str]]:
+def _sort_columns_to_load(sumstatspair: pd.DataFrame) -> tuple[list[str], list[str]]:
     cols_for_trait1=["SNPID","CHR","POS","EA","NEA","PHENO_1","N_1"]
     cols_for_trait2=["SNPID","CHR","POS","EA","NEA","PHENO_2","N_2"]
     for i in ["EAF","BETA","SE","P"]:
@@ -276,18 +276,18 @@ def _sort_columns_to_load(sumstatspair: pd.DataFrame) -> Tuple[List[str], List[s
 
 
 
-def _cols_list_to_r_script(cols_for_trait1: List[str]) -> str:
+def _cols_list_to_r_script(cols_for_trait1: list[str]) -> str:
     script = '"{}"'.format('","'.join(cols_for_trait1))
     return script
 
 def _make_script_for_calculating_r(
-    exposure_or_outcome: str, 
-    ncase: int, 
-    ncontrol: int, 
+    exposure_or_outcome: str,
+    ncase: int,
+    ncontrol: int,
     prevalence: float
 ) -> str:
-        
-        script = """
+
+        script = f"""
         harmonized_data$"r.{exposure_or_outcome}" <- get_r_from_lor(  harmonized_data$"beta.{exposure_or_outcome}",
                                                         harmonized_data$"eaf.{exposure_or_outcome}",
                                                         {ncase},
@@ -296,35 +296,28 @@ def _make_script_for_calculating_r(
                                                         model = "logit",
                                                         correction = FALSE
                                                         )
-        """.format(
-             exposure_or_outcome = exposure_or_outcome,
-             ncase = ncase,
-             ncontrol = ncontrol,
-             prevalence = prevalence
-        )
+        """
         return script
 
 
 def _make_script_for_calculating_r_quant(exposure_or_outcome: str) -> str:
-        script = """
+        script = f"""
         harmonized_data$"r.{exposure_or_outcome}" <- get_r_from_bsen(  harmonized_data$"beta.{exposure_or_outcome}",
                                                         harmonized_data$"se.{exposure_or_outcome}",
                                                         harmonized_data$"samplesize.{exposure_or_outcome}"
                                                         )
-        """.format(
-             exposure_or_outcome = exposure_or_outcome
-        )
+        """
         return script
 
 
 def _filter_by_f(
-    sumstatspair: pd.DataFrame, 
-    f_check: float, 
-    n1: Optional[int], 
-    binary1: Optional[bool] = None, 
-    ncase1: Optional[int] = None, 
-    ncontrol1: Optional[int] = None, 
-    prevalence1: Optional[float] = None, 
+    sumstatspair: pd.DataFrame,
+    f_check: float,
+    n1: int | None,
+    binary1: bool | None = None,
+    ncase1: int | None = None,
+    ncontrol1: int | None = None,
+    prevalence1: float | None = None,
     log: Log = Log()
 ) -> pd.DataFrame:
 
@@ -332,19 +325,19 @@ def _filter_by_f(
         sumstatspair = _get_per_snp_r2(sumstatspair,
             beta="BETA_1",
             af="EAF_1",
-            n = "N_1", 
+            n = "N_1",
             mode="b",
             se="SE_1",
             vary=1,
-            ncase=ncase1, 
-            ncontrol=ncontrol1, 
-            prevalence=prevalence1, 
+            ncase=ncase1,
+            ncontrol=ncontrol1,
+            prevalence=prevalence1,
             k=1)
     else:
         sumstatspair = _get_per_snp_r2(sumstatspair,
             beta="BETA_1",
             af="EAF_1",
-            n = "N_1", 
+            n = "N_1",
             mode="q",
             se="SE_1",
             vary=1,

@@ -1,6 +1,9 @@
-from typing import Callable, Any, Dict, List, Optional, Iterable
 import copy
+from collections.abc import Callable, Iterable
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
+
 
 def _list_func_args(func: Callable[..., Any]) -> tuple:
     return func.__code__.co_varnames
@@ -15,7 +18,7 @@ def _extract_kwargs(prefix:str, default:dict, kwargs:dict) -> dict:
     for key,value in kwargs.items():
         # kwargs or args
         if key=="kwargs" or key=="args":
-            for key_nested,value_nested in kwargs[key].items():
+            for key_nested,value_nested in value.items():
                 if prefix in key_nested and "arg" in key_nested:
 
                     if len(key_nested.split("_"))<3:
@@ -25,16 +28,15 @@ def _extract_kwargs(prefix:str, default:dict, kwargs:dict) -> dict:
                     else:
                         print(key_nested.split("_")[-1], value)
                         extracted_single[key_nested.split("_")[-1]] = value_nested
-        else:
-            # local kwargs
-            if prefix in key and "arg" in key:
-                extracted.append(value)
+        # local kwargs
+        elif prefix in key and "arg" in key:
+            extracted.append(value)
     if len(extracted_single.keys()) >0:
         extracted.append(extracted_single)
     merged_arg = _merge_and_sync_dic(extracted, default)
     return merged_arg
 
-def _merge_and_sync_dic(list_of_dics: List[Dict[str, Any]], default: Dict[str, Any]) -> Dict[str, Any]:
+def _merge_and_sync_dic(list_of_dics: list[dict[str, Any]], default: dict[str, Any]) -> dict[str, Any]:
     temp = copy.copy(default)
     for dic in list_of_dics:
         if isinstance(dic, dict):
@@ -42,10 +44,10 @@ def _merge_and_sync_dic(list_of_dics: List[Dict[str, Any]], default: Dict[str, A
     return temp
 
 def _update_kwargs(
-    args: Optional[Dict[str, Any]] = None,
-    default_args: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    
+    args: dict[str, Any] | None = None,
+    default_args: dict[str, Any] | None = None
+) -> dict[str, Any]:
+
     if default_args is None:
         default_args={}
 
@@ -58,24 +60,20 @@ def _update_kwargs(
             default_args[key] = value
         return default_args
 
-    
 
-def _update_arg(arg: Optional[Any] = None, default_arg: Optional[Any] = None) -> Any:
+
+def _update_arg(arg: Any | None = None, default_arg: Any | None = None) -> Any:
     if arg is None:
         # if None, return default
         return default_arg
     else:
-        # if not None, return arg  
+        # if not None, return arg
         return arg
 
 
-from functools import wraps
-import inspect
-
-import inspect
-
 import inspect
 from functools import wraps
+
 
 def resolve_overlapping_kwargs(strategy: str = "prefer_explicit", verbose: bool = False) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator factory for any function."""
@@ -104,9 +102,9 @@ def resolve_overlapping_kwargs(strategy: str = "prefer_explicit", verbose: bool 
     return decorator
 
 def remove_overlapping_kwargs(
-    kwargs_dict: Dict[str, Any],
+    kwargs_dict: dict[str, Any],
     protected_keys: Iterable[str]
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Return a new dict with keys in `protected_keys` removed.
 
@@ -125,7 +123,7 @@ def remove_overlapping_kwargs(
     return {k: v for k, v in kwargs_dict.items() if k not in protected_keys}
 
 
-def normalize_series_inputs(keys: Optional[List[str]] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def normalize_series_inputs(keys: list[str] | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):

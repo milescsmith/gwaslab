@@ -1,7 +1,9 @@
-from typing import TYPE_CHECKING, Union, Optional
+from typing import TYPE_CHECKING, Optional, Union
+
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+
 from gwaslab.info.g_Log import Log
 from gwaslab.qc.qc_decorator import with_logging
 
@@ -13,7 +15,7 @@ if TYPE_CHECKING:
         finished_msg="estimating effective sample size (N_EFF)"
 )
 def _get_ess(
-    sumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
+    sumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
     method: Union[str, float] = "metal",
     log: Log = Log(),
     verbose: bool = True
@@ -49,10 +51,10 @@ def _get_ess(
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
+
     if type(method) is str:
         if method =="metal":
-            log.write(" - Method: {} ".format(method), verbose=verbose)
+            log.write(f" - Method: {method} ", verbose=verbose)
             log.write(" - Referencec: {} ".format("Willer, C. J., Li, Y., & Abecasis, G. R. (2010)"), verbose=verbose)
             log.write(" - Equation: {} ".format(" N_EFF = 4 * N_CASE * N_CONTROL / (N_CASE + N_CONTROL)"), verbose=verbose)
             # Willer, C. J., Li, Y., & Abecasis, G. R. (2010). METAL: fast and efficient meta-analysis of genomewide association scans. Bioinformatics, 26(17), 2190-2191.

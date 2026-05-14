@@ -6,11 +6,11 @@ Creates comprehensive log files with version information, execution details, and
 """
 
 import os
-import time
 import subprocess
-from datetime import datetime
-from typing import Optional, Dict, List, Any, Union
+import time
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
 from gwaslab.info.g_Log import Log
 from gwaslab.info.g_version import gwaslab_info
@@ -22,12 +22,12 @@ class ExecutionResult:
     success: bool
     output: str
     exit_code: int
-    output_files: Dict[str, str] = None
-    errors: List[str] = None
+    output_files: dict[str, str] = None
+    errors: list[str] = None
     execution_time: float = 0.0
-    script_path: Optional[str] = None
-    temp_dir: Optional[str] = None
-    command: Optional[str] = None  # For command-line execution
+    script_path: str | None = None
+    temp_dir: str | None = None
+    command: str | None = None  # For command-line execution
 
 
 class WrapperLogger:
@@ -35,10 +35,10 @@ class WrapperLogger:
     Centralized logging for script execution (R, Python, command-line).
     Creates comprehensive log files with version information, execution details, and outputs.
     """
-    
+
     def __init__(
         self,
-        log: Optional[Log] = None,
+        log: Log | None = None,
         verbose: bool = True
     ):
         """
@@ -50,19 +50,19 @@ class WrapperLogger:
         """
         self.log = log if log is not None else Log()
         self.verbose = verbose
-    
+
     def create_log_file(
         self,
         result: ExecutionResult,
         script_type: str,  # "R", "Python", or "Command"
-        script_content: Optional[str] = None,
-        command: Optional[str] = None,
+        script_content: str | None = None,
+        command: str | None = None,
         log_file_path: str = None,
-        working_dir: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        version_info: Optional[Dict[str, str]] = None,
-        tool_path: Optional[str] = None,
-        package_name: Optional[str] = None
+        working_dir: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        version_info: dict[str, str] | None = None,
+        tool_path: str | None = None,
+        package_name: str | None = None
     ) -> str:
         """
         Create a comprehensive log file for script execution.
@@ -90,11 +90,11 @@ class WrapperLogger:
                 working_dir or os.getcwd(),
                 f"gwaslab_{script_type.lower()}_{pid}_{timestamp}.log"
             )
-        
+
         # Ensure working directory exists
         if working_dir:
             os.makedirs(working_dir, exist_ok=True)
-        
+
         # Get version information
         if version_info is None:
             version_info = self._get_version_info(
@@ -102,58 +102,58 @@ class WrapperLogger:
                 tool_path=tool_path,
                 package_name=package_name
             )
-        
+
         # Convert result to ExecutionResult if needed
         exec_result = self._normalize_result(result)
-        
+
         try:
             with open(log_file_path, "w") as f:
                 # Write version information
                 self._write_version_section(f, version_info)
-                
+
                 # Write execution time
                 self._write_execution_time_section(f, exec_result)
-                
+
                 # Write metadata if provided
                 if metadata:
                     self._write_metadata_section(f, metadata)
-                
+
                 # Write output files
                 if exec_result.output_files:
                     self._write_output_files_section(f, exec_result.output_files, working_dir)
-                
+
                 # Write script/command content
                 if script_type.upper() == "COMMAND":
                     self._write_command_section(f, command or exec_result.command or "N/A")
                 else:
                     script_label = f"{script_type.upper()} SCRIPT"
                     self._write_script_section(f, script_content or "N/A", script_label)
-                
+
                 # Write execution output
                 self._write_output_section(f, exec_result.output)
-            
+
             self.log.write(f"  -Log file saved to: {log_file_path}", verbose=self.verbose)
             return log_file_path
-        
+
         except Exception as e:
-            self.log.warning(f"  -Could not save log file: {str(e)}", verbose=self.verbose)
+            self.log.warning(f"  -Could not save log file: {e!s}", verbose=self.verbose)
             return log_file_path
-    
+
     def _get_version_info(
         self,
         script_type: str,
-        tool_path: Optional[str] = None,
-        package_name: Optional[str] = None
-    ) -> Dict[str, str]:
+        tool_path: str | None = None,
+        package_name: str | None = None
+    ) -> dict[str, str]:
         """Get version information for the execution environment."""
         version_info = {}
-        
+
         # Get GWASLab version (always)
         try:
             version_info["GWASLab"] = gwaslab_info()["version"]
         except Exception:
             version_info["GWASLab"] = "Unable to determine"
-        
+
         # Get tool version based on script type
         if script_type.upper() == "R":
             if tool_path:
@@ -167,22 +167,22 @@ class WrapperLogger:
                     )
                     version_info["R"] = r_version_output.strip()
                 except Exception as e:
-                    version_info["R"] = f"Unable to determine ({str(e)})"
-            
+                    version_info["R"] = f"Unable to determine ({e!s})"
+
             if package_name:
                 try:
                     rscript_version = f'cat(as.character(packageVersion("{package_name}")))'
-                    import tempfile
                     import random
+                    import tempfile
                     temp_r_version = tempfile.NamedTemporaryFile(
-                        mode='w',
-                        suffix='.R',
+                        mode="w",
+                        suffix=".R",
                         delete=False,
                         prefix=f"_gwaslab_version_check_{random.randint(1, 99999999)}_"
                     )
                     temp_r_version.write(rscript_version)
                     temp_r_version.close()
-                    
+
                     susie_output = subprocess.check_output(
                         f"{tool_path or 'Rscript'} {temp_r_version.name}",
                         stderr=subprocess.STDOUT,
@@ -193,13 +193,13 @@ class WrapperLogger:
                     version_info[package_name] = susie_output.strip()
                     os.remove(temp_r_version.name)
                 except Exception as e:
-                    version_info[package_name] = f"Unable to determine ({str(e)})"
+                    version_info[package_name] = f"Unable to determine ({e!s})"
                     if os.path.exists(temp_r_version.name):
                         try:
                             os.remove(temp_r_version.name)
                         except:
                             pass
-        
+
         elif script_type.upper() == "PYTHON":
             if tool_path:
                 try:
@@ -221,8 +221,8 @@ class WrapperLogger:
                         )
                         version_info["Python"] = python_version_output.strip()
                     except Exception as e:
-                        version_info["Python"] = f"Unable to determine ({str(e)})"
-            
+                        version_info["Python"] = f"Unable to determine ({e!s})"
+
             if package_name:
                 try:
                     import importlib.metadata
@@ -232,8 +232,8 @@ class WrapperLogger:
                         import pkg_resources
                         version_info[package_name] = pkg_resources.get_distribution(package_name).version
                     except Exception as e:
-                        version_info[package_name] = f"Unable to determine ({str(e)})"
-        
+                        version_info[package_name] = f"Unable to determine ({e!s})"
+
         elif script_type.upper() == "COMMAND":
             if tool_path:
                 try:
@@ -253,29 +253,29 @@ class WrapperLogger:
                     else:
                         version_info[tool_path] = "Unable to determine version"
                 except Exception as e:
-                    version_info[tool_path] = f"Unable to determine ({str(e)})"
-        
+                    version_info[tool_path] = f"Unable to determine ({e!s})"
+
         return version_info
-    
+
     def _normalize_result(self, result: Any) -> ExecutionResult:
         """Convert any execution result type to ExecutionResult."""
         if isinstance(result, ExecutionResult):
             return result
-        
+
         # Handle dataclass results from runners
         return ExecutionResult(
-            success=getattr(result, 'success', False),
-            output=getattr(result, 'output', ''),
-            exit_code=getattr(result, 'exit_code', -1),
-            output_files=getattr(result, 'output_files', {}),
-            errors=getattr(result, 'errors', []),
-            execution_time=getattr(result, 'execution_time', 0.0),
-            script_path=getattr(result, 'script_path', None),
-            temp_dir=getattr(result, 'temp_dir', None),
-            command=getattr(result, 'command', None)
+            success=getattr(result, "success", False),
+            output=getattr(result, "output", ""),
+            exit_code=getattr(result, "exit_code", -1),
+            output_files=getattr(result, "output_files", {}),
+            errors=getattr(result, "errors", []),
+            execution_time=getattr(result, "execution_time", 0.0),
+            script_path=getattr(result, "script_path", None),
+            temp_dir=getattr(result, "temp_dir", None),
+            command=getattr(result, "command", None)
         )
-    
-    def _write_version_section(self, f, version_info: Dict[str, str]):
+
+    def _write_version_section(self, f, version_info: dict[str, str]):
         """Write version information section."""
         f.write("=" * 80 + "\n")
         f.write("VERSION INFORMATION\n")
@@ -284,7 +284,7 @@ class WrapperLogger:
             f.write(f"{tool} version: {version}\n")
         f.write("=" * 80 + "\n")
         f.write("\n")
-    
+
     def _write_execution_time_section(self, f, result: ExecutionResult):
         """Write execution time section."""
         execution_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -300,8 +300,8 @@ class WrapperLogger:
             f.write(f"Errors: {len(result.errors)}\n")
         f.write("=" * 80 + "\n")
         f.write("\n")
-    
-    def _write_metadata_section(self, f, metadata: Dict[str, Any]):
+
+    def _write_metadata_section(self, f, metadata: dict[str, Any]):
         """Write metadata section."""
         f.write("=" * 80 + "\n")
         f.write("METADATA\n")
@@ -310,12 +310,12 @@ class WrapperLogger:
             f.write(f"{key}: {value}\n")
         f.write("=" * 80 + "\n")
         f.write("\n")
-    
+
     def _write_output_files_section(
         self,
         f,
-        output_files: Dict[str, str],
-        working_dir: Optional[str] = None
+        output_files: dict[str, str],
+        working_dir: str | None = None
     ):
         """Write output files section."""
         f.write("=" * 80 + "\n")
@@ -334,12 +334,12 @@ class WrapperLogger:
                 except Exception as e:
                     f.write(f"  - {expected_file}\n")
                     f.write(f"    Path: {actual_path}\n")
-                    f.write(f"    Error getting file info: {str(e)}\n")
+                    f.write(f"    Error getting file info: {e!s}\n")
         else:
             f.write("No output files specified.\n")
         f.write("=" * 80 + "\n")
         f.write("\n")
-    
+
     def _write_script_section(self, f, script_content: str, script_label: str = "SCRIPT"):
         """Write script content section."""
         f.write("=" * 80 + "\n")
@@ -347,7 +347,7 @@ class WrapperLogger:
         f.write("=" * 80 + "\n")
         f.write(script_content)
         f.write("\n\n")
-    
+
     def _write_command_section(self, f, command: str):
         """Write command section."""
         f.write("=" * 80 + "\n")
@@ -355,7 +355,7 @@ class WrapperLogger:
         f.write("=" * 80 + "\n")
         f.write(f"{command}\n")
         f.write("\n")
-    
+
     def _write_output_section(self, f, output: str):
         """Write execution output section."""
         f.write("=" * 80 + "\n")
@@ -373,11 +373,11 @@ def create_r_log(
     result: Any,
     script_content: str,
     log_file_path: str,
-    working_dir: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    working_dir: str | None = None,
+    metadata: dict[str, Any] | None = None,
     r_path: str = "Rscript",
-    package_name: Optional[str] = None,
-    log: Optional[Log] = None,
+    package_name: str | None = None,
+    log: Log | None = None,
     verbose: bool = True
 ) -> str:
     """Create a log file for R script execution."""
@@ -398,11 +398,11 @@ def create_python_log(
     result: Any,
     script_content: str,
     log_file_path: str,
-    working_dir: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    working_dir: str | None = None,
+    metadata: dict[str, Any] | None = None,
     python_path: str = "python",
-    package_name: Optional[str] = None,
-    log: Optional[Log] = None,
+    package_name: str | None = None,
+    log: Log | None = None,
     verbose: bool = True
 ) -> str:
     """Create a log file for Python script execution."""
@@ -423,10 +423,10 @@ def create_command_log(
     result: Any,
     command: str,
     log_file_path: str,
-    working_dir: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    tool_path: Optional[str] = None,
-    log: Optional[Log] = None,
+    working_dir: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    tool_path: str | None = None,
+    log: Log | None = None,
     verbose: bool = True
 ) -> str:
     """Create a log file for command-line execution."""

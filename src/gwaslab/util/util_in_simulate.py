@@ -1,20 +1,22 @@
 from __future__ import annotations
+
+from math import sqrt
+from shutil import which
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
-from math import sqrt
-from typing import Optional, Tuple, List, Union
-from allel import read_vcf, GenotypeArray
-from scipy.special import erfc
-import scipy.stats as ss
-from gwaslab.g_Sumstats import Sumstats
-from gwaslab.io.io_vcf import auto_check_vcf_chr_dict
-from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
-from gwaslab.info.g_Log import Log
-from shutil import which
 
 # Polars is required for performance
 import polars as pl
+import scipy.stats as ss
+from allel import GenotypeArray, read_vcf
+from scipy.special import erfc
 
+from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.g_Sumstats import Sumstats
+from gwaslab.info.g_Log import Log
+from gwaslab.io.io_vcf import auto_check_vcf_chr_dict
 
 # =============================================================================
 # Small math helpers (NO SciPy dependency)
@@ -60,12 +62,12 @@ def _z_to_mlog10p(z: np.ndarray) -> np.ndarray:
     return -mlog10p
 
 
-def _make_blocks_by_bp(pos: np.ndarray, window_bp: int) -> List[Tuple[int, int]]:
+def _make_blocks_by_bp(pos: np.ndarray, window_bp: int) -> list[tuple[int, int]]:
     """
     Partition sorted variant positions into blocks of ~window_bp basepairs.
     Returns half-open index intervals [start, end).
     """
-    blocks: List[Tuple[int, int]] = []
+    blocks: list[tuple[int, int]] = []
     n = len(pos)
     i = 0
     while i < n:
@@ -84,11 +86,11 @@ def _make_blocks_by_bp(pos: np.ndarray, window_bp: int) -> List[Tuple[int, int]]
 
 def _read_vcf_variants(
     vcf_path: str,
-    region: Optional[Tuple[Union[int, str], int, int]] = None,
-    vcf_chr_dict: Optional[dict] = None,
-    tabix: Optional[bool] = None,
-    mapper: Optional[ChromosomeMapper] = None,
-    log: Optional[Log] = None,
+    region: tuple[Union[int, str], int, int] | None = None,
+    vcf_chr_dict: dict | None = None,
+    tabix: bool | None = None,
+    mapper: ChromosomeMapper | None = None,
+    log: Log | None = None,
     verbose: bool = True
 ) -> pl.DataFrame:
     """
@@ -118,19 +120,19 @@ def _read_vcf_variants(
     """
     if log is None:
         log = Log()
-    
+
     if tabix is None:
         tabix = which("tabix")
-    
+
     # Get or create mapper
     if mapper is None:
         mapper = ChromosomeMapper(log=log, verbose=verbose)
         mapper.detect_reference_format(vcf_path)
-    
+
     # Auto-detect chromosome dictionary if not provided
     if vcf_chr_dict is None:
         vcf_chr_dict = auto_check_vcf_chr_dict(vcf_path, None, verbose, log)
-    
+
     # Read VCF data
     # Only load variant metadata fields (no genotypes) for fast loading
     # Note: scikit-allel automatically extracts standard INFO fields like AF as variants/AF.
@@ -144,7 +146,7 @@ def _read_vcf_variants(
         "variants/INFO",  # Load entire INFO field for structured array access
         "variants/AF",    # Also request AF directly (scikit-allel auto-extracts standard INFO fields)
     ]
-    
+
     if region is not None:
         chr_, start, end = region
         # Convert chromosome to reference format
@@ -155,14 +157,14 @@ def _read_vcf_variants(
     else:
         log.write(" -Loading all variants from VCF", verbose=verbose)
         vcf_data = read_vcf(vcf_path, tabix=tabix, fields=fields_variant_only)
-    
+
     if vcf_data is None or len(vcf_data["variants/POS"]) == 0:
         raise ValueError("No variants found in VCF for the requested region.")
-    
+
     # Extract variant information
     n_variants = len(vcf_data["variants/POS"])
     log.write(f" -Found {n_variants} variants", verbose=verbose)
-    
+
     # Get chromosome (convert from reference format if needed)
     # Vectorized string conversion
     chr_data = vcf_data["variants/CHROM"]
@@ -171,17 +173,17 @@ def _read_vcf_variants(
         chr_data = np.array([c.decode() if isinstance(c, bytes) else str(c) for c in chr_data], dtype=object)
     else:
         chr_data = np.array([str(c) for c in chr_data], dtype=object)
-    
+
     # Convert chromosome names back to sumstats format (vectorized)
     if vcf_chr_dict:
         reverse_dict = {v: k for k, v in vcf_chr_dict.items()}
         # Vectorized mapping using numpy
         chr_array = np.array(chr_data, dtype=object)
         chr_data = np.array([reverse_dict.get(c, c) for c in chr_array], dtype=object)
-    
+
     # Extract positions
     pos_data = vcf_data["variants/POS"].astype(np.int64)
-    
+
     # Extract ID (SNP ID) from VCF if available (vectorized bytes decoding)
     snpid_data = None
     if "variants/ID" in vcf_data:
@@ -191,15 +193,15 @@ def _read_vcf_variants(
         else:
             snpid_data = snpid_data.astype(str)
         # Replace missing IDs ('.' or None) with None
-        snpid_data = np.where((snpid_data == '.') | (snpid_data == 'None') | (snpid_data == ''), None, snpid_data)
-    
+        snpid_data = np.where((snpid_data == ".") | (snpid_data == "None") | (snpid_data == ""), None, snpid_data)
+
     # Extract REF and ALT alleles (vectorized bytes decoding)
     ref_data = vcf_data["variants/REF"]
     if isinstance(ref_data[0], (bytes, np.bytes_)):
         ref_data = np.char.decode(ref_data.astype("S"), "utf-8")
     else:
         ref_data = ref_data.astype(str)
-    
+
     alt_data = vcf_data["variants/ALT"]
     # ALT can be 2D array (multiple ALT alleles per variant)
     if alt_data.ndim == 2:
@@ -209,12 +211,12 @@ def _read_vcf_variants(
         alt_data = np.char.decode(alt_data.astype("S"), "utf-8")
     else:
         alt_data = alt_data.astype(str)
-    
+
     # Extract EAF from INFO field (AF) if available, otherwise compute from genotypes
     # Note: scikit-allel automatically extracts standard INFO fields like AF as variants/AF,
     # not as variants/INFO["AF"]. Check both locations for compatibility.
     eaf_data = np.full(n_variants, np.nan, dtype=float)
-    
+
     # First, try variants/AF (scikit-allel's automatic extraction)
     if "variants/AF" in vcf_data:
         af_info = vcf_data["variants/AF"]
@@ -223,13 +225,13 @@ def _read_vcf_variants(
         else:
             eaf_data = af_info.astype(float)
     # Fallback: try variants/INFO["AF"] (structured array access)
-    elif "variants/INFO" in vcf_data and hasattr(vcf_data["variants/INFO"].dtype, 'names') and "AF" in vcf_data["variants/INFO"].dtype.names:
+    elif "variants/INFO" in vcf_data and hasattr(vcf_data["variants/INFO"].dtype, "names") and "AF" in vcf_data["variants/INFO"].dtype.names:
         af_info = vcf_data["variants/INFO"]["AF"]
         if af_info.ndim == 2:
             eaf_data = af_info[:, 0].astype(float)
         else:
             eaf_data = af_info.astype(float)
-    
+
     # If EAF still missing, try to compute from genotypes (vectorized)
     if np.any(np.isnan(eaf_data)) and "calldata/GT" in vcf_data:
         # Compute AF from genotypes for missing values (vectorized)
@@ -243,18 +245,18 @@ def _read_vcf_variants(
         # Vectorized: fill in missing values using boolean indexing
         nan_mask = np.isnan(eaf_data)
         eaf_data[nan_mask] = computed_eaf[nan_mask]
-    
+
     # If still missing, use a default (0.5 for common variants) - vectorized
     nan_count = np.isnan(eaf_data).sum()
     if nan_count > 0:
         log.warning(f" -{nan_count} variants have missing EAF, using default 0.5", verbose=verbose)
         eaf_data[np.isnan(eaf_data)] = 0.5
-    
+
     # Extract INFO score if available
     info_data = np.full(n_variants, np.nan, dtype=float)
     if "variants/INFO" in vcf_data and "INFO" in vcf_data["variants/INFO"].dtype.names:
         info_data = vcf_data["variants/INFO"]["INFO"].astype(float)
-    
+
     # Create Polars DataFrame directly for better performance
     # Convert object arrays to proper types for Polars
     data_dict = {
@@ -264,15 +266,15 @@ def _read_vcf_variants(
         "NEA": [str(r) for r in ref_data],  # Ensure string type
         "EAF": eaf_data,
     }
-    
+
     # Add SNPID if available from VCF
     if snpid_data is not None:
         data_dict["SNPID"] = [str(s) if s is not None else None for s in snpid_data]
-    
+
     # Add INFO if available
     if not np.all(np.isnan(info_data)):
         data_dict["INFO"] = info_data
-    
+
     # Create Polars DataFrame with explicit types using Series to avoid object dtype
     # This ensures proper types from the start, which is required for sorting
     df = pl.DataFrame({
@@ -282,17 +284,17 @@ def _read_vcf_variants(
         "NEA": pl.Series("NEA", data_dict["NEA"], dtype=pl.Utf8),
         "EAF": pl.Series("EAF", data_dict["EAF"], dtype=pl.Float64),
     })
-    
+
     # Add optional columns with proper types if they exist
     if "SNPID" in data_dict:
         df = df.with_columns(pl.Series("SNPID", data_dict["SNPID"], dtype=pl.Utf8))
     if "INFO" in data_dict:
         df = df.with_columns(pl.Series("INFO", data_dict["INFO"], dtype=pl.Float64))
-    
+
     # Sort by position (Polars is much faster)
     # All columns are now properly typed (Utf8, Int64, Float64), so sorting will work
     df = df.sort(["CHR", "POS"])
-    
+
     log.write(f" -Loaded {df.height} variants", verbose=verbose)
     return df
 
@@ -306,13 +308,13 @@ def _get_standardized_genotypes_for_block(
     variant_df: Union[pd.DataFrame, pl.DataFrame],
     start_idx: int,
     end_idx: int,
-    region: Optional[Tuple[Union[int, str], int, int]] = None,
-    vcf_chr_dict: Optional[dict] = None,
-    tabix: Optional[bool] = None,
-    mapper: Optional[ChromosomeMapper] = None,
-    log: Optional[Log] = None,
+    region: tuple[Union[int, str], int, int] | None = None,
+    vcf_chr_dict: dict | None = None,
+    tabix: bool | None = None,
+    mapper: ChromosomeMapper | None = None,
+    log: Log | None = None,
     verbose: bool = True
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Extract and standardize genotypes for a block of variants.
     
@@ -352,15 +354,15 @@ def _get_standardized_genotypes_for_block(
     """
     if log is None:
         log = Log()
-    
+
     if tabix is None:
         tabix = which("tabix")
-    
+
     # Get or create mapper
     if mapper is None:
         mapper = ChromosomeMapper(log=log, verbose=verbose)
         mapper.detect_reference_format(vcf_path)
-    
+
     # Get block variant data - extract numpy arrays directly (avoid Polars→Pandas conversion)
     if isinstance(variant_df, pl.DataFrame):
         block_slice = variant_df.slice(start_idx, end_idx - start_idx)
@@ -383,16 +385,16 @@ def _get_standardized_genotypes_for_block(
         block_ea = block_df["EA"].values
         block_chr = block_df["CHR"].values
         block_eaf = block_df["EAF"].values
-    
+
     # Determine region for this block
     chr_ = block_chr[0]
     start_pos = block_pos.min()
     end_pos = block_pos.max()
-    
+
     # Convert chromosome to reference format
     region_chr_ref = mapper.sumstats_to_reference(chr_, reference_file=vcf_path, as_string=True)
     region_str = f"{region_chr_ref}:{start_pos}-{end_pos}"
-    
+
     # Read VCF data for this block - minimal fields: POS, REF, ALT, GT
     vcf_data = read_vcf(
         vcf_path,
@@ -405,11 +407,11 @@ def _get_standardized_genotypes_for_block(
             "calldata/GT",
         ]
     )
-    
+
     if vcf_data is None or len(vcf_data["variants/POS"]) == 0:
         log.warning(f" -No VCF data for block {start_idx}:{end_idx}", verbose=verbose)
         return np.array([]).reshape(0, 0), np.array([]), np.array([], dtype=int)
-    
+
     # Match variants (vectorized bytes decoding)
     vcf_pos = vcf_data["variants/POS"].astype(np.int64)
     vcf_ref = vcf_data["variants/REF"]
@@ -417,7 +419,7 @@ def _get_standardized_genotypes_for_block(
         vcf_ref = np.char.decode(vcf_ref.astype("S"), "utf-8")
     else:
         vcf_ref = vcf_ref.astype(str)
-    
+
     vcf_alt = vcf_data["variants/ALT"]
     if vcf_alt.ndim == 2:
         vcf_alt = vcf_alt[:, 0]
@@ -425,25 +427,25 @@ def _get_standardized_genotypes_for_block(
         vcf_alt = np.char.decode(vcf_alt.astype("S"), "utf-8")
     else:
         vcf_alt = vcf_alt.astype(str)
-    
+
     # Match variants by position only (vectorized using np.isin)
     # Since VCF ALT = EA and VCF REF = NEA (by definition), we only need to match positions
     # Vectorized matching: find positions in block_pos that exist in vcf_pos
     matched_mask = np.isin(block_pos, vcf_pos)
     matched_block_indices = np.where(matched_mask)[0]
-    
+
     if len(matched_block_indices) == 0:
         log.warning(f" -No variants matched in VCF for block {start_idx}:{end_idx}", verbose=verbose)
         return np.array([]).reshape(0, 0), np.array([]), np.array([], dtype=int)
-    
+
     # Map block positions to VCF indices (take first match for each position)
     # Create sorted index for vcf_pos for efficient lookup
     vcf_pos_sorted_idx = np.argsort(vcf_pos)
     vcf_pos_sorted = vcf_pos[vcf_pos_sorted_idx]
-    
+
     # Use searchsorted to find first match for each block position
     matched_positions = block_pos[matched_block_indices]
-    vcf_match_idx = np.searchsorted(vcf_pos_sorted, matched_positions, side='left')
+    vcf_match_idx = np.searchsorted(vcf_pos_sorted, matched_positions, side="left")
     # Ensure we don't go out of bounds
     vcf_match_idx = np.clip(vcf_match_idx, 0, len(vcf_pos_sorted) - 1)
     # Verify matches (positions must actually match)
@@ -452,39 +454,39 @@ def _get_standardized_genotypes_for_block(
     vcf_match_idx = vcf_match_idx[valid_match]
     # Map back to original vcf indices
     matched_indices = vcf_pos_sorted_idx[vcf_match_idx]
-    
+
     if len(matched_indices) == 0:
         log.warning(f" -No variants matched in VCF for block {start_idx}:{end_idx}", verbose=verbose)
         return np.array([]).reshape(0, 0), np.array([]), np.array([], dtype=int)
-    
+
     matched_indices = np.array(matched_indices, dtype=int)
     matched_block_indices = np.array(matched_block_indices, dtype=int)
-    
+
     # Get genotypes
     if "calldata/GT" not in vcf_data:
         log.warning(" -No genotype data in VCF", verbose=verbose)
         return np.array([]).reshape(0, 0), np.array([]), np.array([], dtype=int)
-    
+
     gt_array = GenotypeArray(vcf_data["calldata/GT"][matched_indices])
     n_alt = gt_array.to_n_alt()  # Shape: (n_variants, n_samples), integer dtype, -1 for missing
     # VCF ALT = EA, so n_alt directly represents EA dosage (0/1/2)
-    
+
     # Convert to float and handle missing genotypes (scikit-allel uses -1 for missing, not NaN)
     n_alt = n_alt.astype(float)
     n_alt[n_alt < 0] = np.nan  # Map missing genotypes (-1) to NaN
-    
+
     # Check for monomorphic variants (use nanstd to handle missing genotypes)
     variant_std = np.nanstd(n_alt, axis=1)
     polymorphic_mask = variant_std > 1e-10
-    
+
     if polymorphic_mask.sum() == 0:
         log.warning(f" -All variants are monomorphic in block {start_idx}:{end_idx}", verbose=verbose)
         return np.array([]).reshape(0, 0), np.array([]), np.array([], dtype=int)
-    
+
     # Filter to polymorphic variants
     n_alt_poly = n_alt[polymorphic_mask, :]
     matched_block_indices_poly = matched_block_indices[polymorphic_mask]
-    
+
     # Get EAF from block data for matched variants
     # VCF ALT = EA, so EAF from VCF is already correct (no flipping needed)
     # Use pre-extracted block_eaf array (much faster than accessing block_df)
@@ -494,39 +496,39 @@ def _get_standardized_genotypes_for_block(
     else:
         # Pandas case: extract from DataFrame
         p = block_df.iloc[matched_block_indices_poly]["EAF"].values
-    
+
     p = p.astype(float)
-    
+
     # Standardize genotypes using sample statistics (not theoretical HWE values)
     # This ensures diag(R) = 1 exactly, preventing λGC inflation
-    # 
+    #
     # Step 1: Transpose genotype matrix
     # n_alt is (n_variants, n_samples), we need (n_samples, n_variants) for standardization
     G = n_alt_poly.T.astype(np.float64, copy=False)  # Shape: (n_samples, n_variants)
     n_samples = G.shape[0]
-    
+
     # Step 2: Compute sample-based standardization: X = (G - μ) / σ
     # where μ and σ are computed from the actual genotype matrix (not theoretical HWE)
     # This ensures each column has exactly mean=0 and var=1 in the sample
-    # This is critical: theoretical standardization X = (G - 2p) / sqrt(2p(1-p)) 
+    # This is critical: theoretical standardization X = (G - 2p) / sqrt(2p(1-p))
     # only works in expectation under HWE and infinite samples. In finite samples,
     # it can lead to diag(R) ≠ 1 and λGC inflation.
     mu = np.nanmean(G, axis=0).astype(np.float64)  # Sample mean per variant (handles NaN)
     sd = np.nanstd(G, axis=0, ddof=0).astype(np.float64)  # Sample SD per variant (ddof=0 for population SD)
-    
+
     # Step 3: Avoid division by zero for monomorphic variants
     # Should be filtered already, but safety check to prevent numerical errors
     sd = np.clip(sd, 1e-6, None).astype(np.float64)
-    
+
     # Step 4: Standardize: X = (G - μ) / σ
     # Broadcast mu and sd across samples to standardize each variant
     X = ((G - mu[np.newaxis, :]) / sd[np.newaxis, :]).astype(np.float64)
-    
+
     # Step 5: Handle missing data (NaN in genotypes)
     # Set to 0 (mean-centered) after standardization
     # After standardization, NaN values should be 0 since we subtract the mean
     X = np.where(np.isfinite(X), X, 0.0).astype(np.float64)
-    
+
     return X, p, matched_block_indices_poly
 
 
@@ -542,7 +544,7 @@ def _filter_variants(
     eaf_max: float = 1.0,
     exclude_rare: bool = False,
     rare_maf_threshold: float = 0.01,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     verbose: bool = True
 ) -> pl.DataFrame:
     """
@@ -552,26 +554,26 @@ def _filter_variants(
     """
     if log is None:
         log = Log()
-    
+
     m = df.height
     if m == 0:
         return df
-    
+
     # Log filter parameters when non-default values are used
     if maf_min > 0.0 or maf_max < 0.5 or eaf_min > 0.0 or eaf_max < 1.0 or exclude_rare:
         log.write(f" -Applying filters: MAF=[{maf_min:.4f}, {maf_max:.4f}], EAF=[{eaf_min:.4f}, {eaf_max:.4f}], exclude_rare={exclude_rare}", verbose=verbose)
-    
+
     # Step 1: Compute MAF from EAF
     # MAF (Minor Allele Frequency) = min(EAF, 1-EAF)
     # This ensures MAF is always between 0 and 0.5, regardless of which allele is the effect allele
     df = df.with_columns([
         (pl.min_horizontal(pl.col("EAF"), 1.0 - pl.col("EAF"))).alias("_MAF")
     ])
-    
+
     # Step 2: Build filter conditions
     # We build conditions separately and combine them at the end
     conditions = []
-    
+
     # Step 2a: MAF filter condition
     # Always apply MAF filter (even if maf_min=0.0 and maf_max=0.5, it's a no-op but ensures consistency)
     # Exclude NaN values from passing the filter (they fail the condition)
@@ -585,7 +587,7 @@ def _filter_variants(
     elif n_filtered_maf > 0:
         # Even with default bounds, log if any were filtered (e.g., due to NaN)
         log.write(f" -MAF filter: {n_passed_maf} variants passed, {n_filtered_maf} filtered (MAF in [{maf_min:.4f}, {maf_max:.4f}])", verbose=verbose)
-    
+
     # Step 2b: EAF filter condition
     # Always apply EAF filter (even if eaf_min=0.0 and eaf_max=1.0, it's a no-op but ensures consistency)
     # Exclude NaN values from passing the filter (they fail the condition)
@@ -599,7 +601,7 @@ def _filter_variants(
     elif n_filtered_eaf > 0:
         # Even with default bounds, log if any were filtered (e.g., due to NaN)
         log.write(f" -EAF filter: {n_passed_eaf} variants passed, {n_filtered_eaf} filtered (EAF in [{eaf_min:.4f}, {eaf_max:.4f}])", verbose=verbose)
-    
+
     # Step 2c: Rare variant exclusion (optional)
     # If exclude_rare=True, exclude variants with MAF below the threshold
     if exclude_rare:
@@ -608,7 +610,7 @@ def _filter_variants(
         n_rare = df.filter(~rare_condition).height
         if n_rare > 0:
             log.write(f" -Excluded {n_rare} rare variants (MAF < {rare_maf_threshold:.4f})", verbose=verbose)
-    
+
     # Step 3: Apply all filter conditions
     # Combine all conditions with AND logic (all must be satisfied)
     if conditions:
@@ -616,34 +618,34 @@ def _filter_variants(
         for cond in conditions[1:]:
             combined_condition = combined_condition & cond
         df = df.filter(combined_condition)
-    
+
     # Step 4: Clean up temporary MAF column
     df = df.drop("_MAF")
-    
+
     # Step 5: Log final filter results
     n_before_filter = m
     m_filtered = df.height
     n_filtered = n_before_filter - m_filtered
-    
+
     if n_filtered > 0:
         log.write(f" -After filtering: {m_filtered} variants remaining ({n_filtered} excluded)", verbose=verbose)
-    
+
     if m_filtered == 0:
         raise ValueError("No variants remaining after applying filters. Please adjust filter criteria.")
-    
+
     return df
 
 
 def _setup_sample_sizes(
     m: int,
     trait: str,
-    n: Optional[int] = None,
-    n_case: Optional[int] = None,
-    n_ctrl: Optional[int] = None,
+    n: int | None = None,
+    n_case: int | None = None,
+    n_ctrl: int | None = None,
     n_drop_rate: float = 0.0,
     n_drop_min: float = 0.5,
-    rng: Optional[np.random.Generator] = None
-) -> Tuple[np.ndarray, np.ndarray]:
+    rng: np.random.Generator | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Setup sample sizes (N) and effective sample sizes (N_eff) for variants.
     
@@ -654,7 +656,7 @@ def _setup_sample_sizes(
     """
     if rng is None:
         rng = np.random.default_rng()
-    
+
     # Step 1: Set baseline N and N_eff based on trait type
     if trait == "binary":
         if n_case is None or n_ctrl is None:
@@ -674,7 +676,7 @@ def _setup_sample_sizes(
         # - N_eff = N (no adjustment needed for quantitative traits)
         N = np.full(m, float(n), dtype=float)
         N_eff = N.copy()
-    
+
     # Step 2: Apply per-SNP N variation to simulate missingness/QC issues
     # In real GWAS, not all SNPs have the same sample size due to:
     # - Missing genotypes
@@ -691,7 +693,7 @@ def _setup_sample_sizes(
             # For quantitative traits, N_eff follows N; for binary we keep neff_base constant
             if trait == "quant":
                 N_eff[drop] *= mult
-    
+
     return N, N_eff
 
 
@@ -702,7 +704,7 @@ def _setup_info_scores(
     info_sd: float = 0.05,
     info_min: float = 0.3,
     info_max: float = 1.0,
-    rng: Optional[np.random.Generator] = None
+    rng: np.random.Generator | None = None
 ) -> np.ndarray:
     """
     Setup INFO scores for variants (from VCF or simulated).
@@ -714,15 +716,15 @@ def _setup_info_scores(
     """
     if rng is None:
         rng = np.random.default_rng()
-    
+
     m = df.height
-    
+
     if use_info and "INFO" in df.columns:
         info = np.clip(df["INFO"].to_numpy().astype(float), info_min, info_max)
     else:
         info = rng.normal(info_mean, info_sd, size=m)
         info = np.clip(info, info_min, info_max)
-    
+
     return info
 
 
@@ -733,16 +735,16 @@ def _select_causal_variants(
     n_causal: int,
     alpha: float,
     effect_sd: float,
-    causal_maf_min: Optional[float] = None,
-    causal_maf_max: Optional[float] = None,
-    causal_eaf_min: Optional[float] = None,
-    causal_eaf_max: Optional[float] = None,
-    causal_idx: Optional[np.ndarray] = None,
-    causal_beta: Optional[np.ndarray] = None,
-    rng: Optional[np.random.Generator] = None,
-    log: Optional[Log] = None,
+    causal_maf_min: float | None = None,
+    causal_maf_max: float | None = None,
+    causal_eaf_min: float | None = None,
+    causal_eaf_max: float | None = None,
+    causal_idx: np.ndarray | None = None,
+    causal_beta: np.ndarray | None = None,
+    rng: np.random.Generator | None = None,
+    log: Log | None = None,
     verbose: bool = True
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Select causal variants and assign effect sizes.
     
@@ -755,21 +757,21 @@ def _select_causal_variants(
         log = Log()
     if rng is None:
         rng = np.random.default_rng()
-    
+
     m = df.height
     beta_true = np.zeros(m, dtype=float)  # True causal effect sizes (0 for non-causal)
     is_causal = np.zeros(m, dtype=bool)    # Boolean mask indicating which variants are causal
-    
+
     # Step 1: Compute MAF and EAF for causal variant filtering
     # Extract EAF values and compute MAF = min(EAF, 1-EAF)
     eaf_values = df["EAF"].to_numpy().astype(float)
     maf_values = np.minimum(eaf_values, 1.0 - eaf_values)
-    
+
     # Step 2: Build causal variant candidate mask
     # Apply causal_maf_min/max and causal_eaf_min/max filters to restrict which variants
     # are eligible to be selected as causal (separate from variant-level filters)
     causal_candidate_mask = np.ones(m, dtype=bool)
-    
+
     # Apply causal variant filters if specified
     if causal_maf_min is not None or causal_maf_max is not None:
         causal_maf_mask = np.ones(m, dtype=bool)
@@ -781,7 +783,7 @@ def _select_causal_variants(
         n_excluded_maf = (~causal_maf_mask).sum()
         if n_excluded_maf > 0:
             log.write(f" -Excluded {n_excluded_maf} variants from causal selection by MAF filter", verbose=verbose)
-    
+
     if causal_eaf_min is not None or causal_eaf_max is not None:
         causal_eaf_mask = np.ones(m, dtype=bool)
         if causal_eaf_min is not None:
@@ -792,14 +794,14 @@ def _select_causal_variants(
         n_excluded_eaf = (~causal_eaf_mask).sum()
         if n_excluded_eaf > 0:
             log.write(f" -Excluded {n_excluded_eaf} variants from causal selection by EAF filter", verbose=verbose)
-    
+
     # Get candidate indices
     causal_candidate_indices = np.where(causal_candidate_mask)[0]
     n_candidates = len(causal_candidate_indices)
-    
+
     if n_candidates == 0:
         raise ValueError("No variants eligible for causal selection after applying causal filters. Please adjust filter criteria.")
-    
+
     # Step 3: Select causal variants and assign effect sizes
     if causal_idx is not None and causal_beta is not None:
         # Option A: Use explicit causal variants provided by user
@@ -810,12 +812,12 @@ def _select_causal_variants(
             raise ValueError("causal_idx and causal_beta must be 1D and same length.")
         if np.any((causal_idx < 0) | (causal_idx >= m)):
             raise ValueError("causal_idx contains indices outside the variant range.")
-        
+
         # Check if explicit causal indices pass the causal filters (warn if not)
         if not np.all(causal_candidate_mask[causal_idx]):
             invalid_causal = causal_idx[~causal_candidate_mask[causal_idx]]
             log.warning(f" -Warning: {len(invalid_causal)} explicit causal variants do not pass causal filters", verbose=verbose)
-        
+
         # Assign explicit effect sizes
         beta_true[causal_idx] = causal_beta
         is_causal[causal_idx] = True
@@ -838,7 +840,7 @@ def _select_causal_variants(
             idx = causal_candidate_indices[selected_candidate_idx]
         else:
             raise ValueError("mode must be 'polygenic' or 'sparse'")
-        
+
         # Step 4: Sample causal effect sizes with MAF-dependent architecture
         if alpha > 0.0:
             # MAF-dependent architecture: β_j^raw ~ N(0, [2p_j(1-p_j)]^(-alpha))
@@ -855,20 +857,20 @@ def _select_causal_variants(
             # MAF-independent architecture: β_j ~ N(0, effect_sd^2)
             # All causal variants have the same effect size variance regardless of frequency
             beta_true[idx] = rng.normal(0.0, float(effect_sd), size=len(idx))
-        
+
         is_causal[idx] = True
-    
+
     log.write(f" -Selected {is_causal.sum()} causal variants", verbose=verbose)
-    
+
     return beta_true, is_causal
 
 
 def _convert_z_to_sumstats(
     z: np.ndarray,
     N_eff: np.ndarray,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     verbose: bool = True
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Convert Z-scores to summary statistics (SE, BETA, P, MLOG10P).
     
@@ -879,58 +881,58 @@ def _convert_z_to_sumstats(
     """
     if log is None:
         log = Log()
-    
+
     m = len(z)
-    
+
     # Validate N_eff
     N_eff = np.clip(N_eff, 1.0, None)
-    
+
     # Standard error: SE = 1 / sqrt(N_eff)
     se = 1.0 / np.sqrt(N_eff)
-    
+
     # Validate Z scores
     z_nonzero_count = np.sum(z != 0.0)
     z_finite_count = np.sum(np.isfinite(z))
     z_abs_max = np.abs(z[np.isfinite(z)]).max() if z_finite_count > 0 else 0.0
     z_abs_mean = np.abs(z[np.isfinite(z)]).mean() if z_finite_count > 0 else 0.0
-    
+
     log.write(f" -Z-score statistics: {z_nonzero_count}/{m} non-zero, {z_finite_count}/{m} finite, max|Z|={z_abs_max:.6f}, mean|Z|={z_abs_mean:.6f}", verbose=verbose)
-    
+
     if z_nonzero_count == 0:
         log.warning(" -WARNING: All Z scores are zero! This will result in all betas being zero.", verbose=verbose)
         log.warning(" -Possible causes:", verbose=verbose)
         log.warning("   1. All causal effects are zero (check causal variant selection)", verbose=verbose)
         log.warning("   2. LD matrices are all identity (variants not matching in VCF)", verbose=verbose)
         log.warning("   3. Numerical issues causing all Z to be replaced with 0", verbose=verbose)
-    
+
     # Replace NaN/Inf Z scores with 0 (no effect)
     z_valid = np.where(np.isfinite(z), z, 0.0)
-    
+
     # Effect estimate: BETA = Z * SE
     beta_hat = z_valid * se
-    
+
     # Calculate MLOG10P directly from Z using log-space for numerical precision
     mlog10p = _z_to_mlog10p(z_valid)
     mlog10p = np.where(np.isfinite(mlog10p), mlog10p, 0.0)
-    
+
     # Calculate P from MLOG10P: P = 10^(-MLOG10P)
     p = np.power(10.0, -mlog10p)
     p = np.where(np.isfinite(p), p, 0.5)
-    
+
     # Log warning if there were invalid Z scores
     invalid_z_count = np.sum(~np.isfinite(z))
     if invalid_z_count > 0:
         log.warning(f" -Found {invalid_z_count} invalid Z scores (NaN/Inf), replaced with 0", verbose=verbose)
-    
+
     return se, beta_hat, p, mlog10p
 
 
 def _extract_causal_snp_ids(
     df: pl.DataFrame,
     is_causal: np.ndarray,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     verbose: bool = True
-) -> List[str]:
+) -> list[str]:
     """
     Extract causal SNP IDs from Polars DataFrame.
     
@@ -938,20 +940,20 @@ def _extract_causal_snp_ids(
     """
     if log is None:
         log = Log()
-    
+
     causal_indices = np.where(is_causal)[0]
     if len(causal_indices) == 0:
         return []
-    
+
     # Filter to causal variants only (Polars is fast)
     # Use row indices to filter - create a boolean mask
     # Polars int_range().is_in() works with lists or Series
     is_causal_mask = pl.int_range(0, df.height).is_in(causal_indices)
     causal_df = df.filter(is_causal_mask)
-    
+
     # Extract SNP IDs
     causal_snp_ids = []
-    
+
     # Check if SNPID column exists (from VCF)
     if "SNPID" in df.columns:
         snpid_col = causal_df["SNPID"].to_list()
@@ -959,10 +961,10 @@ def _extract_causal_snp_ids(
         pos_col = causal_df["POS"].to_list()
         ea_col = causal_df["EA"].to_list()
         nea_col = causal_df["NEA"].to_list()
-        
-        for snp_id, chr_val, pos_val, ea_val, nea_val in zip(snpid_col, chr_col, pos_col, ea_col, nea_col):
+
+        for snp_id, chr_val, pos_val, ea_val, nea_val in zip(snpid_col, chr_col, pos_col, ea_col, nea_col, strict=False):
             # Use VCF ID if available and not missing
-            if snp_id is not None and str(snp_id) != 'None' and str(snp_id) != '.' and str(snp_id) != '':
+            if snp_id is not None and str(snp_id) != "None" and str(snp_id) != "." and str(snp_id) != "":
                 causal_snp_ids.append(str(snp_id))
             else:
                 # Fallback: construct ID from CHR:POS:EA:NEA
@@ -974,13 +976,13 @@ def _extract_causal_snp_ids(
         pos_col = causal_df["POS"].to_list()
         ea_col = causal_df["EA"].to_list()
         nea_col = causal_df["NEA"].to_list()
-        
-        for chr_val, pos_val, ea_val, nea_val in zip(chr_col, pos_col, ea_col, nea_col):
+
+        for chr_val, pos_val, ea_val, nea_val in zip(chr_col, pos_col, ea_col, nea_col, strict=False):
             snp_id = f"{chr_val}:{pos_val}:{ea_val}:{nea_val}"
             causal_snp_ids.append(snp_id)
-    
+
     log.write(f" -Extracted {len(causal_snp_ids)} causal SNP IDs", verbose=verbose)
-    
+
     return causal_snp_ids
 
 
@@ -991,12 +993,12 @@ def _extract_causal_snp_ids(
 def simulate_sumstats_region(
     vcf_path: str,
     *,
-    region: Optional[Tuple[Union[int, str], int, int]] = None,
+    region: tuple[Union[int, str], int, int] | None = None,
     # trait and sample size
     trait: str = "quant",                    # "quant" or "binary"
-    n: Optional[int] = 300_000,              # required if trait="quant"
-    n_case: Optional[int] = None,            # required if trait="binary"
-    n_ctrl: Optional[int] = None,            # required if trait="binary"
+    n: int | None = 300_000,              # required if trait="quant"
+    n_case: int | None = None,            # required if trait="binary"
+    n_ctrl: int | None = None,            # required if trait="binary"
     # genetic architecture
     mode: str = "sparse",                 # "polygenic" or "sparse"
     pi: float = 2e-3,                        # causal fraction if polygenic
@@ -1010,12 +1012,12 @@ def simulate_sumstats_region(
     eaf_max: float = 1.0,                    # maximum EAF for variants (1.0 = no filter)
     exclude_rare: bool = False,              # if True, exclude rare variants (MAF < 0.01)
     rare_maf_threshold: float = 0.01,        # MAF threshold for rare variants
-    thin: Optional[float] = 0.5,            # fraction of variants to keep after filtering (None = keep all, simulates incomplete coverage)
+    thin: float | None = 0.5,            # fraction of variants to keep after filtering (None = keep all, simulates incomplete coverage)
     # causal variant selection filters
-    causal_maf_min: Optional[float] = None,  # minimum MAF for causal variants (None = no filter)
-    causal_maf_max: Optional[float] = None,  # maximum MAF for causal variants (None = no filter)
-    causal_eaf_min: Optional[float] = None,  # minimum EAF for causal variants (None = no filter)
-    causal_eaf_max: Optional[float] = None,  # maximum EAF for causal variants (None = no filter)
+    causal_maf_min: float | None = None,  # minimum MAF for causal variants (None = no filter)
+    causal_maf_max: float | None = None,  # maximum MAF for causal variants (None = no filter)
+    causal_eaf_min: float | None = None,  # minimum EAF for causal variants (None = no filter)
+    causal_eaf_max: float | None = None,  # maximum EAF for causal variants (None = no filter)
     # realism knobs
     n_drop_rate: float = 0.15,               # fraction of SNPs with reduced N
     n_drop_min: float = 0.5,                 # minimum N multiplier for dropped SNPs
@@ -1030,18 +1032,18 @@ def simulate_sumstats_region(
     # deterministic
     seed: int = 1,
     # explicit causals (optional)
-    causal_idx: Optional[np.ndarray] = None,
-    causal_beta: Optional[np.ndarray] = None,
+    causal_idx: np.ndarray | None = None,
+    causal_beta: np.ndarray | None = None,
     # VCF reading options
-    vcf_chr_dict: Optional[dict] = None,
-    tabix: Optional[bool] = None,
+    vcf_chr_dict: dict | None = None,
+    tabix: bool | None = None,
     verbose: bool = True,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     # Sumstats object options
     study: str = "Simulated_Study",
     trait_name: str = "Simulated_Trait",
     build: str = "38",
-) -> Tuple[Sumstats, List[str]]:
+) -> tuple[Sumstats, list[str]]:
     """
     Simulate GWAS summary statistics (BETA/SE/Z/P) for a genomic region using a reference panel LD model.
     
@@ -1368,14 +1370,14 @@ def simulate_sumstats_region(
     """
     if log is None:
         log = Log()
-    
+
     rng = np.random.default_rng(seed)
-    
+
     log.write("Starting GWAS summary statistics simulation...", verbose=verbose)
     log.write(f" -VCF path: {vcf_path}", verbose=verbose)
     if region:
         log.write(f" -Region: chr{region[0]}:{region[1]}-{region[2]}", verbose=verbose)
-    
+
     # -------------------------------------------------------------------------
     # Step 0: Load variants from VCF file
     # -------------------------------------------------------------------------
@@ -1384,7 +1386,7 @@ def simulate_sumstats_region(
     log.write("Loading variants from VCF...", verbose=verbose)
     mapper = ChromosomeMapper(log=log, verbose=verbose)
     mapper.detect_reference_format(vcf_path)
-    
+
     # Read variant metadata from VCF (CHR, POS, EA, NEA, EAF, INFO)
     # Only loads variant-level data, not genotypes (genotypes loaded later when needed)
     df = _read_vcf_variants(
@@ -1396,22 +1398,22 @@ def simulate_sumstats_region(
         log=log,
         verbose=verbose
     )
-    
+
     # Validate that required columns are present
     for col in ("CHR", "POS", "EA", "NEA", "EAF"):
         if col not in df.columns:
             raise ValueError(f"VCF must provide column '{col}'")
-    
+
     # Extract position array and count variants
     # DataFrame is already sorted by POS from _read_vcf_variants
     pos = df["POS"].to_numpy().astype(np.int64)
     m = df.height
-    
+
     if m == 0:
         raise ValueError("No variants returned for the requested region.")
-    
+
     log.write(f" -Loaded {m} variants", verbose=verbose)
-    
+
     # -------------------------------------------------------------------------
     # Step 0.5: Apply variant-level filters (MAF/EAF thresholds, exclude rare)
     # -------------------------------------------------------------------------
@@ -1429,7 +1431,7 @@ def simulate_sumstats_region(
         verbose=verbose
     )
     m = df.height
-    
+
     # -------------------------------------------------------------------------
     # Step 0.6: Thin variants to simulate incomplete GWAS coverage
     # -------------------------------------------------------------------------
@@ -1447,9 +1449,9 @@ def simulate_sumstats_region(
         df = df[keep_indices]
         m = df.height
         log.write(f" -After thinning: {m} variants remaining", verbose=verbose)
-    
+
     pos = df["POS"].to_numpy().astype(np.int64)
-    
+
     # -------------------------------------------------------------------------
     # Step 1: Setup sample sizes (N and N_eff) for each variant
     # -------------------------------------------------------------------------
@@ -1467,7 +1469,7 @@ def simulate_sumstats_region(
         n_drop_min=n_drop_min,
         rng=rng
     )
-    
+
     # -------------------------------------------------------------------------
     # Step 2: Setup INFO scores and apply attenuation to N_eff
     # -------------------------------------------------------------------------
@@ -1483,12 +1485,12 @@ def simulate_sumstats_region(
         info_max=info_max,
         rng=rng
     )
-    
+
     # Attenuate N_eff by INFO: N_eff <- N_eff * INFO
     # Lower INFO (poor imputation) => less information => larger SE => smaller Z-scores
     # Ensure N_eff is always positive and valid (minimum of 1.0) to prevent division issues
     N_eff = np.clip(N_eff * info, 1.0, None)
-    
+
     # -------------------------------------------------------------------------
     # Step 3: Select causal variants and assign effect sizes
     # -------------------------------------------------------------------------
@@ -1516,11 +1518,11 @@ def simulate_sumstats_region(
         log=log,
         verbose=verbose
     )
-    
+
     # -------------------------------------------------------------------------
     # Step 4: Simulate Z-scores using efficient X^T X approach
     # -------------------------------------------------------------------------
-    # This method avoids explicit LD matrix construction (O(k²) memory) and 
+    # This method avoids explicit LD matrix construction (O(k²) memory) and
     # Cholesky decomposition (O(k³) time) by using matrix-vector products.
     # Instead of computing R = (1/n) X^T X and then sampling z ~ N(μ, R),
     # we directly compute z = μ_causal + b_strat + ε where:
@@ -1529,9 +1531,9 @@ def simulate_sumstats_region(
     #   - b_strat = σ_strat * (1/sqrt(n)) X^T v, v ~ N(0, I_n)  [bias term: population stratification]
     # This is mathematically equivalent but much more efficient for large k.
     z = np.empty(m, dtype=np.float64)
-    
+
     log.write(" -Simulating Z-scores using X^T X method", verbose=verbose)
-    
+
     # Load genotypes from VCF and standardize them
     # Standardization: X_ij = (G_ij - μ_j) / σ_j where μ_j and σ_j are sample mean and SD
     # This ensures each variant has mean=0 and var=1 in the sample
@@ -1547,20 +1549,20 @@ def simulate_sumstats_region(
         log=log,
         verbose=verbose
     )
-    
+
     if X.shape[0] == 0 or X.shape[1] == 0:
         # No matched variants found in VCF, set all Z-scores to 0
         z[:] = 0.0
     else:
         n_samples = X.shape[0]  # Number of samples in reference panel
         n_variants_matched = X.shape[1]  # Number of variants matched between sumstats and VCF
-        
+
         # matched_indices are indices within [0, m) indicating which variants were matched
         # Extract beta and N_eff only for matched variants
         beta_matched = beta_true[matched_indices]
         N_eff_matched = N_eff[matched_indices]
         N_eff_matched = np.clip(N_eff_matched, 1.0, None)
-        
+
         # Compute mean term: μ_causal = sqrt(N_eff) * (1/n) X^T (X β)
         log.write(" -Computing causal mean: μ_causal = sqrt(N_eff) * (1/n) X^T (X β)", verbose=verbose)
         # Step 1: Compute X β (effect of causal variants on phenotypes)
@@ -1570,20 +1572,20 @@ def simulate_sumstats_region(
         # Step 3: Scale by sqrt(N_eff) to account for sample size
         sqrt_N_eff = np.sqrt(N_eff_matched)
         mu_causal = sqrt_N_eff * R_beta
-        
+
         # Generate standard LD-noise: ε_0 ~ N(0, R)
         # NOTE: Scaling must be 1/sqrt(n), NOT 1/n, so that Var(ε_0) = (1/n) X^T X = R
         # This ensures the noise has the correct correlation structure matching the LD matrix
         log.write(" -Generating standard LD-noise: ε_0 = (1/sqrt(n)) X^T u, u ~ N(0, I_n)", verbose=verbose)
         u = rng.standard_normal(n_samples)
         epsilon_0 = (X.T @ u) / np.sqrt(float(n_samples))
-        
+
         # Apply cryptic relatedness / global inflation: ε = λ * ε_0
         # This scales the noise variance: Cov(ε) = λ * R
         # If λ > 1, creates genomic control inflation (QQ plot inflates)
         log.write(f" -Applying cryptic relatedness inflation: ε = λ * ε_0 (λ = {lambda_gc:.4f})", verbose=verbose)
         epsilon = lambda_gc * epsilon_0
-        
+
         # Generate population stratification bias: b_strat ~ N(0, σ_strat^2 R)
         # This creates LD-correlated bias that mimics population structure
         # Creates genome-wide shifts and correlated "hills" of signal across LD blocks
@@ -1594,26 +1596,26 @@ def simulate_sumstats_region(
             b_strat = sigma_strat * (X.T @ v) / np.sqrt(float(n_samples))
         else:
             log.write(" -Skipping population stratification bias (σ_strat = 0.0)", verbose=verbose)
-        
+
         # Z-scores: z = μ_causal + b_strat + ε
         # μ_causal: signal from causal variants (spread via LD)
         # b_strat: LD-correlated bias from population stratification
         # ε: scaled noise (correlated due to LD, inflated by λ)
         log.write(" -Computing final Z-scores: z = μ_causal + b_strat + ε", verbose=verbose)
         z_matched = mu_causal + b_strat + epsilon
-        
+
         # Validate: replace any NaN/Inf values with 0 (shouldn't happen, but safety check)
         z_matched = np.where(np.isfinite(z_matched), z_matched, 0.0).astype(np.float64)
-        
+
         # Store Z-scores in global array (only for matched variants)
         z[matched_indices] = z_matched
-        
+
         # Set unmatched variants to 0 (variants in sumstats but not found in VCF)
         all_indices = np.arange(m)
         unmatched = np.setdiff1d(all_indices, matched_indices)
         if len(unmatched) > 0:
             z[unmatched] = 0.0
-    
+
     # -------------------------------------------------------------------------
     # Step 5: Convert Z-scores to summary statistics (SE, BETA, P, MLOG10P)
     # -------------------------------------------------------------------------
@@ -1628,7 +1630,7 @@ def simulate_sumstats_region(
         log=log,
         verbose=verbose
     )
-    
+
     # -------------------------------------------------------------------------
     # Step 6: Assemble output DataFrame (using Polars for performance)
     # -------------------------------------------------------------------------
@@ -1647,19 +1649,19 @@ def simulate_sumstats_region(
         pl.Series("P", p, dtype=pl.Float64),
         pl.Series("MLOG10P", mlog10p, dtype=pl.Float64),
     ])
-    
+
     # Add binary trait specific columns (N_CASE and N_CONTROL)
     if trait == "binary":
         out = out.with_columns([
             pl.Series("N_CASE", np.full(m, int(n_case), dtype=int), dtype=pl.Int64),
             pl.Series("N_CONTROL", np.full(m, int(n_ctrl), dtype=int), dtype=pl.Int64),
         ])
-    
+
     # Convert to Pandas for Sumstats object (required by GWASLab)
     out = out.to_pandas()
-    
+
     log.write("Simulation completed successfully!", verbose=verbose)
-    
+
     # -------------------------------------------------------------------------
     # Step 7: Extract causal SNP IDs
     # -------------------------------------------------------------------------
@@ -1671,7 +1673,7 @@ def simulate_sumstats_region(
         log=log,
         verbose=verbose
     )
-    
+
     # -------------------------------------------------------------------------
     # Step 8: Create and return Sumstats object
     # -------------------------------------------------------------------------
@@ -1699,23 +1701,23 @@ def simulate_sumstats_region(
         build=build,
         verbose=verbose
     )
-    
+
     return sumstats_obj, causal_snp_ids
 
 
 def simulate_sumstats_global(
     vcf_path: str,
     *,
-    chromosomes: Optional[List[Union[int, str]]] = None,  # If None, use all chromosomes
+    chromosomes: list[Union[int, str]] | None = None,  # If None, use all chromosomes
     # trait and sample size
     trait: str = "quant",                    # "quant" or "binary"
-    n: Optional[int] = 300_000,              # required if trait="quant"
-    n_case: Optional[int] = None,            # required if trait="binary"
-    n_ctrl: Optional[int] = None,            # required if trait="binary"
+    n: int | None = 300_000,              # required if trait="quant"
+    n_case: int | None = None,            # required if trait="binary"
+    n_ctrl: int | None = None,            # required if trait="binary"
     # genetic architecture
     mode: str = "polygenic",                 # "polygenic" or "sparse"
     pi: float = 2e-3,                        # causal fraction if polygenic
-    n_causal: Optional[int] = None,          # number of causals if sparse (per chromosome if None)
+    n_causal: int | None = None,          # number of causals if sparse (per chromosome if None)
     h2: float = 0.1,                          # target heritability
     alpha: float = 0.2,                       # MAF dependence parameter (0 = MAF-independent)
     # variant filtering
@@ -1726,10 +1728,10 @@ def simulate_sumstats_global(
     exclude_rare: bool = False,              # if True, exclude rare variants (MAF < 0.01)
     rare_maf_threshold: float = 0.01,        # MAF threshold for rare variants
     # causal variant selection filters
-    causal_maf_min: Optional[float] = None,  # minimum MAF for causal variants
-    causal_maf_max: Optional[float] = None,  # maximum MAF for causal variants
-    causal_eaf_min: Optional[float] = None,  # minimum EAF for causal variants
-    causal_eaf_max: Optional[float] = None,  # maximum EAF for causal variants
+    causal_maf_min: float | None = None,  # minimum MAF for causal variants
+    causal_maf_max: float | None = None,  # maximum MAF for causal variants
+    causal_eaf_min: float | None = None,  # minimum EAF for causal variants
+    causal_eaf_max: float | None = None,  # maximum EAF for causal variants
     # block-wise processing
     window_bp: int = 1_000_000,              # window size in basepairs for block-wise simulation (1Mb default)
     # realism knobs
@@ -1743,15 +1745,15 @@ def simulate_sumstats_global(
     # deterministic
     seed: int = 1,
     # VCF reading options
-    vcf_chr_dict: Optional[dict] = None,
-    tabix: Optional[bool] = None,
+    vcf_chr_dict: dict | None = None,
+    tabix: bool | None = None,
     verbose: bool = True,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     # Sumstats object options
     study: str = "Simulated_Study",
     trait_name: str = "Simulated_Trait",
     build: str = "19",
-) -> Tuple[Sumstats, List[str]]:
+) -> tuple[Sumstats, list[str]]:
     """
     Simulate genome-wide GWAS summary statistics using efficient reference-panel LD model.
     
@@ -1903,23 +1905,23 @@ def simulate_sumstats_global(
     """
     if log is None:
         log = Log()
-    
+
     rng = np.random.default_rng(seed)
-    
+
     log.write("Starting genome-wide GWAS summary statistics simulation...", verbose=verbose)
     log.write(f" -VCF path: {vcf_path}", verbose=verbose)
     log.write(f" -Target heritability: {h2:.4f}", verbose=verbose)
     log.write(f" -MAF dependence (alpha): {alpha:.4f}", verbose=verbose)
-    
+
     # Initialize mapper
     mapper = ChromosomeMapper(log=log, verbose=verbose)
     mapper.detect_reference_format(vcf_path)
-    
+
     # -------------------------------------------------------------------------
     # Phase 1: Load variants and select causals
     # -------------------------------------------------------------------------
     log.write("Phase 1: Loading variants and selecting causal variants...", verbose=verbose)
-    
+
     # Determine chromosomes to process
     if chromosomes is None:
         # Auto-detect chromosomes: need to load all variants first
@@ -1933,27 +1935,27 @@ def simulate_sumstats_global(
             log=log,
             verbose=verbose
         )
-        
+
         if df.height == 0:
             raise ValueError("No variants found in VCF")
-        
+
         # Auto-detect chromosomes from loaded variants
         unique_chrs = df["CHR"].unique().to_list()
         # Sort chromosomes naturally
         def chr_sort_key(x):
-            x_str = str(x).lstrip('chrCHR')
+            x_str = str(x).lstrip("chrCHR")
             try:
                 return (0, int(x_str))  # Numeric chromosomes first
             except ValueError:
                 return (1, x_str)  # Non-numeric (e.g., X, Y, MT) after
-        
+
         chromosomes = sorted(unique_chrs, key=chr_sort_key)
         log.write(f" -Found {len(chromosomes)} chromosomes: {chromosomes[:5]}..." if len(chromosomes) > 5 else f" -Found {len(chromosomes)} chromosomes: {chromosomes}", verbose=verbose)
     else:
         # Load only specified chromosomes (more efficient)
         log.write(f" -Loading variants for {len(chromosomes)} specified chromosomes...", verbose=verbose)
         chr_str_list = [str(c) for c in chromosomes]
-        
+
         # Load each chromosome separately and combine
         # For tabix-indexed VCFs, this is efficient as it only loads the specified chromosome
         all_dfs = []
@@ -1972,7 +1974,7 @@ def simulate_sumstats_global(
                 log=log,
                 verbose=False  # Less verbose for each chromosome
             )
-            
+
             # Filter to exact chromosome match (handle string/numeric differences)
             # This ensures we only get variants from the requested chromosome
             if df_chr.height > 0:
@@ -1980,20 +1982,20 @@ def simulate_sumstats_global(
                 if df_chr.height > 0:
                     all_dfs.append(df_chr)
                     log.write(f"     -Loaded {df_chr.height} variants from chromosome {chr_val}", verbose=verbose)
-        
+
         if len(all_dfs) == 0:
             raise ValueError(f"No variants found for specified chromosomes: {chromosomes}")
-        
+
         # Combine all chromosomes using Polars (much faster)
         df = pl.concat(all_dfs)
         log.write(f" -Loaded variants from {len(chromosomes)} chromosomes", verbose=verbose)
-    
+
     # Sort by CHR and POS (Polars is much faster)
     df = df.sort(["CHR", "POS"])
-    
+
     m = df.height
     log.write(f" -Total variants loaded: {m}", verbose=verbose)
-    
+
     # Apply variant filters
     df = _filter_variants(
         df=df,
@@ -2007,7 +2009,7 @@ def simulate_sumstats_global(
         verbose=verbose
     )
     m = df.height
-    
+
     # Setup N and N_eff
     N, N_eff = _setup_sample_sizes(
         m=m,
@@ -2019,7 +2021,7 @@ def simulate_sumstats_global(
         n_drop_min=n_drop_min,
         rng=rng
     )
-    
+
     # Setup INFO scores and apply attenuation
     info = _setup_info_scores(
         df=df,
@@ -2031,7 +2033,7 @@ def simulate_sumstats_global(
         rng=rng
     )
     N_eff = np.clip(N_eff * info, 1.0, None)
-    
+
     # Select causal variants (for global, we use raw effects that will be rescaled)
     # Note: For global simulation, we need to handle n_causal=None differently
     if mode == "sparse" and n_causal is None:
@@ -2039,7 +2041,7 @@ def simulate_sumstats_global(
         n_causal_effective = max(1, int(round(m * 0.001)))
     else:
         n_causal_effective = n_causal if n_causal is not None else 3
-    
+
     beta_raw, is_causal = _select_causal_variants(
         df=df,
         mode=mode,
@@ -2057,35 +2059,35 @@ def simulate_sumstats_global(
         log=log,
         verbose=verbose
     )
-    
+
     # -------------------------------------------------------------------------
     # Phase 2: Compute raw genetic variance across all blocks
     # -------------------------------------------------------------------------
     log.write("Phase 2: Computing raw genetic variance for heritability calibration...", verbose=verbose)
-    
+
     pos = df["POS"].to_numpy().astype(np.int64)
     chr_array = df["CHR"].to_numpy()
-    
+
     # Group variants by chromosome
     chr_to_indices = {}
     for i, chr_val in enumerate(chr_array):
         if chr_val not in chr_to_indices:
             chr_to_indices[chr_val] = []
         chr_to_indices[chr_val].append(i)
-    
+
     V_g_raw_total = 0.0
     n_blocks_processed = 0
-    
+
     for chr_val in chromosomes:
         if chr_val not in chr_to_indices:
             continue
-        
+
         chr_indices = np.array(chr_to_indices[chr_val])
         chr_pos = pos[chr_indices]
-        
+
         # Create blocks for this chromosome
         blocks = _make_blocks_by_bp(chr_pos, int(window_bp))
-    
+
     for block_idx, (start_i, end_i) in enumerate(blocks):
             # Map block indices to global indices
             # Note: end_i can be equal to len(chr_pos) (half-open interval [start, end))
@@ -2097,7 +2099,7 @@ def simulate_sumstats_global(
                 # Use one past the last variant index for this chromosome (exclusive end)
                 # Cap at len(df) to avoid out-of-bounds
                 global_end = min(chr_indices[-1] + 1 if len(chr_indices) > 0 else global_start, df.height)
-            
+
             # Get standardized genotypes for this block
             X, p_block, matched_indices = _get_standardized_genotypes_for_block(
             vcf_path=vcf_path,
@@ -2111,62 +2113,62 @@ def simulate_sumstats_global(
             log=log,
                 verbose=False
             )
-            
+
             if X.shape[0] == 0 or X.shape[1] == 0:
                 continue
-            
+
             n_samples = X.shape[0]
             n_variants_block = X.shape[1]
-            
+
             # Get beta_raw for matched variants
             # Map matched_indices (local to block, 0-based within block slice) to global indices
             # matched_indices are indices within the block slice [global_start, global_end)
             global_matched = global_start + matched_indices
             beta_block = beta_raw[global_matched]
-            
+
             # Compute V_g^raw = (1/n) (Xβ)^T (Xβ)
             X_beta = X @ beta_block
             V_g_block = np.dot(X_beta, X_beta) / float(n_samples)
-            
+
             V_g_raw_total += V_g_block
             n_blocks_processed += 1
-    
+
     if n_blocks_processed == 0:
         raise ValueError("No blocks could be processed for genetic variance calculation")
-    
+
     log.write(f" -Raw genetic variance: {V_g_raw_total:.6f}", verbose=verbose)
     log.write(f" -Processed {n_blocks_processed} blocks", verbose=verbose)
-    
+
     # Compute rescaling factor
     if V_g_raw_total <= 0:
         log.warning(" -Raw genetic variance is non-positive, using identity scaling", verbose=verbose)
         scale_factor = 1.0
     else:
         scale_factor = np.sqrt(h2 / V_g_raw_total)
-    
+
     log.write(f" -Rescaling factor: {scale_factor:.6f}", verbose=verbose)
-    
+
     # Rescale effects
     beta_true = beta_raw * scale_factor
-    
+
     # -------------------------------------------------------------------------
     # Phase 3: Generate Z-scores using efficient X^T X approach
     # -------------------------------------------------------------------------
     log.write("Phase 3: Generating Z-scores...", verbose=verbose)
-    
+
     z = np.zeros(m, dtype=float)
-    
+
     for chr_val in chromosomes:
         if chr_val not in chr_to_indices:
             continue
-        
+
         chr_indices = np.array(chr_to_indices[chr_val])
         chr_pos = pos[chr_indices]
-        
+
         blocks = _make_blocks_by_bp(chr_pos, int(window_bp))
-        
+
         log.write(f" -Processing chromosome {chr_val}: {len(blocks)} blocks", verbose=verbose)
-        
+
         for block_idx, (start_i, end_i) in enumerate(blocks):
             # Map block indices to global indices
             # Note: end_i can be equal to len(chr_pos) (half-open interval [start, end))
@@ -2178,7 +2180,7 @@ def simulate_sumstats_global(
                 # Use one past the last variant index for this chromosome (exclusive end)
                 # Cap at len(df) to avoid out-of-bounds
                 global_end = min(chr_indices[-1] + 1 if len(chr_indices) > 0 else global_start, df.height)
-            
+
             # Get standardized genotypes
             X, p_block, matched_indices = _get_standardized_genotypes_for_block(
                 vcf_path=vcf_path,
@@ -2192,42 +2194,42 @@ def simulate_sumstats_global(
                 log=log,
                 verbose=False
             )
-            
+
             if X.shape[0] == 0 or X.shape[1] == 0:
                 continue
-            
+
             n_samples = X.shape[0]
             n_variants_block = X.shape[1]
-            
+
             # Map matched indices to global
             # matched_indices are indices within the block slice [global_start, global_end)
             global_matched = global_start + matched_indices
-            
+
             # Get rescaled effects and N_eff for this block
             beta_block = beta_true[global_matched]
             N_eff_block = N_eff[global_matched]
             N_eff_block = np.clip(N_eff_block, 1.0, None)
-            
+
             # Compute mean: μ = sqrt(N_eff) * (1/n) X^T (Xβ)
             X_beta = X @ beta_block
             R_beta = (X.T @ X_beta) / float(n_samples)
             sqrt_N_eff = np.sqrt(N_eff_block)
             mu = sqrt_N_eff * R_beta
-            
+
             # Generate noise: ε = (1/sqrt(n)) X^T u, where u ~ N(0, I_n)
             # NOTE: scaling must be 1/sqrt(n), NOT 1/n, so that Var(ε) = (1/n) X^T X = R
             u = rng.standard_normal(n_samples)
             epsilon = (X.T @ u) / np.sqrt(float(n_samples))
-            
+
             # Z-scores: z = μ + ε
             z_block = mu + epsilon
-            
+
             # Validate
             z_block = np.where(np.isfinite(z_block), z_block, 0.0)
-            
+
             # Store in global array
             z[global_matched] = z_block
-    
+
     # -------------------------------------------------------------------------
     # Phase 4: Convert to summary statistics
     # -------------------------------------------------------------------------
@@ -2238,12 +2240,12 @@ def simulate_sumstats_global(
         log=log,
         verbose=verbose
     )
-    
+
     # -------------------------------------------------------------------------
     # Phase 5: Assemble output (using Polars)
     # -------------------------------------------------------------------------
     log.write("Phase 5: Assembling output...", verbose=verbose)
-    
+
     # Add all columns using Polars (much faster)
     # Create Series with explicit dtype to avoid casting issues
     out = df.with_columns([
@@ -2258,16 +2260,16 @@ def simulate_sumstats_global(
         pl.Series("P", p, dtype=pl.Float64),
         pl.Series("MLOG10P", mlog10p, dtype=pl.Float64),
     ])
-    
+
     if trait == "binary":
         out = out.with_columns([
             pl.Series("N_CASE", np.full(m, int(n_case), dtype=int), dtype=pl.Int64),
             pl.Series("N_CONTROL", np.full(m, int(n_ctrl), dtype=int), dtype=pl.Int64),
         ])
-    
+
     # Convert to Pandas for Sumstats object (required)
     out = out.to_pandas()
-    
+
     # Extract causal SNP IDs
     causal_snp_ids = _extract_causal_snp_ids(
         df=df,
@@ -2275,7 +2277,7 @@ def simulate_sumstats_global(
         log=log,
         verbose=verbose
     )
-    
+
     # Create Sumstats object
     sumstats_obj = Sumstats(
         sumstats=out,
@@ -2298,7 +2300,7 @@ def simulate_sumstats_global(
         build=build,
         verbose=verbose
     )
-    
+
     log.write("Genome-wide simulation completed successfully!", verbose=verbose)
-    
+
     return sumstats_obj, causal_snp_ids

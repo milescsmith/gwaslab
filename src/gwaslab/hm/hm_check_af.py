@@ -1,9 +1,12 @@
-import pandas as pd
 import numpy as np
-from gwaslab.info.g_Log import Log
-from .hm_assign_rsid import _annotate_sumstats
-from gwaslab.qc.qc_decorator import with_logging
+import pandas as pd
+
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.info.g_Log import Log
+from gwaslab.qc.qc_decorator import with_logging
+
+from .hm_assign_rsid import _annotate_sumstats
+
 
 @with_logging(
     start_to_msg="check the difference between EAF (sumstats) and ALT frequency (reference VCF) using sweep mode",
@@ -162,25 +165,25 @@ def _check_af_with_annotation(
         assign_cols = tuple(assign_cols)
     else:
         assign_cols = tuple(assign_cols)
-    
+
     # Ensure assign_cols contains ref_alt_freq
     if ref_alt_freq not in assign_cols:
         assign_cols = tuple(list(assign_cols) + [ref_alt_freq])
-    
+
     # Optimize: If converting to BCF, don't strip info (needed for AF extraction)
     if convert_to_bcf:
         strip_info = False
 
     # Get mapper from Sumstats object if available, otherwise create one
     if mapper is None:
-        if not is_dataframe and hasattr(sumstats_obj, 'mapper'):
+        if not is_dataframe and hasattr(sumstats_obj, "mapper"):
             mapper = sumstats_obj.mapper
         else:
             species = sumstats_obj.meta.get("gwaslab", {}).get("species", "homo sapiens") if not is_dataframe else "homo sapiens"
-            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, 'build') else None
+            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, "build") else None
             mapper = ChromosomeMapper(species=species, build=build, log=log, verbose=verbose)
             # Auto-detect sumstats format if data is available
-            if not is_dataframe and hasattr(sumstats_obj, 'data') and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
+            if not is_dataframe and hasattr(sumstats_obj, "data") and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
                 mapper.detect_sumstats_format(sumstats_obj.data[chrom])
 
     # Auto-detect reference format from VCF file
@@ -210,15 +213,15 @@ def _check_af_with_annotation(
         verbose=verbose,
         log=log,
     )
-    
+
     # Calculate DAF = EAF - ALT_AF (reference)
     # The annotated AF column should contain ALT_AF from reference
     column_name = column_name + suffix
-    
+
     # Initialize DAF column
     if column_name not in annotated_sumstats.columns:
         annotated_sumstats[column_name] = np.nan
-    
+
     # Filter variants to process based on STATUS if not force
     if not force:
         from gwaslab.hm.hm_harmonize_sumstats import _extract_status_digit
@@ -228,12 +231,12 @@ def _check_af_with_annotation(
     else:
         good_chrpos = pd.Series(True, index=annotated_sumstats.index)
         log.write(" -Checking all variants (force=True):", good_chrpos.sum(), verbose=verbose)
-    
+
     # Only process variants with EAF available
     has_eaf = annotated_sumstats[eaf].notna()
     has_ref_af = annotated_sumstats[ref_alt_freq].notna()
     to_process = good_chrpos & has_eaf & has_ref_af
-    
+
     if to_process.sum() > 0:
         # Calculate DAF = EAF - ALT_AF (reference)
         # The ref_alt_freq column contains ALT_AF from reference VCF
@@ -250,28 +253,28 @@ def _check_af_with_annotation(
         else:
             # No flip flag, assume EA matches ALT (use AF directly)
             ref_af_matched = annotated_sumstats.loc[to_process, ref_alt_freq]
-        
+
         # DAF = EAF (sumstats) - ALT_AF (reference, matched to EA)
         eaf_values = annotated_sumstats.loc[to_process, eaf].values
-        ref_af_values = ref_af_matched.values if hasattr(ref_af_matched, 'values') else ref_af_matched
+        ref_af_values = ref_af_matched.values if hasattr(ref_af_matched, "values") else ref_af_matched
         daf_values = eaf_values - ref_af_values
         annotated_sumstats.loc[to_process, column_name] = daf_values.astype(float)
-        
+
         log.write(" -Difference in allele frequency (DAF) = EAF (sumstats) - ALT_AF (reference VCF)", verbose=verbose)
         log.write(" -Note: this DAF is not the derived allele frequency.", verbose=verbose)
-        log.write(" - {} max:".format(column_name), np.nanmax(annotated_sumstats[column_name]), verbose=verbose)
-        log.write(" - {} min:".format(column_name), np.nanmin(annotated_sumstats[column_name]), verbose=verbose)
-        log.write(" - {} mean:".format(column_name), np.nanmean(annotated_sumstats[column_name]), verbose=verbose)
-        log.write(" - {} sd:".format(column_name), np.nanstd(annotated_sumstats[column_name]), verbose=verbose)
-        log.write(" - abs({}) min:".format(column_name), np.nanmin(np.abs(annotated_sumstats[column_name])), verbose=verbose)
-        log.write(" - abs({}) max:".format(column_name), np.nanmax(np.abs(annotated_sumstats[column_name])), verbose=verbose)
-        log.write(" - abs({}) sd:".format(column_name), np.nanstd(np.abs(annotated_sumstats[column_name])), verbose=verbose)
+        log.write(f" - {column_name} max:", np.nanmax(annotated_sumstats[column_name]), verbose=verbose)
+        log.write(f" - {column_name} min:", np.nanmin(annotated_sumstats[column_name]), verbose=verbose)
+        log.write(f" - {column_name} mean:", np.nanmean(annotated_sumstats[column_name]), verbose=verbose)
+        log.write(f" - {column_name} sd:", np.nanstd(annotated_sumstats[column_name]), verbose=verbose)
+        log.write(f" - abs({column_name}) min:", np.nanmin(np.abs(annotated_sumstats[column_name])), verbose=verbose)
+        log.write(f" - abs({column_name}) max:", np.nanmax(np.abs(annotated_sumstats[column_name])), verbose=verbose)
+        log.write(f" - abs({column_name}) sd:", np.nanstd(np.abs(annotated_sumstats[column_name])), verbose=verbose)
         log.write("Finished allele frequency checking!")
-    
+
     # Drop ALLELE_FLIPPED as it's an internal temporary column
     if "ALLELE_FLIPPED" in annotated_sumstats.columns:
         annotated_sumstats = annotated_sumstats.drop(columns=["ALLELE_FLIPPED"])
-    
+
     # Set metadata and update harmonization status if Sumstats object is available
     if not is_dataframe:
         # Assign modified dataframe back to the Sumstats object
@@ -440,25 +443,25 @@ def _infer_af_with_annotation(
         assign_cols = tuple(assign_cols)
     else:
         assign_cols = tuple(assign_cols)
-    
+
     # Ensure assign_cols contains ref_alt_freq
     if ref_alt_freq not in assign_cols:
         assign_cols = tuple(list(assign_cols) + [ref_alt_freq])
-    
+
     # Optimize: If converting to BCF, don't strip info (needed for AF extraction)
     if convert_to_bcf:
         strip_info = False
 
     # Get mapper from Sumstats object if available, otherwise create one
     if mapper is None:
-        if not is_dataframe and hasattr(sumstats_obj, 'mapper'):
+        if not is_dataframe and hasattr(sumstats_obj, "mapper"):
             mapper = sumstats_obj.mapper
         else:
             species = sumstats_obj.meta.get("gwaslab", {}).get("species", "homo sapiens") if not is_dataframe else "homo sapiens"
-            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, 'build') else None
+            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, "build") else None
             mapper = ChromosomeMapper(species=species, build=build, log=log, verbose=verbose)
             # Auto-detect sumstats format if data is available
-            if not is_dataframe and hasattr(sumstats_obj, 'data') and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
+            if not is_dataframe and hasattr(sumstats_obj, "data") and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
                 mapper.detect_sumstats_format(sumstats_obj.data[chrom])
 
     # Auto-detect reference format from VCF file
@@ -472,9 +475,9 @@ def _infer_af_with_annotation(
     # Initialize EAF column if it doesn't exist
     if eaf not in sumstats.columns:
         sumstats[eaf] = np.nan
-    
+
     prenumber = sumstats[eaf].isna().sum()
-    
+
     # Filter variants to process based on STATUS if not force
     if not force:
         from gwaslab.hm.hm_harmonize_sumstats import _extract_status_digit
@@ -484,13 +487,13 @@ def _infer_af_with_annotation(
     else:
         good_chrpos = pd.Series(True, index=sumstats.index)
         log.write(" -Checking all variants (force=True):", good_chrpos.sum(), verbose=verbose)
-    
+
     # Only process variants that need EAF inference
     needs_eaf = sumstats[eaf].isna()
     to_process = good_chrpos & needs_eaf
-    
+
     log.write(f" -Variants needing EAF inference: {to_process.sum()} / {len(sumstats)}", verbose=verbose)
-    
+
     if to_process.sum() > 0:
         # Annotate with AF from reference for variants that need EAF
         # We'll annotate all variants first, then update only those that need EAF
@@ -512,25 +515,25 @@ def _infer_af_with_annotation(
             verbose=verbose,
             log=log,
         )
-        
+
         # Debug: Check if ALLELE_FLIPPED exists after annotation
         if "ALLELE_FLIPPED" not in annotated_sumstats.columns:
             log.write(" -WARNING: ALLELE_FLIPPED column not found after _annotate_sumstats!", verbose=verbose)
         else:
             flipped_count = annotated_sumstats["ALLELE_FLIPPED"].fillna(False).sum()
             log.write(f" -ALLELE_FLIPPED column found, {flipped_count} variants marked as flipped", verbose=verbose)
-        
+
         # The annotated AF column contains ALT_AF from reference VCF
         # _annotate_sumstats handles allele matching, so the annotated AF should be
         # the frequency of the allele that matches EA in sumstats
         # For inference: if EA matches ALT, use ALT_AF directly; if EA matches REF, use 1 - ALT_AF
         # Since _annotate_sumstats already handles matching, we can use the annotated AF directly
         # as the inferred EAF for variants where EAF was missing
-        
+
         # Update EAF for variants that were missing EAF and now have annotated AF
         has_ref_af = annotated_sumstats[ref_alt_freq].notna()
         to_update = to_process & has_ref_af
-        
+
         if to_update.sum() > 0:
             # Use the annotated AF as inferred EAF, but adjust for allele orientation
             # If EA matches ALT, use ALT_AF directly
@@ -546,19 +549,19 @@ def _infer_af_with_annotation(
             else:
                 # No flip flag, assume EA matches ALT (use AF directly)
                 annotated_sumstats.loc[to_update, eaf] = annotated_sumstats.loc[to_update, ref_alt_freq]
-        
+
         afternumber = annotated_sumstats[eaf].isna().sum()
-        log.write(" -Inferred EAF for {} variants.".format(prenumber - afternumber), verbose=verbose)
-        log.write(" -EAF is still missing for {} variants.".format(afternumber), verbose=verbose)
-        
+        log.write(f" -Inferred EAF for {prenumber - afternumber} variants.", verbose=verbose)
+        log.write(f" -EAF is still missing for {afternumber} variants.", verbose=verbose)
+
         sumstats = annotated_sumstats
     else:
         log.write(" -No variants need EAF inference (all have EAF or don't meet criteria).", verbose=verbose)
-    
+
     # Drop ALLELE_FLIPPED as it's an internal temporary column
     if "ALLELE_FLIPPED" in sumstats.columns:
         sumstats = sumstats.drop(columns=["ALLELE_FLIPPED"])
-    
+
     # Set metadata and update harmonization status if Sumstats object is available
     if not is_dataframe:
         # Assign modified dataframe back to the Sumstats object
@@ -738,25 +741,25 @@ def _infer_af_with_maf_annotation(
         assign_cols = tuple(assign_cols)
     else:
         assign_cols = tuple(assign_cols)
-    
+
     # Ensure assign_cols contains ref_alt_freq
     if ref_alt_freq not in assign_cols:
         assign_cols = tuple(list(assign_cols) + [ref_alt_freq])
-    
+
     # Optimize: If converting to BCF, don't strip info (needed for AF extraction)
     if convert_to_bcf:
         strip_info = False
 
     # Get mapper from Sumstats object if available, otherwise create one
     if mapper is None:
-        if not is_dataframe and hasattr(sumstats_obj, 'mapper'):
+        if not is_dataframe and hasattr(sumstats_obj, "mapper"):
             mapper = sumstats_obj.mapper
         else:
             species = sumstats_obj.meta.get("gwaslab", {}).get("species", "homo sapiens") if not is_dataframe else "homo sapiens"
-            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, 'build') else None
+            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, "build") else None
             mapper = ChromosomeMapper(species=species, build=build, log=log, verbose=verbose)
             # Auto-detect sumstats format if data is available
-            if not is_dataframe and hasattr(sumstats_obj, 'data') and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
+            if not is_dataframe and hasattr(sumstats_obj, "data") and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
                 mapper.detect_sumstats_format(sumstats_obj.data[chrom])
 
     # Auto-detect reference format from VCF file
@@ -772,9 +775,9 @@ def _infer_af_with_maf_annotation(
         sumstats[eaf] = np.nan
     if ref_eaf not in sumstats.columns:
         sumstats[ref_eaf] = np.nan
-    
+
     prenumber = sumstats[eaf].isna().sum()
-    
+
     # Filter variants to process based on STATUS if not force
     if not force:
         from gwaslab.hm.hm_harmonize_sumstats import _extract_status_digit
@@ -782,11 +785,11 @@ def _infer_af_with_maf_annotation(
         good_chrpos = (digit_4 == 0)
     else:
         good_chrpos = pd.Series(True, index=sumstats.index)
-    
+
     # Only process variants with valid MAF (required for EAF inference)
     good_chrpos = good_chrpos & sumstats[maf].notna()
     log.write(" -Checking variants:", good_chrpos.sum(), verbose=verbose)
-    
+
     if good_chrpos.sum() > 0:
         # Annotate with AF from reference for variants that need EAF inference
         annotated_sumstats = _annotate_sumstats(
@@ -807,7 +810,7 @@ def _infer_af_with_maf_annotation(
             verbose=verbose,
             log=log,
         )
-        
+
         # Store the annotated AF in the ref_eaf column
         # Handle allele matching: if EA matches ALT, use ALT_AF directly
         # If EA matches REF (ALLELE_FLIPPED=True), use 1 - ALT_AF
@@ -822,14 +825,14 @@ def _infer_af_with_maf_annotation(
         else:
             # No flip flag, assume EA matches ALT (use AF directly)
             annotated_sumstats[ref_eaf] = annotated_sumstats[ref_alt_freq]
-        
+
         # Infer sumstats EAF based on sumstats MAF and reference EAF
         # Use XOR logic - flip when ref_eaf and maf indicate different major/minor alleles
         # (ref_eaf >= 0.5) means ref allele is major, (maf <= 0.5) means maf is minor
         # If ref is major and maf is minor, or ref is minor and maf is major, we need to flip
         has_ref_eaf = annotated_sumstats[ref_eaf].notna()
         to_process = good_chrpos & has_ref_eaf
-        
+
         if to_process.sum() > 0:
             is_flipped = (annotated_sumstats.loc[to_process, ref_eaf] >= 0.5) != (annotated_sumstats.loc[to_process, maf] > 0.5)
             # Vectorized assignment: use np.where for efficient conditional assignment
@@ -843,24 +846,24 @@ def _infer_af_with_maf_annotation(
             original_dtype = annotated_sumstats[eaf].dtype
             inferred_eaf = inferred_eaf.astype(original_dtype)
             annotated_sumstats.loc[to_process, eaf] = inferred_eaf
-            log.write(" -Flipping MAF to obtain EAF for {} variants".format(is_flipped.sum()), verbose=verbose)
-        
+            log.write(f" -Flipping MAF to obtain EAF for {is_flipped.sum()} variants", verbose=verbose)
+
         afternumber = annotated_sumstats[eaf].isna().sum()
-        log.write(" -Inferred EAF for {} variants.".format(prenumber - afternumber), verbose=verbose)
-        log.write(" -EAF is still missing for {} variants.".format(afternumber), verbose=verbose)
-        
+        log.write(f" -Inferred EAF for {prenumber - afternumber} variants.", verbose=verbose)
+        log.write(f" -EAF is still missing for {afternumber} variants.", verbose=verbose)
+
         # Drop the temporary ref_eaf column
         if ref_eaf in annotated_sumstats.columns:
             annotated_sumstats = annotated_sumstats.drop(columns=[ref_eaf])
-        
+
         sumstats = annotated_sumstats
     else:
         log.write(" -No variants need EAF inference (all have EAF or don't meet criteria).", verbose=verbose)
-    
+
     # Drop ALLELE_FLIPPED as it's an internal temporary column
     if "ALLELE_FLIPPED" in sumstats.columns:
         sumstats = sumstats.drop(columns=["ALLELE_FLIPPED"])
-    
+
     # Set metadata and update harmonization status if Sumstats object is available
     if not is_dataframe:
         # Assign modified dataframe back to the Sumstats object

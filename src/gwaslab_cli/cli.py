@@ -13,24 +13,23 @@ import numpy as np
 import pandas as pd
 
 from gwaslab.util.util_in_filter_value import _exclude, _extract
-
 from gwaslab_cli.cli_banner import emit_cli_mode_banner
-from gwaslab_cli.pair import run_pair
 from gwaslab_cli.handlers import (
     load_sumstats,
     run_config,
     run_config_show,
-    run_path,
+    run_download,
+    run_download_ref,
     run_fb_list,
     run_fb_show,
     run_fb_update,
-    run_version,
-    run_download,
-    run_download_ref,
-    run_list_ref,
     run_init,
+    run_list_ref,
+    run_path,
     run_report,
+    run_version,
 )
+from gwaslab_cli.pair import run_pair
 
 
 def _apply_cli_fix_steps(s, args) -> bool:
@@ -56,10 +55,10 @@ def _apply_cli_fix_steps(s, args) -> bool:
     return bool(need_chr and need_pos)
 
 
-def _read_variant_id_list(path: str) -> List[str]:
+def _read_variant_id_list(path: str) -> list[str]:
     """Read one variant ID per line (first column if whitespace-separated); skip blanks and # comments."""
-    out: List[str] = []
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
+    out: list[str] = []
+    with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):
@@ -68,7 +67,7 @@ def _read_variant_id_list(path: str) -> List[str]:
     return out
 
 
-def _variant_id_column(df: pd.DataFrame) -> Optional[str]:
+def _variant_id_column(df: pd.DataFrame) -> str | None:
     if "SNPID" in df.columns:
         return "SNPID"
     if "rsID" in df.columns:
@@ -81,7 +80,7 @@ def _strip_chr_token(u: str) -> str:
     return u[3:] if u.startswith("CHR") else u
 
 
-def _apply_chr_filter(s, chr_filter: List[str], verbose: bool) -> None:
+def _apply_chr_filter(s, chr_filter: list[str], verbose: bool) -> None:
     allowed = {_strip_chr_token(t) for t in chr_filter}
     ch = s.data["CHR"]
     norm = ch.map(lambda x: _strip_chr_token(x) if pd.notna(x) else None)
@@ -93,7 +92,7 @@ def _apply_chr_filter(s, chr_filter: List[str], verbose: bool) -> None:
     )
 
 
-def _maf_series(df: pd.DataFrame) -> Optional[pd.Series]:
+def _maf_series(df: pd.DataFrame) -> pd.Series | None:
     if "MAF" in df.columns:
         return pd.to_numeric(df["MAF"], errors="coerce")
     if "EAF" in df.columns:
@@ -224,7 +223,7 @@ def _add_download_sumstats_args(p: argparse.ArgumentParser) -> None:
     )
 
 
-def main(argv: Optional[list] = None) -> None:
+def main(argv: list | None = None) -> None:
     """Main entry point for GWASLab CLI."""
     if argv is None:
         argv = sys.argv[1:]
@@ -713,7 +712,7 @@ Examples:
     if not args.input:
         parser.error("--input is required (or use a subcommand like 'version', 'config')")
 
-    extract_list_file: Optional[str] = None
+    extract_list_file: str | None = None
     if args.extract is not None:
         pe = os.path.expanduser(args.extract)
         if not os.path.isfile(pe):

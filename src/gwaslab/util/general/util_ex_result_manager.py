@@ -5,21 +5,22 @@ Provides result tracking, preview, and log file management for script executions
 """
 
 import os
-import pandas as pd
-from typing import Optional, Dict, List, Any, Union
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 
-from gwaslab.util.rwrapper.util_ex_r_runner import RExecutionResult
-from gwaslab.util.pwrapper.util_ex_python_runner import PythonExecutionResult
-from gwaslab.util.cwrapper.util_ex_command_runner import CommandExecutionResult
+import pandas as pd
+
 from gwaslab.info.g_Log import Log
-from gwaslab.util.general.util_wrapper_log import create_r_log, create_python_log, create_command_log
+from gwaslab.util.cwrapper.util_ex_command_runner import CommandExecutionResult
 from gwaslab.util.general.util_path_manager import _path
+from gwaslab.util.general.util_wrapper_log import create_command_log, create_python_log, create_r_log
+from gwaslab.util.pwrapper.util_ex_python_runner import PythonExecutionResult
+from gwaslab.util.rwrapper.util_ex_r_runner import RExecutionResult
 
 try:
-    import matplotlib.pyplot as plt
     import matplotlib.image as mpimg
+    import matplotlib.pyplot as plt
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -31,11 +32,11 @@ ExecutionResult = Union[RExecutionResult, PythonExecutionResult, CommandExecutio
 @dataclass
 class ExecutionRecord:
     """Record of a single execution with its result and metadata."""
-    identifier: Optional[str]
+    identifier: str | None
     result: ExecutionResult
     timestamp: str
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    output_data: Dict[str, Any] = field(default_factory=dict)  # Cached output files
+    parameters: dict[str, Any] = field(default_factory=dict)
+    output_data: dict[str, Any] = field(default_factory=dict)  # Cached output files
 
 
 class ResultManager:
@@ -57,8 +58,8 @@ class ResultManager:
     >>> manager.preview_dataframe("output.csv", n_rows=5)
     >>> manager.show_image("diagnostic.png", title="Diagnostic Plot")
     """
-    
-    def __init__(self, log: Optional[Log] = None):
+
+    def __init__(self, log: Log | None = None):
         """
         Initialize ResultManager.
         
@@ -66,15 +67,15 @@ class ResultManager:
             log: Log instance for logging (default: None, creates new Log)
         """
         self.log = log if log is not None else Log()
-        self.records: List[ExecutionRecord] = []
-    
+        self.records: list[ExecutionRecord] = []
+
     def trace(
         self,
         result: ExecutionResult,
-        identifier: Optional[str] = None,
-        parameters: Optional[Dict[str, Any]] = None,
+        identifier: str | None = None,
+        parameters: dict[str, Any] | None = None,
         read_outputs: bool = False,
-        expected_files: Optional[List[str]] = None
+        expected_files: list[str] | None = None
     ) -> ExecutionRecord:
         """
         Trace an execution result (record it and optionally read outputs).
@@ -95,13 +96,13 @@ class ResultManager:
             timestamp=datetime.now().isoformat(),
             parameters=parameters or {}
         )
-        
+
         # Read outputs if requested
         if read_outputs and expected_files:
             record.output_data = self._read_outputs(result, expected_files)
-        
+
         self.records.append(record)
-        
+
         # Log success/failure
         if result.success:
             self.log.write(
@@ -116,45 +117,45 @@ class ResultManager:
             if result.errors:
                 for error in result.errors:
                     self.log.warning(f"    Error: {error}", verbose=True)
-        
+
         return record
-    
+
     def _read_outputs(
         self,
         result: ExecutionResult,
-        expected_files: List[str]
-    ) -> Dict[str, Any]:
+        expected_files: list[str]
+    ) -> dict[str, Any]:
         """Read output files from a result."""
         outputs = {}
-        
+
         for file_name in expected_files:
             if file_name in result.output_files:
                 file_path = result.output_files[file_name]
                 try:
                     # Try to read as CSV/TSV
-                    if file_path.endswith('.csv') or file_path.endswith('.res'):
+                    if file_path.endswith(".csv") or file_path.endswith(".res"):
                         outputs[file_name] = pd.read_csv(file_path)
-                    elif file_path.endswith('.tsv') or file_path.endswith('.tsv.gz'):
-                        outputs[file_name] = pd.read_csv(file_path, sep='\t')
+                    elif file_path.endswith(".tsv") or file_path.endswith(".tsv.gz"):
+                        outputs[file_name] = pd.read_csv(file_path, sep="\t")
                     else:
                         # Read as text
-                        with open(file_path, 'r') as f:
+                        with open(file_path) as f:
                             outputs[file_name] = f.read()
                 except Exception as e:
                     outputs[file_name] = None
-                    self.log.warning(f"Error reading output file {file_name}: {str(e)}")
+                    self.log.warning(f"Error reading output file {file_name}: {e!s}")
             else:
                 outputs[file_name] = None
-        
+
         return outputs
-    
+
     def preview_dataframe(
         self,
         file_name: str,
-        result: Optional[ExecutionResult] = None,
+        result: ExecutionResult | None = None,
         n_rows: int = 5,
         show_info: bool = True
-    ) -> Optional[pd.DataFrame]:
+    ) -> pd.DataFrame | None:
         """
         Show a preview of a DataFrame from an output file.
         
@@ -174,27 +175,27 @@ class ResultManager:
                 if record.result.success and file_name in record.result.output_files:
                     result = record.result
                     break
-        
+
         if result is None or file_name not in result.output_files:
             self.log.warning(f"  -Output file not found: {file_name}", verbose=True)
             return None
-        
+
         # Use the path from output_files directly (already resolved and validated)
         file_path = result.output_files[file_name]
-        
+
         # Verify file exists (should always be true since it's in output_files)
         if not os.path.exists(file_path):
             self.log.warning(f"  -Output file path does not exist: {file_path}", verbose=True)
             return None
-        
+
         try:
             # Read the file - try CSV first, then TSV
             # .pipcs files are CSV files written by R
-            if (file_path.endswith('.csv') or file_path.endswith('.res') or 
-                file_path.endswith('.pipcs')):
+            if (file_path.endswith(".csv") or file_path.endswith(".res") or
+                file_path.endswith(".pipcs")):
                 df = pd.read_csv(file_path)
-            elif file_path.endswith('.tsv') or file_path.endswith('.tsv.gz'):
-                df = pd.read_csv(file_path, sep='\t')
+            elif file_path.endswith(".tsv") or file_path.endswith(".tsv.gz"):
+                df = pd.read_csv(file_path, sep="\t")
             else:
                 # Try reading as CSV as fallback (many R outputs are CSV even without .csv extension)
                 try:
@@ -202,32 +203,32 @@ class ResultManager:
                 except Exception:
                     self.log.warning(f"  -File {file_name} is not a CSV/TSV file", verbose=True)
                     return None
-            
+
             # Show preview
             self.log.write(f"  -Preview of {file_name}:", verbose=True)
             self.log.write(f"    Shape: {df.shape[0]} rows × {df.shape[1]} columns", verbose=True)
-            
+
             if show_info:
                 self.log.write(f"    Columns: {', '.join(df.columns.tolist()[:10])}", verbose=True)
                 if len(df.columns) > 10:
                     self.log.write(f"    ... and {len(df.columns) - 10} more columns", verbose=True)
-            
+
             # Show head
             preview_df = df.head(n_rows)
             self.log.write(f"\n    First {n_rows} rows:", verbose=True)
             self.log.write(f"\n{preview_df.to_string()}\n", verbose=True)
-            
+
             return df
-            
+
         except Exception as e:
-            self.log.warning(f"  -Error reading {file_name}: {str(e)}", verbose=True)
+            self.log.warning(f"  -Error reading {file_name}: {e!s}", verbose=True)
             return None
-    
+
     def show_image(
         self,
         file_name: str,
-        result: Optional[ExecutionResult] = None,
-        title: Optional[str] = None,
+        result: ExecutionResult | None = None,
+        title: str | None = None,
         figsize: tuple = (10, 6)
     ) -> bool:
         """
@@ -245,7 +246,7 @@ class ResultManager:
         if not MATPLOTLIB_AVAILABLE:
             self.log.warning("  -matplotlib not available, cannot display image", verbose=True)
             return False
-        
+
         # Find result to use
         if result is None:
             # Use last successful result
@@ -253,25 +254,25 @@ class ResultManager:
                 if record.result.success and file_name in record.result.output_files:
                     result = record.result
                     break
-        
+
         if result is None or file_name not in result.output_files:
             self.log.warning(f"  -Image file not found: {file_name}", verbose=True)
             return False
-        
+
         # Use the path from output_files directly (already resolved and validated by RScriptRunner)
         # The path is already absolute and verified to exist (as shown in log file)
         file_path = result.output_files[file_name]
-        
+
         # Simple existence check (should always pass since RScriptRunner validates it)
         if not os.path.exists(file_path):
             self.log.warning(f"  -Image file does not exist: {file_path}", verbose=True)
             return False
-        
+
         try:
             img = mpimg.imread(file_path)
             plt.figure(figsize=figsize)
             plt.imshow(img)
-            plt.axis('off')
+            plt.axis("off")
             if title:
                 plt.title(title)
             plt.tight_layout()
@@ -279,18 +280,18 @@ class ResultManager:
             self.log.write(f"  -Displayed image: {file_name}", verbose=True)
             return True
         except Exception as e:
-            self.log.warning(f"  -Could not display image: {str(e)}", verbose=True)
+            self.log.warning(f"  -Could not display image: {e!s}", verbose=True)
             return False
-    
+
     def create_r_log(
         self,
         result: ExecutionResult,
         script_content: str,
         log_file_path: str,
-        working_dir: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        working_dir: str | None = None,
+        metadata: dict[str, Any] | None = None,
         r_path: str = "Rscript",
-        package_name: Optional[str] = None,
+        package_name: str | None = None,
         verbose: bool = True
     ) -> str:
         """
@@ -320,16 +321,16 @@ class ResultManager:
             log=self.log,
             verbose=verbose
         )
-    
+
     def create_python_log(
         self,
         result: ExecutionResult,
         script_content: str,
         log_file_path: str,
-        working_dir: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        working_dir: str | None = None,
+        metadata: dict[str, Any] | None = None,
         python_path: str = "python",
-        package_name: Optional[str] = None,
+        package_name: str | None = None,
         verbose: bool = True
     ) -> str:
         """
@@ -359,15 +360,15 @@ class ResultManager:
             log=self.log,
             verbose=verbose
         )
-    
+
     def create_command_log(
         self,
         result: ExecutionResult,
         command: str,
         log_file_path: str,
-        working_dir: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        tool_path: Optional[str] = None,
+        working_dir: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_path: str | None = None,
         verbose: bool = True
     ) -> str:
         """
@@ -395,8 +396,8 @@ class ResultManager:
             log=self.log,
             verbose=verbose
         )
-    
-    def get_statistics(self) -> Dict[str, Any]:
+
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get execution statistics.
         
@@ -412,13 +413,13 @@ class ResultManager:
                 "total_execution_time": 0.0,
                 "average_execution_time": 0.0
             }
-        
+
         total = len(self.records)
         successful = sum(1 for r in self.records if r.result.success)
         failed = total - successful
         total_time = sum(r.result.execution_time for r in self.records)
         avg_time = total_time / total if total > 0 else 0.0
-        
+
         return {
             "total_executions": total,
             "successful_executions": successful,
@@ -427,15 +428,15 @@ class ResultManager:
             "total_execution_time": total_time,
             "average_execution_time": avg_time
         }
-    
-    def get_failed_executions(self) -> List[ExecutionRecord]:
+
+    def get_failed_executions(self) -> list[ExecutionRecord]:
         """Get all failed execution records."""
         return [r for r in self.records if not r.result.success]
-    
-    def get_successful_executions(self) -> List[ExecutionRecord]:
+
+    def get_successful_executions(self) -> list[ExecutionRecord]:
         """Get all successful execution records."""
         return [r for r in self.records if r.result.success]
-    
+
     def clear(self) -> None:
         """Clear all stored records."""
         self.records.clear()

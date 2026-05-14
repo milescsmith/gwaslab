@@ -1,10 +1,11 @@
 import os
+import random
 import sys
 import tempfile
 import unittest
-import random
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -12,20 +13,20 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
-from gwaslab.viz.viz_plot_miamiplot2 import plot_miami2
-# regional_mode_setup / process_vcf: viz_plot_regional2; bulk scatter: draw_manhattan_panel
-from gwaslab.viz.viz_plot_regional2 import _plot_regional, regional_mode_setup, process_vcf
-from gwaslab.viz.viz_plot_manhattan_mode import draw_manhattan_panel
 from gwaslab.info.g_Log import Log
-from gwaslab.viz.viz_plot_mqqplot import _mqqplot
-from gwaslab.viz.viz_plot_trumpetplot import _plot_trumpet
-from gwaslab.viz.viz_plot_stackedregional import plot_stacked_mqq
 from gwaslab.viz.viz_plot_compare_af import plotdaf
+from gwaslab.viz.viz_plot_manhattan_mode import draw_manhattan_panel
+from gwaslab.viz.viz_plot_miamiplot2 import plot_miami2
+from gwaslab.viz.viz_plot_mqqplot import _mqqplot
 
+# regional_mode_setup / process_vcf: viz_plot_regional2; bulk scatter: draw_manhattan_panel
+from gwaslab.viz.viz_plot_regional2 import _plot_regional, process_vcf, regional_mode_setup
+from gwaslab.viz.viz_plot_stackedregional import plot_stacked_mqq
+from gwaslab.viz.viz_plot_trumpetplot import _plot_trumpet
 
 # Three chr1 SNPs, six samples, diploid GT — enough for allel.read_vcf(..., tabix=None)
 # and rogers_huff LD vs a chosen lead. Plain .vcf (no bgzip/tabix) keeps CI simple.
@@ -174,7 +175,7 @@ class TestRelatedPlots(unittest.TestCase):
         target_chr = df1["CHR"].iloc[0]
         target_pos = df1["POS"].iloc[0]
         region = (target_chr, max(0, target_pos - 100000), target_pos + 100000)
-        
+
         # Use mode="m" instead of "r" since "r" requires VCF files
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
@@ -191,12 +192,12 @@ class TestRelatedPlots(unittest.TestCase):
     def test_plot_stacked_mqq_with_sumstats_objects(self):
         # Test with Sumstats objects instead of DataFrames
         from gwaslab.g_Sumstats import Sumstats
-        
+
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
         gl1 = Sumstats(sumstats=df1, chrom="CHR", pos="POS", p="P", snpid="SNPID", verbose=False)
         gl2 = Sumstats(sumstats=df2, chrom="CHR", pos="POS", p="P", snpid="SNPID", verbose=False)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[gl1, gl2],
             mode="m",
@@ -212,7 +213,7 @@ class TestRelatedPlots(unittest.TestCase):
         df2 = make_sumstats(n=200)
         highlight_snps = [df1.iloc[0]["SNPID"], df1.iloc[1]["SNPID"]]
         pinpoint_snps = [df1.iloc[2]["SNPID"]]
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
             mode="m",
@@ -231,7 +232,7 @@ class TestRelatedPlots(unittest.TestCase):
         # Test that mqq_kwargs are properly passed through to underlying plots
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
             mode="m",
@@ -251,7 +252,7 @@ class TestRelatedPlots(unittest.TestCase):
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
         df3 = make_sumstats(n=150)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2, df3],
             mode="m",
@@ -271,7 +272,7 @@ class TestRelatedPlots(unittest.TestCase):
         # Actually, let's test with 2 panels instead to avoid the bug
         df1 = make_sumstats(n=200)
         df2 = make_sumstats(n=200)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
             mode="m",
@@ -286,7 +287,7 @@ class TestRelatedPlots(unittest.TestCase):
         # Test with custom title position
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
             mode="m",
@@ -303,7 +304,7 @@ class TestRelatedPlots(unittest.TestCase):
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
         df3 = make_sumstats(n=150)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2, df3],
             mode="mqq",
@@ -324,7 +325,7 @@ class TestRelatedPlots(unittest.TestCase):
         df1 = make_sumstats(n=200)
         df2 = make_sumstats(n=200)
         anno_snps = [df1.iloc[0]["SNPID"], df1.iloc[1]["SNPID"], df1.iloc[2]["SNPID"]]
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
             mode="m",
@@ -348,7 +349,7 @@ class TestRelatedPlots(unittest.TestCase):
         target_chr = df1["CHR"].iloc[0]
         target_pos = df1["POS"].iloc[0]
         region = (target_chr, max(0, target_pos - 100000), target_pos + 100000)
-        
+
         # Use mode="m" instead of "r" since "r" requires VCF files
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
@@ -365,7 +366,7 @@ class TestRelatedPlots(unittest.TestCase):
         # Test with common_ylabel=False (each panel gets its own ylabel)
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
             mode="m",
@@ -380,7 +381,7 @@ class TestRelatedPlots(unittest.TestCase):
         # Test with custom height ratios
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2],
             mode="m",
@@ -399,11 +400,11 @@ class TestRelatedPlots(unittest.TestCase):
         df1 = make_sumstats(n=150)
         df2 = make_sumstats(n=150)
         df3 = make_sumstats(n=150)
-        
+
         highlight1 = [df1.iloc[0]["SNPID"]]
         highlight2 = [df2.iloc[0]["SNPID"]]
         highlight3 = [df3.iloc[0]["SNPID"]]
-        
+
         fig, log = plot_stacked_mqq(
             objects=[df1, df2, df3],
             mode="m",

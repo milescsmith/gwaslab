@@ -1,23 +1,25 @@
-from typing import Tuple, Any, List
+from typing import Any, List, Tuple
+
 import pandas as pd
 
+
 def _run_plink_filter(filter_flag: str, out_prefix: str) -> None:
-    '''
+    """
     run plink filter functions to generate bim and fam files
     
     Returns:
         bim as pd.DataFrame: SNPID,CHR,POS,NEA,EA
         fam as pd.DataFrame: FID,IID
-    '''
-    plink_script='''
+    """
+    plink_script=f"""
     plink2 \
-    {} \
+    {filter_flag} \
     --make-just-bim \
-    --make-just-fam \ 
-    --out {}
-    '''.format(filter_flag, out_prefix)
+    --make-just-fam \\ 
+    --out {out_prefix}
+    """
 
-def _plink2_filter_to_flag(tmpdir: str = "./", **kwargs: Any) -> Tuple[str, List[str]]:
+def _plink2_filter_to_flag(tmpdir: str = "./", **kwargs: Any) -> tuple[str, list[str]]:
     combined_flag=""
     temp_file_list=[]
     for flag_with_underbar,value in kwargs.items():
@@ -32,7 +34,7 @@ def _plink2_filter_to_flag(tmpdir: str = "./", **kwargs: Any) -> Tuple[str, List
         combined_flag += formated_flag
     return combined_flag,temp_file_list
 
-def _process_df_to_file(flag_with_underbar: str, df: pd.DataFrame, tmpdir: str) -> Tuple[str, str]:
+def _process_df_to_file(flag_with_underbar: str, df: pd.DataFrame, tmpdir: str) -> tuple[str, str]:
     temp_path ="{}/memory_address_{}.{}".format(tmpdir.rstrip("/"),
                                                 id(df),
                                                 flag_with_underbar.replace("_",""))

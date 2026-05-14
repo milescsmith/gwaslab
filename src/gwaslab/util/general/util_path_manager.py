@@ -1,8 +1,9 @@
-from typing import Optional, Any
 import os
 import re
 import time
 import uuid
+from typing import Any, Optional
+
 from gwaslab.info.g_Log import Log
 
 
@@ -18,30 +19,30 @@ def _sanitize_path_component(component: str) -> str:
     """
     if not isinstance(component, str):
         component = str(component)
-    
+
     # Replace invalid filesystem characters (Windows and Unix)
     # Invalid chars: < > : " | ? * \ / and control characters
     invalid_chars = r'[<>:"|?*\\/\x00-\x1f]'
-    component = re.sub(invalid_chars, '_', component)
-    
+    component = re.sub(invalid_chars, "_", component)
+
     # Replace multiple consecutive dashes/underscores with single underscore
-    component = re.sub(r'[-_]+', '_', component)
-    
+    component = re.sub(r"[-_]+", "_", component)
+
     # Remove leading/trailing dots, dashes, and spaces (problematic on some filesystems)
-    component = component.strip('. -_')
-    
+    component = component.strip(". -_")
+
     # Replace spaces with underscores
-    component = component.replace(' ', '_')
-    
+    component = component.replace(" ", "_")
+
     # Limit component length to prevent issues
     max_component_length = 255
     if len(component) > max_component_length:
         component = component[:max_component_length]
-    
+
     # Ensure component is not empty
     if not component:
         component = "unnamed"
-    
+
     return component
 
 
@@ -78,29 +79,29 @@ def _handle_path_collision(path: str, max_attempts: int = 1000) -> str:
     """
     if not os.path.exists(path):
         return path
-    
+
     # Split path into directory, basename, and extension
     directory = os.path.dirname(path)
     basename = os.path.basename(path)
-    
+
     # Try to split extension
-    if '.' in basename:
-        name_parts = basename.rsplit('.', 1)
+    if "." in basename:
+        name_parts = basename.rsplit(".", 1)
         base_name = name_parts[0]
-        extension = '.' + name_parts[1]
+        extension = "." + name_parts[1]
     else:
         base_name = basename
-        extension = ''
-    
+        extension = ""
+
     # Try appending unique IDs until we find a non-existent path
     for attempt in range(1, max_attempts + 1):
         unique_id = _generate_unique_id(use_uuid=True)
         new_basename = f"{base_name}_{unique_id}{extension}"
         new_path = os.path.join(directory, new_basename)
-        
+
         if not os.path.exists(new_path):
             return new_path
-    
+
     # Fallback: use timestamp if all attempts fail
     timestamp = int(time.time() * 1000) % 1000000000
     new_basename = f"{base_name}_{timestamp}{extension}"
@@ -120,62 +121,62 @@ def _validate_path_length(path: str, max_length: int = 4096) -> str:
     """
     if len(path) <= max_length:
         return path
-    
+
     # Split path components
     directory = os.path.dirname(path)
     basename = os.path.basename(path)
-    
+
     # Calculate available length for basename
     # Reserve space for directory separator and safety margin
     available_length = max_length - len(directory) - 10  # 10 char safety margin
-    
+
     if available_length < 10:  # Minimum basename length
         # If directory is too long, truncate it
         directory = directory[:max_length - 200]  # Reserve 200 for basename
         available_length = max_length - len(directory) - 10
-    
+
     # Truncate basename if needed
     if len(basename) > available_length:
-        if '.' in basename:
-            name_parts = basename.rsplit('.', 1)
+        if "." in basename:
+            name_parts = basename.rsplit(".", 1)
             base_name = name_parts[0]
-            extension = '.' + name_parts[1]
+            extension = "." + name_parts[1]
             # Reserve space for extension
             base_name = base_name[:available_length - len(extension) - 1]
             basename = base_name + extension
         else:
             basename = basename[:available_length]
-    
+
     return os.path.join(directory, basename)
 
 
 def _path(*args: Any,
-                 out: Optional[str] = None,
-                 directory: Optional[str] = None,
+                 out: str | None = None,
+                 directory: str | None = None,
                  tmp: bool = False,
-                 prefix: Optional[str] = None,
-                 study: Optional[str] = None,
-                 nstudy: Optional[str] = None,
-                 trait: Optional[str] = None,
-                 exposure: Optional[str] = None,
-                 outcome: Optional[str] = None,
-                 chrom: Optional[str] = None,
-                 rsid: Optional[str] = None,
-                 snpid: Optional[str] = None,
-                 locus: Optional[str] = None,
-                 loci: Optional[str] = None, 
-                 analysis: Optional[str] = None,
-                 mode: Optional[str] = None,
-                 method: Optional[str] = None,
-                 ancestry: Optional[str] = None,
-                 population: Optional[str] = None,
-                 sample_size: Optional[str] = None,
-                 genotyping: Optional[str] = None, 
-                 pid: Optional[str] = None,
-                 build: Optional[str] = None,
-                 suffix: Optional[str] = None,
-                 result_type: Optional[str] = None,
-                 subdirectory: Optional[str] = None,
+                 prefix: str | None = None,
+                 study: str | None = None,
+                 nstudy: str | None = None,
+                 trait: str | None = None,
+                 exposure: str | None = None,
+                 outcome: str | None = None,
+                 chrom: str | None = None,
+                 rsid: str | None = None,
+                 snpid: str | None = None,
+                 locus: str | None = None,
+                 loci: str | None = None,
+                 analysis: str | None = None,
+                 mode: str | None = None,
+                 method: str | None = None,
+                 ancestry: str | None = None,
+                 population: str | None = None,
+                 sample_size: str | None = None,
+                 genotyping: str | None = None,
+                 pid: str | None = None,
+                 build: str | None = None,
+                 suffix: str | None = None,
+                 result_type: str | None = None,
+                 subdirectory: str | None = None,
                  log: Log = Log(),
                  verbose: bool = True
                  ) -> str:
@@ -223,12 +224,12 @@ def _path(*args: Any,
     if out is not None:
         if os.path.isdir(out):
             directory = out
-            log.write( "Directory detected: {}".format(directory), verbose=verbose)
+            log.write( f"Directory detected: {directory}", verbose=verbose)
         else:
             directory = os.path.dirname(out)
-            log.write( "Directory detected: {}".format(directory), verbose=verbose)
+            log.write( f"Directory detected: {directory}", verbose=verbose)
             out_basename = os.path.basename(out)
-            log.write( "Basename detected: {}".format(out_basename), verbose=verbose)
+            log.write( f"Basename detected: {out_basename}", verbose=verbose)
 
     if out_basename == "":
         # create default path
@@ -237,18 +238,18 @@ def _path(*args: Any,
 
         # ordered components excluding directory, suffix, result_type, subdirectory
         path_order = [
-            "prefix", "study", "nstudy", "trait", "exposure", "outcome", 
-            "chrom", "rsid", "snpid", "locus", "loci", "analysis", "mode", "method", 
+            "prefix", "study", "nstudy", "trait", "exposure", "outcome",
+            "chrom", "rsid", "snpid", "locus", "loci", "analysis", "mode", "method",
             "ancestry", "population","sample_size", "genotyping", "pid", "build", "result_type"
         ]
-        
+
         # create default path
         ###############################################################################################################################################
         # Generate unique ID for temporary files if needed and pid not provided
         if tmp == True and pid is None:
             pid = _generate_unique_id(use_uuid=True)
-            log.write("Generated unique ID for temporary file: {}".format(pid), verbose=verbose)
-        
+            log.write(f"Generated unique ID for temporary file: {pid}", verbose=verbose)
+
         ###############################################################################################################################################
         all_kwargs = locals()
         for key,value in all_kwargs.items():
@@ -259,26 +260,25 @@ def _path(*args: Any,
 
         # merge path components
         path_list = list(map(str, path_list))  + list(map(str, args))
-        
+
         # Sanitize all path components to ensure filesystem compatibility
         path_list = [_sanitize_path_component(component) for component in path_list]
 
         if tmp == True:
             path_list.insert(0, "_gwaslab")
 
-        log.write( "Path component detected: {}".format(path_list), verbose=verbose)
+        log.write( f"Path component detected: {path_list}", verbose=verbose)
 
         path = "_".join(path_list)
+    # use user-provided path, but sanitize it for safety
+    # Preserve extension if present
+    elif "." in out_basename:
+        name_parts = out_basename.rsplit(".", 1)
+        base_name = _sanitize_path_component(name_parts[0])
+        extension = "." + _sanitize_path_component(name_parts[1])
+        path = base_name + extension
     else:
-        # use user-provided path, but sanitize it for safety
-        # Preserve extension if present
-        if '.' in out_basename:
-            name_parts = out_basename.rsplit('.', 1)
-            base_name = _sanitize_path_component(name_parts[0])
-            extension = '.' + _sanitize_path_component(name_parts[1])
-            path = base_name + extension
-        else:
-            path = _sanitize_path_component(out_basename)
+        path = _sanitize_path_component(out_basename)
     ###############################################################################################################################################
 
     # add directory and subdirectory for result files
@@ -290,23 +290,22 @@ def _path(*args: Any,
             if not os.path.exists(directory):
                 try:
                     os.makedirs(directory, exist_ok=True)
-                    log.write("Created subdirectory for results: {}".format(directory), verbose=verbose)
+                    log.write(f"Created subdirectory for results: {directory}", verbose=verbose)
                 except OSError:
-                    log.write("Warning: Could not create subdirectory: {}".format(directory), verbose=verbose)
+                    log.write(f"Warning: Could not create subdirectory: {directory}", verbose=verbose)
         path = os.path.join(directory, path)
+    # Handle subdirectory even when main directory is not specified
+    elif subdirectory is not None:
+        subdir_path = os.path.join("./", subdirectory)
+        if not os.path.exists(subdir_path):
+            try:
+                os.makedirs(subdir_path, exist_ok=True)
+                log.write(f"Created subdirectory for results: {subdir_path}", verbose=verbose)
+            except OSError:
+                log.write(f"Warning: Could not create subdirectory: {subdir_path}", verbose=verbose)
+        path = os.path.join(subdir_path, path)
     else:
-        # Handle subdirectory even when main directory is not specified
-        if subdirectory is not None:
-            subdir_path = os.path.join("./", subdirectory)
-            if not os.path.exists(subdir_path):
-                try:
-                    os.makedirs(subdir_path, exist_ok=True)
-                    log.write("Created subdirectory for results: {}".format(subdir_path), verbose=verbose)
-                except OSError:
-                    log.write("Warning: Could not create subdirectory: {}".format(subdir_path), verbose=verbose)
-            path = os.path.join(subdir_path, path)
-        else:
-            path = os.path.join("./", path)
+        path = os.path.join("./", path)
     ###############################################################################################################################################
 
     # add file extension
@@ -318,7 +317,7 @@ def _path(*args: Any,
 
     # Validate path length
     path = _validate_path_length(path)
-    
+
     # Handle path collisions (only for files, not directories)
     # Only check if the path has a suffix (likely a file) and tmp is False
     # (tmp files should always be unique due to unique ID)
@@ -326,9 +325,9 @@ def _path(*args: Any,
         original_path = path
         path = _handle_path_collision(path)
         if path != original_path:
-            log.write("Path collision detected, using unique path: {}".format(path), verbose=verbose)
+            log.write(f"Path collision detected, using unique path: {path}", verbose=verbose)
 
-    log.write( "Creating path: {}".format(path), verbose=verbose)
+    log.write( f"Creating path: {path}", verbose=verbose)
 
     return path
 

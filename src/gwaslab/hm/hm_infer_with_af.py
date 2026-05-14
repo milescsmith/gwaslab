@@ -1,11 +1,12 @@
-import pandas as pd
 import numpy as np
-from gwaslab.info.g_Log import Log
-from gwaslab.info.g_vchange_status import vchange_status
-from gwaslab.info.g_vchange_status import ensure_status_int
-from .hm_assign_rsid import _annotate_sumstats
-from gwaslab.qc.qc_decorator import with_logging
+import pandas as pd
+
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.info.g_Log import Log
+from gwaslab.info.g_vchange_status import ensure_status_int, vchange_status
+from gwaslab.qc.qc_decorator import with_logging
+
+from .hm_assign_rsid import _annotate_sumstats
 
 # Epsilon for floating point precision in frequency comparisons
 # Used to handle floating point precision issues when comparing MAF values at threshold
@@ -167,14 +168,14 @@ def _infer_strand_with_annotation(
 
     # Initialize chromosome mapper for coordinate conversion
     if mapper is None:
-        if not is_dataframe and hasattr(sumstats_obj, 'mapper'):
+        if not is_dataframe and hasattr(sumstats_obj, "mapper"):
             mapper = sumstats_obj.mapper
         else:
             species = sumstats_obj.meta.get("gwaslab", {}).get("species", "homo sapiens") if not is_dataframe else "homo sapiens"
-            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, 'build') else None
+            build = sumstats_obj.build if not is_dataframe and hasattr(sumstats_obj, "build") else None
             mapper = ChromosomeMapper(species=species, build=build, log=log, verbose=verbose)
             # Auto-detect chromosome format from sumstats data
-            if not is_dataframe and hasattr(sumstats_obj, 'data') and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
+            if not is_dataframe and hasattr(sumstats_obj, "data") and not sumstats_obj.data.empty and chrom in sumstats_obj.data.columns:
                 mapper.detect_sumstats_format(sumstats_obj.data[chrom])
 
     # Normalize assign_cols parameter to tuple format
@@ -184,7 +185,7 @@ def _infer_strand_with_annotation(
         assign_cols = tuple(assign_cols)
     else:
         assign_cols = tuple(assign_cols)
-        
+
     # If converting to BCF, preserve INFO fields (needed for AF extraction)
     if convert_to_bcf:
         strip_info = False
@@ -216,12 +217,12 @@ def _infer_strand_with_annotation(
         verbose=verbose,
         log=log,
     )
-    
+
     # Rename annotated column to RAF (if different from source column name)
     if assign_cols and len(assign_cols) > 0:
         source_col = assign_cols[0]
         if source_col in annotated_sumstats.columns and source_col != raf:
-            log.write(" -Renaming {} in reference to {} in Sumstats".format(source_col, raf), verbose=verbose)
+            log.write(f" -Renaming {source_col} in reference to {raf} in Sumstats", verbose=verbose)
             # Drop target column if it exists to avoid conflicts
             if raf in annotated_sumstats.columns:
                 annotated_sumstats = annotated_sumstats.drop(columns=[raf])
@@ -244,11 +245,11 @@ def _infer_strand_with_annotation(
         log=log,
         verbose=verbose,
     )
-    
+
     # Remove temporary ALLELE_FLIPPED column (used internally for strand inference)
     if "ALLELE_FLIPPED" in result.columns:
         result = result.drop(columns=["ALLELE_FLIPPED"])
-    
+
     # Update metadata and harmonization status if input was a Sumstats object
     if not is_dataframe:
         # Assign modified dataframe back to the Sumstats object
@@ -259,11 +260,11 @@ def _infer_strand_with_annotation(
                 sumstats_obj.meta["gwaslab"]["references"]["ref_infer"] = _append_meta_record(
                     sumstats_obj.meta["gwaslab"]["references"]["ref_infer"], path)
             infer_strand_kwargs = {
-                'path': path, 'vcf_path': vcf_path, 'tsv_path': tsv_path, 'assign_cols': assign_cols,
-                'threads': threads, 'reuse_lookup': reuse_lookup,
-                'convert_to_bcf': convert_to_bcf, 'strip_info': strip_info,
-                'maf_threshold': maf_threshold, 'ref_maf_threshold': ref_maf_threshold,
-                'daf_tolerance': daf_tolerance
+                "path": path, "vcf_path": vcf_path, "tsv_path": tsv_path, "assign_cols": assign_cols,
+                "threads": threads, "reuse_lookup": reuse_lookup,
+                "convert_to_bcf": convert_to_bcf, "strip_info": strip_info,
+                "maf_threshold": maf_threshold, "ref_maf_threshold": ref_maf_threshold,
+                "daf_tolerance": daf_tolerance
             }
             _update_harmonize_step(sumstats_obj, "infer_strand", infer_strand_kwargs, True)
         except:
@@ -407,26 +408,26 @@ def _infer_strand(
     missing_cols = [col for col in required_cols if col not in sumstats.columns]
     if missing_cols:
         raise ValueError(f"Missing required columns: {missing_cols}")
-    
+
     # Check for missing values in critical columns and log warnings
     na_counts = {}
     for col in [flipped_col, eaf, raf]:
         na_count = sumstats[col].isna().sum()
         if na_count > 0:
             na_counts[col] = na_count
-            log.write(" -WARNING: {} variants have NA in {} column...".format(na_count, col), verbose=verbose)
-    
+            log.write(f" -WARNING: {na_count} variants have NA in {col} column...", verbose=verbose)
+
     # Initialize strand column if not present
     if strand_col not in sumstats.columns:
         sumstats[strand_col] = pd.NA
-        log.write(" -Initialized new {} column...".format(strand_col), verbose=verbose)
+        log.write(f" -Initialized new {strand_col} column...", verbose=verbose)
     else:
         existing_strand_count = sumstats[strand_col].notna().sum()
-        log.write(" -Found existing {} column with {} non-NA values...".format(strand_col, existing_strand_count), verbose=verbose)
-    
+        log.write(f" -Found existing {strand_col} column with {existing_strand_count} non-NA values...", verbose=verbose)
+
     # Ensure STATUS is integer type before any operations
     sumstats = ensure_status_int(sumstats, status_col)
-    
+
     # Pre-compute allele validity and type masks for efficient processing
     # Extract allele series once to avoid repeated column access
     ea_series = sumstats[ea]
@@ -434,13 +435,13 @@ def _infer_strand(
     ea_valid = ea_series.notna() & (ea_series != ".")
     nea_valid = nea_series.notna() & (nea_series != ".")
     both_alleles_valid = ea_valid & nea_valid
-    
+
     # Identify SNPs (single-character alleles) vs indels (multi-character)
     ea_len = ea_series.str.len()
     nea_len = nea_series.str.len()
     both_single_char = (ea_len == 1) & (nea_len == 1)
     valid_snp_mask = both_alleles_valid & both_single_char
-    
+
     # Identify palindromic SNPs: A/T, T/A, G/C, C/G
     # These require strand inference since they look the same on both strands
     palindromic_pairs = (
@@ -450,10 +451,10 @@ def _infer_strand(
         ((ea_series == "C") & (nea_series == "G"))
     )
     palindromic_mask = palindromic_pairs & valid_snp_mask
-    
+
     # Non-palindromic SNPs: strand is unambiguous, no inference needed
     non_palindromic_mask = valid_snp_mask & ~palindromic_mask
-    
+
     # Set STATUS 7th digit = '0' for non-palindromic SNPs (strand unambiguous)
     if non_palindromic_mask.any():
         sumstats.loc[non_palindromic_mask, status_col] = vchange_status(
@@ -462,7 +463,7 @@ def _infer_strand(
             [str(i) for i in range(10)],
             ["0"] * 10
         )
-    
+
     # Start with all palindromic SNPs for further processing
     valid_palindromic_mask = palindromic_mask
 
@@ -471,7 +472,7 @@ def _infer_strand(
     raf_notna = sumstats[raf].notna()
     eaf_series = sumstats[eaf]
     raf_series = sumstats[raf]
-    
+
     # Step 1: Filter palindromic SNPs by MAF threshold (based on EAF alone)
     # For palindromic SNPs, we can only infer strand if MAF is clearly defined
     # MAF can be inferred if: EAF <= maf_threshold OR EAF >= (1 - maf_threshold)
@@ -482,12 +483,12 @@ def _infer_strand(
             eaf_values = eaf_series[palindromic_with_eaf]
             # Check if MAF can be determined from EAF: either minor or major allele is clear
             maf_can_infer = (eaf_values <= maf_threshold + FREQ_COMPARISON_EPSILON) | (eaf_values >= 1 - maf_threshold - FREQ_COMPARISON_EPSILON)
-            
+
             # Variants where MAF cannot be inferred (ambiguous frequency) -> STATUS 7
             maf_cannot_infer_local = ~maf_can_infer
             maf_cannot_infer_mask = pd.Series(False, index=sumstats.index)
             maf_cannot_infer_mask.loc[palindromic_with_eaf] = maf_cannot_infer_local.values
-            
+
             if maf_cannot_infer_mask.any():
                 sumstats.loc[maf_cannot_infer_mask, strand_col] = "?"
                 sumstats.loc[maf_cannot_infer_mask, status_col] = vchange_status(
@@ -510,13 +511,13 @@ def _infer_strand(
         unknown_palindromic_mask = digit6_match & digit7_match
         valid_palindromic_mask = valid_palindromic_mask & unknown_palindromic_mask
     else:
-        log.write(" -WARNING: STATUS column '{}' not found, cannot filter by strand status...".format(status_col), verbose=verbose)
-    
+        log.write(f" -WARNING: STATUS column '{status_col}' not found, cannot filter by strand status...", verbose=verbose)
+
     # Step 3: Infer strand for palindromic SNPs using EAF and RAF comparison
     if valid_palindromic_mask.any():
         # Require both EAF and RAF to be available for comparison
         valid_palindromic_with_af_mask = valid_palindromic_mask & eaf_notna & raf_notna
-        
+
         if valid_palindromic_with_af_mask.any():
             # Filter by MAF threshold: both EAF and RAF must have MAF <= threshold
             # This ensures frequencies are unambiguous enough for reliable inference
@@ -525,12 +526,12 @@ def _infer_strand(
             maf_eaf = np.minimum(eaf_values, 1 - eaf_values)
             maf_raf = np.minimum(raf_values, 1 - raf_values)
             maf_mask_local = (maf_eaf <= maf_threshold + FREQ_COMPARISON_EPSILON) & (maf_raf <= ref_maf_threshold + FREQ_COMPARISON_EPSILON)
-            
+
             # Map mask back to full index
             maf_mask = pd.Series(False, index=sumstats.index)
             maf_mask.loc[valid_palindromic_with_af_mask] = maf_mask_local.values
             valid_palindromic_with_af_mask = valid_palindromic_with_af_mask & maf_mask
-        
+
         if valid_palindromic_with_af_mask.any():
             # Compare EAF with RAF to determine strand orientation
             # Forward strand: EAF should match RAF (same strand)
@@ -539,16 +540,16 @@ def _infer_strand(
             raf_subset = raf_series[valid_palindromic_with_af_mask]
             af_diff_forward = np.abs(eaf_subset - raf_subset)
             af_diff_reverse = np.abs(eaf_subset - (1 - raf_subset))
-            
+
             # Assign forward strand if EAF is closer to RAF than to (1-RAF)
             forward_palindromic = af_diff_forward <= af_diff_reverse
-            
+
             # Map results back to full index
             forward_palindromic_full = pd.Series(False, index=sumstats.index)
             forward_palindromic_full.loc[valid_palindromic_with_af_mask] = forward_palindromic.values
             forward_mask = valid_palindromic_with_af_mask & forward_palindromic_full
             reverse_mask = valid_palindromic_with_af_mask & ~forward_palindromic_full
-            
+
             # Assign forward strand: STATUS 7th digit = '1'
             if forward_mask.any():
                 sumstats.loc[forward_mask, strand_col] = "+"
@@ -558,7 +559,7 @@ def _infer_strand(
                     [str(i) for i in range(10)],
                     ["1"] * 10
                 )
-            
+
             # Assign reverse strand: STATUS 7th digit = '2'
             if reverse_mask.any():
                 sumstats.loc[reverse_mask, strand_col] = "-"
@@ -568,14 +569,14 @@ def _infer_strand(
                     [str(i) for i in range(10)],
                     ["2"] * 10
                 )
-        
+
         # Step 4: Handle remaining palindromic SNPs that couldn't be processed
         if valid_palindromic_mask.any():
             # Category 1: Variants with both EAF and RAF but filtered out by MAF threshold
             maf_exceed_mask = valid_palindromic_mask & eaf_notna & raf_notna
-            if 'valid_palindromic_with_af_mask' in locals() and valid_palindromic_with_af_mask.any():
+            if "valid_palindromic_with_af_mask" in locals() and valid_palindromic_with_af_mask.any():
                 maf_exceed_mask = maf_exceed_mask & ~valid_palindromic_with_af_mask
-                
+
                 # Sub-category 1a: MAF(RAF) > ref_maf_threshold -> STATUS 8 (reference MAF too high)
                 if maf_exceed_mask.any():
                     raf_exceed_values = raf_series[maf_exceed_mask]
@@ -583,7 +584,7 @@ def _infer_strand(
                     maf_raf_exceed_bool = maf_raf_exceed > ref_maf_threshold + FREQ_COMPARISON_EPSILON
                     maf_raf_exceed_mask = pd.Series(False, index=sumstats.index)
                     maf_raf_exceed_mask.loc[maf_exceed_mask] = maf_raf_exceed_bool.values
-                    
+
                     if maf_raf_exceed_mask.any():
                         sumstats.loc[maf_raf_exceed_mask, strand_col] = "?"
                         sumstats.loc[maf_raf_exceed_mask, status_col] = vchange_status(
@@ -593,10 +594,10 @@ def _infer_strand(
                             ["8"] * 10
                         )
                         maf_exceed_mask = maf_exceed_mask & ~maf_raf_exceed_mask
-            
+
             # Category 2: Variants checked but not found in reference (EAF present, RAF missing) -> STATUS 8
             checked_but_not_found_mask = valid_palindromic_mask & eaf_notna & ~raf_notna
-            
+
             # Category 3: Variants with MAF(EAF) > threshold but MAF(RAF) <= threshold -> STATUS 7
             # (These passed RAF check but failed EAF check)
             if maf_exceed_mask.any():
@@ -607,7 +608,7 @@ def _infer_strand(
                     [str(i) for i in range(10)],
                     ["7"] * 10
                 )
-            
+
             # Assign STATUS 8 for variants not found in reference
             if checked_but_not_found_mask.any():
                 sumstats.loc[checked_but_not_found_mask, strand_col] = "?"
@@ -617,24 +618,24 @@ def _infer_strand(
                     [str(i) for i in range(10)],
                     ["8"] * 10
                 )
-    
+
     # Process indels: variants with multi-character alleles
     # Use pre-computed length masks to identify indels
     indel_mask = (ea_len > 1) | (nea_len > 1)
     valid_indel_mask = indel_mask & both_alleles_valid
-    
+
     # Filter to indels with unknown strand status
     # Only process variants where STATUS indicates unknown indel strand (6th digit = 6, 7th digit = 8 or 9)
     if status_col in sumstats.columns:
-        if 'status_series' not in locals():
+        if "status_series" not in locals():
             status_series = sumstats[status_col]
         digit6_indel = status_match(status_series, 6, [6])      # Indel type
         digit7_indel = status_match(status_series, 7, [8, 9])   # Unknown strand
         unknown_indel_mask = digit6_indel & digit7_indel
         valid_indel_mask = valid_indel_mask & unknown_indel_mask
     else:
-        log.write(" -WARNING: STATUS column '{}' not found, cannot filter by strand status...".format(status_col), verbose=verbose)
-    
+        log.write(f" -WARNING: STATUS column '{status_col}' not found, cannot filter by strand status...", verbose=verbose)
+
     # Infer strand for indels using EAF and RAF comparison with tolerance
     # Only process indels found in reference (RAF available)
     if valid_indel_mask.any():
@@ -648,7 +649,7 @@ def _infer_strand(
             maf_eaf = np.minimum(eaf_values, 1 - eaf_values)
             maf_raf = np.minimum(raf_values, 1 - raf_values)
             maf_mask_local = (maf_eaf <= maf_threshold + FREQ_COMPARISON_EPSILON) & (maf_raf <= ref_maf_threshold + FREQ_COMPARISON_EPSILON)
-            
+
             # Map mask back to full index
             maf_mask = pd.Series(False, index=sumstats.index)
             maf_mask.loc[valid_indel_with_af_mask] = maf_mask_local.values
@@ -656,7 +657,7 @@ def _infer_strand(
 
             # Track ambiguous indels (both forward and reverse differences exceed tolerance)
             ambiguous_indel_mask_full = pd.Series(False, index=sumstats.index)
-            
+
             if valid_indel_with_af_mask.any():
                 # Compare EAF with RAF using tolerance-based approach
                 # For indels, we use daf_tolerance instead of exact matching
@@ -664,28 +665,28 @@ def _infer_strand(
                 raf_subset = raf_series[valid_indel_with_af_mask]
                 af_diff_forward = np.abs(eaf_subset - raf_subset)
                 af_diff_reverse = np.abs(eaf_subset - (1 - raf_subset))
-                
+
                 # Determine strand based on which difference is within tolerance
                 # Forward strand: |EAF - RAF| < daf_tolerance (matches old method: abs(raf - eaf) < daf_tolerance)
                 # Reverse strand: |EAF - (1-RAF)| < daf_tolerance (matches old method: abs(raf - (1-eaf)) < daf_tolerance)
                 # Ambiguous: both differences >= tolerance
                 forward_within_tolerance = af_diff_forward < daf_tolerance
                 reverse_within_tolerance = af_diff_reverse < daf_tolerance
-                
+
                 # Track ambiguous cases (both differences exceed tolerance)
                 ambiguous_indel_mask_local = (~forward_within_tolerance) & (~reverse_within_tolerance)
                 ambiguous_indel_mask_full.loc[valid_indel_with_af_mask] = ambiguous_indel_mask_local.values
-                
+
                 # Map results back to full index
                 forward_within_tolerance_full = pd.Series(False, index=sumstats.index)
                 forward_within_tolerance_full.loc[valid_indel_with_af_mask] = forward_within_tolerance.values
                 forward_indel_mask = valid_indel_with_af_mask & forward_within_tolerance_full
-                
+
                 # Reverse strand only if forward is not within tolerance (forward takes precedence)
                 reverse_within_tolerance_full = pd.Series(False, index=sumstats.index)
                 reverse_within_tolerance_full.loc[valid_indel_with_af_mask] = reverse_within_tolerance.values
                 reverse_indel_mask = valid_indel_with_af_mask & reverse_within_tolerance_full & ~forward_within_tolerance_full
-        
+
                 # Assign forward strand: STATUS 7th digit = '3'
                 if forward_indel_mask.any():
                     sumstats.loc[forward_indel_mask, strand_col] = "+"
@@ -695,7 +696,7 @@ def _infer_strand(
                         [str(i) for i in range(10)],
                         ["3"] * 10
                     )
-                
+
                 # Assign reverse strand: STATUS 7th digit = '6'
                 if reverse_indel_mask.any():
                     sumstats.loc[reverse_indel_mask, strand_col] = "-"
@@ -705,24 +706,24 @@ def _infer_strand(
                         [str(i) for i in range(10)],
                         ["6"] * 10
                     )
-        
+
         # Handle remaining indels that couldn't be processed
         if valid_indel_mask.any():
             # Category 1: Indels checked but not found in reference (EAF present, RAF missing) -> STATUS 8
             indel_not_found_mask = valid_indel_mask & eaf_notna & ~raf_notna
-            
+
             # Category 2: Indels with both EAF and RAF but filtered out by MAF threshold -> STATUS 8
             indel_maf_exceed_mask = valid_indel_mask & eaf_notna & raf_notna
-            if 'valid_indel_with_af_mask' in locals() and valid_indel_with_af_mask.any():
+            if "valid_indel_with_af_mask" in locals() and valid_indel_with_af_mask.any():
                 indel_maf_exceed_mask = indel_maf_exceed_mask & ~valid_indel_with_af_mask
-            
+
             # Category 3: Ambiguous indels (both forward and reverse differences > tolerance) -> STATUS 4
             # These are indels with valid AF that passed MAF check but couldn't be assigned to either strand
-            if 'ambiguous_indel_mask_full' in locals() and ambiguous_indel_mask_full.any():
+            if "ambiguous_indel_mask_full" in locals() and ambiguous_indel_mask_full.any():
                 indel_ambiguous_mask = ambiguous_indel_mask_full & valid_indel_mask
             else:
                 indel_ambiguous_mask = pd.Series(False, index=sumstats.index)
-            
+
             # Assign STATUS 8 for not found or MAF exceeded
             indel_status8_mask = indel_not_found_mask | indel_maf_exceed_mask
             if indel_status8_mask.any():
@@ -733,7 +734,7 @@ def _infer_strand(
                     [str(i) for i in range(10)],
                     ["8"] * 10
                 )
-            
+
             # Assign STATUS 4 for ambiguous indels (both DAF differences exceed tolerance)
             if indel_ambiguous_mask.any():
                 sumstats.loc[indel_ambiguous_mask, strand_col] = "?"
@@ -743,8 +744,8 @@ def _infer_strand(
                     [str(i) for i in range(10)],
                     ["4"] * 10
                 )
-    
+
     # Note: strand_col is kept in the output for user reference
     # It is not dropped here (unlike ALLELE_FLIPPED which is dropped in _infer_strand_with_annotation)
-    
+
     return sumstats

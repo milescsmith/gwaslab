@@ -1,31 +1,27 @@
-from typing import TYPE_CHECKING, Union, Optional, Tuple, List
-from gwaslab.bd.bd_common_data import get_number_to_chr
-from gwaslab.bd.bd_common_data import get_chr_list
-from gwaslab.bd.bd_common_data import get_chr_to_number
-from gwaslab.bd.bd_common_data import get_number_to_NC
-from gwaslab.bd.bd_common_data import _maketrans
-from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
-from pysam import VariantFile
+import copy
 import re
+from shutil import which
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
-import copy
-from allel import GenotypeArray
-from allel import read_vcf
-from allel import rogers_huff_r_between
+from allel import GenotypeArray, read_vcf, rogers_huff_r_between
+from pysam import VariantFile
+
+from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.bd.bd_common_data import _maketrans, get_chr_list, get_chr_to_number, get_number_to_chr, get_number_to_NC
 from gwaslab.info.g_Log import Log
-from shutil import which
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
 
 # VCF/BCF file suffix definitions
-VCF_BCF_SUFFIXES = ('.vcf.gz', '.bcf', '.vcf')
+VCF_BCF_SUFFIXES = (".vcf.gz", ".bcf", ".vcf")
 
 def auto_check_vcf_chr_dict(
-    vcf_path: str | None, 
-    vcf_chr_dict: dict | None, 
-    verbose: bool, 
+    vcf_path: str | None,
+    vcf_chr_dict: dict | None,
+    verbose: bool,
     log: "Log"
 ) -> dict:
     """
@@ -70,7 +66,7 @@ def auto_check_vcf_chr_dict(
         vcf_chr_dict = check_vcf_chr_NC(vcf_path, log, verbose)
         if vcf_chr_dict is not None:
             return vcf_chr_dict
-        
+
         log.write(" -Checking prefix for chromosomes in VCF/BCF files...", verbose=verbose)
         prefix = check_vcf_chr_prefix(vcf_path, log, verbose)
         if prefix is not None:
@@ -79,7 +75,7 @@ def auto_check_vcf_chr_dict(
         else:
             log.write(" -No prefix for chromosomes in the VCF/BCF files.", verbose=verbose)
             vcf_chr_dict = get_number_to_chr()
-    
+
     # Filter to only include contigs present in the VCF file
     if vcf_path is not None:
         vcf_bcf = VariantFile(vcf_path)
@@ -87,12 +83,12 @@ def auto_check_vcf_chr_dict(
         vcf_chr_dict_filtered = {k: v for k, v in vcf_chr_dict.items() if v in valid_contigs}
         if vcf_chr_dict_filtered:
             return vcf_chr_dict_filtered
-    
+
     return vcf_chr_dict or get_number_to_chr()
 
 def check_vcf_chr_prefix(
-    vcf_bcf_path: str, 
-    log: "Log", 
+    vcf_bcf_path: str,
+    log: "Log",
     verbose: bool
 ) -> str | None:
     """
@@ -114,17 +110,17 @@ def check_vcf_chr_prefix(
     """
     vcf_bcf = VariantFile(vcf_bcf_path)
     contigs_list = list(vcf_bcf.header.contigs)
-    
+
     # Use ChromosomeMapper to detect format
     if len(contigs_list) > 0:
         contigs_series = pd.Series(contigs_list[:min(10, len(contigs_list))])
         mapper = ChromosomeMapper(verbose=False)
         detected_format = mapper.detect_format(contigs_series)
-        
+
         if detected_format == "chr":
             # Extract prefix from first matching contig
             for contig in contigs_list:
-                match = re.search(r'(chr|Chr|CHR)([0-9xXyYmM]+)', contig, re.IGNORECASE)
+                match = re.search(r"(chr|Chr|CHR)([0-9xXyYmM]+)", contig, re.IGNORECASE)
                 if match:
                     return match.group(1)
     return None
@@ -138,8 +134,8 @@ def is_vcf_file(path: str) -> bool:
         return False
 
 def check_vcf_chr_NC(
-    vcf_bcf_path: str, 
-    log: "Log", 
+    vcf_bcf_path: str,
+    log: "Log",
     verbose: bool
 ) -> dict | None:
     """
@@ -161,13 +157,13 @@ def check_vcf_chr_NC(
     """
     vcf_bcf = VariantFile(vcf_bcf_path)
     contigs_list = list(vcf_bcf.header.contigs)
-    
+
     # Use ChromosomeMapper to detect format
     if len(contigs_list) > 0:
         contigs_series = pd.Series(contigs_list[:min(10, len(contigs_list))])
         mapper = ChromosomeMapper(verbose=False)
         detected_format = mapper.detect_format(contigs_series)
-        
+
         if detected_format == "nc":
             # Check which build matches
             for build in ["19", "38"]:
@@ -181,17 +177,17 @@ def check_vcf_chr_NC(
     return None
 
 
-def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], 
-                vcf_path: Optional[str] = None, 
-                region: Optional[Tuple[Union[int, str], int, int]] = None,
-                log: Log = Log(), 
-                verbose: bool = True, 
+def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
+                vcf_path: str | None = None,
+                region: tuple[Union[int, str], int, int] | None = None,
+                log: Log = Log(),
+                verbose: bool = True,
                 pos: str = "POS",
                 nea: str = "NEA",
-                ea: str = "EA", 
-                mapper: Optional[ChromosomeMapper] = None,
-                tabix: Optional[bool] = None,
-                export_path: Optional[str] = None) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+                ea: str = "EA",
+                mapper: ChromosomeMapper | None = None,
+                tabix: bool | None = None,
+                export_path: str | None = None) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     """
     Calculate full LD matrix from VCF file and return both the LD matrix and corresponding sumstats.
     
@@ -236,19 +232,19 @@ def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union['Sumstats', pd.DataFram
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data.copy()
-    
+
     from gwaslab.util.util_in_filter_value import _filter_region
     sumstats = _filter_region(sumstats.copy(), region, log=log, verbose=False)  # Reduce verbosity
 
     if tabix is None:
         tabix = which("tabix")
-    
+
     # Get or create mapper
     if mapper is None:
         mapper = ChromosomeMapper(log=log, verbose=False)  # Reduce verbosity
         # Auto-detect reference format from VCF file
         mapper.detect_reference_format(vcf_path)
-    
+
     # Convert region chromosome to reference format
     # as_string=True for region string formatting
     region_chr_ref = mapper.sumstats_to_reference(region[0], reference_file=vcf_path, as_string=True)
@@ -261,7 +257,7 @@ def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union['Sumstats', pd.DataFram
         ref_genotype["variants/POS"]=np.array([],dtype="int64")
     n_ref_variants = len(ref_genotype["variants/POS"])
     log.write(" -Loading VCF region {}:{} ({} variants)...".format(region_chr_ref, f"{region[1]}-{region[2]}", n_ref_variants), verbose=verbose)
-    # match sumstats pos and ref pos: 
+    # match sumstats pos and ref pos:
     # get ref index for its first appearance of sumstats pos
      #######################################################################################
     def match_variant(x):
@@ -269,7 +265,7 @@ def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union['Sumstats', pd.DataFram
         if np.any(ref_genotype["variants/POS"] == x.iloc[0]):
             # position match
             matches = np.where(ref_genotype["variants/POS"] == x.iloc[0])[0]
-            if len(matches) > 1:  
+            if len(matches) > 1:
                 # multiple position matches
                 for j in matches:
                     # for each possible match, compare ref and alt
@@ -278,9 +274,9 @@ def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union['Sumstats', pd.DataFram
                             return j
                     elif x.iloc[1] in ref_genotype["variants/ALT"][j]:
                         if x.iloc[2] == ref_genotype["variants/REF"][j]:
-                            return j    
+                            return j
                 return None
-            else: 
+            else:
                 # single match
                 #log.write("  -Single match found for position {}".format(x.iloc[0]), verbose=verbose)
                 return matches[0]
@@ -290,36 +286,35 @@ def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union['Sumstats', pd.DataFram
     #############################################################################################
     sumstats["REFINDEX"] = sumstats[[pos,nea,ea]].apply(lambda x: match_variant(x),axis=1)
     #############################################################################################
-    
+
     # Report matching results
     matched_count = sumstats["REFINDEX"].notna().sum()
     unmatched_count = len(sumstats) - matched_count
-    
+
     # Get non-na SNP indices for LD calculation
     valid_indices = sumstats["REFINDEX"].dropna().astype("int").values
-    
+
     # Calculate full LD matrix using allel's standard method
     if len(valid_indices) > 0:
         # Get genotypes for all valid SNPs
         all_snp_genotypes = GenotypeArray(ref_genotype["calldata/GT"][valid_indices]).to_n_alt()
-        
+
         # Calculate pairwise LD matrix using allel's rogers_huff_r function
-        log.write(" -Computing LD matrix for {} variants (matched: {}, unmatched: {})...".format(
-            len(valid_indices), matched_count, unmatched_count), verbose=verbose)
+        log.write(f" -Computing LD matrix for {len(valid_indices)} variants (matched: {matched_count}, unmatched: {unmatched_count})...", verbose=verbose)
         r_values = rogers_huff_r_between(all_snp_genotypes, all_snp_genotypes)
         ld_matrix = np.power(r_values, 2)  # Convert r to r^2
-        
+
         # Create a subset of sumstats that matches the order of the LD matrix
         # First get the indices of non-na entries
         non_na_indices = sumstats.index[sumstats["REFINDEX"].notna()]
         matched_sumstats = sumstats.loc[non_na_indices].copy()
-        
+
         # Remove rows with missing pos, nea, or ea values while preserving order
         # We need to do this carefully to maintain the correspondence with ld_matrix
         na_mask = matched_sumstats[[pos, nea, ea]].isna().any(axis=1)
         clean_indices = matched_sumstats.index[~na_mask]
         matched_sumstats = matched_sumstats.loc[clean_indices]
-        
+
         # Also need to filter ld_matrix and valid_indices to match
         clean_original_indices = np.where(~na_mask)[0]
         if len(clean_original_indices) > 0:
@@ -333,30 +328,30 @@ def _get_ld_matrix_from_vcf(sumstats_or_dataframe: Union['Sumstats', pd.DataFram
         log.warning(" -No valid indices found for LD calculation, returning empty results", verbose=verbose)
         ld_matrix = np.array([]).reshape(0, 0)
         matched_sumstats = sumstats.iloc[[]].copy()  # Empty DataFrame with same structure
-    
+
     # Export results if export_path is provided
     if export_path is not None:
         import os
         # Create export directory if it doesn't exist
         os.makedirs(export_path, exist_ok=True)
-        
+
         # Automatically construct prefix based on region
         if region is not None:
-            prefix = "chr{}_{}_{}".format(region[0], region[1], region[2])
+            prefix = f"chr{region[0]}_{region[1]}_{region[2]}"
         else:
             prefix = "ld"
-        
+
         # Export matched sumstats
-        sumstats_export_path = os.path.join(export_path, "{}_sumstats.tsv.gz".format(prefix))
-        log.write(" -Exporting matched sumstats to: {}".format(sumstats_export_path), verbose=verbose)
+        sumstats_export_path = os.path.join(export_path, f"{prefix}_sumstats.tsv.gz")
+        log.write(f" -Exporting matched sumstats to: {sumstats_export_path}", verbose=verbose)
         matched_sumstats.to_csv(sumstats_export_path, sep="\t", index=False, compression="gzip")
-        
+
         # Export LD matrix
-        ld_matrix_export_path = os.path.join(export_path, "{}_ldmatrix.npy".format(prefix))
-        log.write(" -Exporting LD matrix to: {}".format(ld_matrix_export_path), verbose=verbose)
+        ld_matrix_export_path = os.path.join(export_path, f"{prefix}_ldmatrix.npy")
+        log.write(f" -Exporting LD matrix to: {ld_matrix_export_path}", verbose=verbose)
         np.save(ld_matrix_export_path, ld_matrix)
-        
+
         log.write(" -Export completed successfully!", verbose=verbose)
-    
+
     # Return both the LD matrix and the matched sumstats
     return matched_sumstats, ld_matrix

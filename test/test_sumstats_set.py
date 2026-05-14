@@ -1,10 +1,11 @@
 import os
-import sys
-import unittest
-import tempfile
 import shutil
+import sys
+import tempfile
+import unittest
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -69,7 +70,7 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
     def setUp(self):
         """Create temporary directory with test sumstats files."""
         self.temp_dir = tempfile.mkdtemp()
-        
+
         # Create test data
         self.data1 = pd.DataFrame([
             {"CHR": 1, "POS": 100, "EA": "A", "NEA": "G", "BETA": 0.10, "SE": 0.02, "P": 1e-6, "SNPID": "rs123"},
@@ -83,12 +84,12 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
             {"CHR": 1, "POS": 100, "EA": "A", "NEA": "G", "BETA": 0.12, "SE": 0.025, "P": 1e-5, "SNPID": "rs123"},
             {"CHR": 4, "POS": 400, "EA": "T", "NEA": "A", "BETA": 0.03, "SE": 0.05, "P": 0.5, "SNPID": "rs999"},
         ])
-        
+
         # Write test files
         self.file1 = os.path.join(self.temp_dir, "study_EUR.txt")
         self.file2 = os.path.join(self.temp_dir, "study_EAS.txt")
         self.file3 = os.path.join(self.temp_dir, "study_AFR.txt")
-        
+
         self.data1.to_csv(self.file1, sep="\t", index=False)
         self.data2.to_csv(self.file2, sep="\t", index=False)
         self.data3.to_csv(self.file3, sep="\t", index=False)
@@ -101,7 +102,7 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
         """Test loading multiple files via glob pattern."""
         pattern = os.path.join(self.temp_dir, "study_*.txt")
         variant_set = ["rs123"]
-        
+
         sset = SumstatsSet(
             pattern,
             variant_set=variant_set,
@@ -115,16 +116,16 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # Should have loaded 3 studies
         studies = sset.data["STUDY"].unique()
         self.assertEqual(len(studies), 3)
-        
+
         # Study names should be derived from filenames
         self.assertIn("study_EUR", studies)
         self.assertIn("study_EAS", studies)
         self.assertIn("study_AFR", studies)
-        
+
         # Should have extracted rs123 from all 3 studies
         self.assertEqual(len(sset.data), 3)
 
@@ -135,10 +136,10 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
         file_b = os.path.join(self.temp_dir, "trait_B.txt")
         self.data1.to_csv(file_a, sep="\t", index=False)
         self.data2.to_csv(file_b, sep="\t", index=False)
-        
+
         pattern = os.path.join(self.temp_dir, "trait_?.txt")
         variant_set = ["rs123"]
-        
+
         sset = SumstatsSet(
             pattern,
             variant_set=variant_set,
@@ -152,7 +153,7 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         studies = sset.data["STUDY"].unique()
         self.assertEqual(len(studies), 2)
         self.assertIn("trait_A", studies)
@@ -161,21 +162,21 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
     def test_glob_pattern_no_match_raises_error(self):
         """Test that FileNotFoundError is raised when no files match."""
         pattern = os.path.join(self.temp_dir, "nonexistent_*.txt")
-        
+
         with self.assertRaises(FileNotFoundError) as context:
             SumstatsSet(
                 pattern,
                 variant_set=["rs123"],
                 verbose=False
             )
-        
+
         self.assertIn("No files match pattern", str(context.exception))
 
     def test_glob_single_file_match(self):
         """Test glob pattern that matches only one file."""
         pattern = os.path.join(self.temp_dir, "study_EUR.txt")
         variant_set = ["rs123", "rs456"]
-        
+
         sset = SumstatsSet(
             pattern,
             variant_set=variant_set,
@@ -189,7 +190,7 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         studies = sset.data["STUDY"].unique()
         self.assertEqual(len(studies), 1)
         self.assertIn("study_EUR", studies)
@@ -198,7 +199,7 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
     def test_glob_pattern_without_variant_set(self):
         """Test loading all data when variant_set is None."""
         pattern = os.path.join(self.temp_dir, "study_*.txt")
-        
+
         sset = SumstatsSet(
             pattern,
             variant_set=None,  # No variant filtering
@@ -212,14 +213,14 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
             p="P",
             verbose=False
         )
-        
+
         # Should have loaded 3 studies
         studies = sset.data["STUDY"].unique()
         self.assertEqual(len(studies), 3)
-        
+
         # Should have all variants from all studies (2 + 2 + 2 = 6)
         self.assertEqual(len(sset.data), 6)
-        
+
         # Check STUDY column exists and has correct values
         self.assertIn("STUDY", sset.data.columns)
         self.assertIn("study_EUR", studies)
@@ -234,18 +235,18 @@ class TestSumstatsSetGlobLoading(unittest.TestCase):
         rows2 = [
             {"CHR": 2, "POS": 200, "EA": "C", "NEA": "T", "BETA": 0.05, "SE": 0.03, "P": 1e-4, "SNPID": "rs2"},
         ]
-        
-        gl1 = Sumstats(pd.DataFrame(rows1), chrom="CHR", pos="POS", ea="EA", nea="NEA", 
+
+        gl1 = Sumstats(pd.DataFrame(rows1), chrom="CHR", pos="POS", ea="EA", nea="NEA",
                        snpid="SNPID", beta="BETA", se="SE", p="P", verbose=False)
         gl2 = Sumstats(pd.DataFrame(rows2), chrom="CHR", pos="POS", ea="EA", nea="NEA",
                        snpid="SNPID", beta="BETA", se="SE", p="P", verbose=False)
-        
+
         sset = SumstatsSet(
             {"study1": gl1, "study2": gl2},
             variant_set=None,
             verbose=False
         )
-        
+
         # Should have all data from both studies
         self.assertEqual(len(sset.data), 2)
         self.assertIn("STUDY", sset.data.columns)

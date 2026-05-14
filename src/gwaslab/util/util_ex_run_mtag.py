@@ -1,48 +1,50 @@
-from typing import TYPE_CHECKING, Optional, List
-import subprocess
-import os
 import gc
-import pandas as pd
+import os
+import subprocess
+from typing import TYPE_CHECKING, List, Optional
+
 import numpy as np
+import pandas as pd
+
 from gwaslab.info.g_Log import Log
 from gwaslab.util.general.util_path_manager import _path
 
 if TYPE_CHECKING:
     from gwaslab.g_SumstatsMulti import SumstatsMulti
 
-def _run_mtag(sumstats_multi: 'SumstatsMulti', 
+def _run_mtag(sumstats_multi: "SumstatsMulti",
                      python: str = "python",
                      mtag: str = "",
                      study: str = "Group1",
                      special_flags: str = "",
-                     ld_ref_panel: Optional[str] = None,
-                     traits: Optional[List[str]] = None,
-                     out_prefix: Optional[str] = None,
-                     perfect_gencov: bool = False, 
-                     equal_h2: bool = False, 
-                     no_overlap: bool = False, 
+                     ld_ref_panel: str | None = None,
+                     traits: list[str] | None = None,
+                     out_prefix: str | None = None,
+                     perfect_gencov: bool = False,
+                     equal_h2: bool = False,
+                     no_overlap: bool = False,
                      fdr: bool = False,
                      n_min: int = 0,
                      nstudy: int = 2,
-                     log: Log = Log(), 
+                     log: Log = Log(),
                      verbose: bool = True) -> None:
-    
+
     log.write("Start to run MTAG from command line:", verbose=verbose)
 
     if traits is None:
-         traits_to_form_string = [ 'trait_{}'.format(i+1) for i in range(nstudy)]
+         traits_to_form_string = [ f"trait_{i+1}" for i in range(nstudy)]
     else:
-         traits_to_form_string = ['{}'.format(i) for i in traits]
-    
+         traits_to_form_string = [f"{i}" for i in traits]
+
     res_combined = pd.DataFrame()
     # snpid    chr    bpos    a1    a2    freq    z    pval    n
-    
+
     output_snp_info_cols =["rsID","CHR","POS","EA","NEA"]
     sumstats_paths = []
     for i in range(nstudy):
         output_stats_cols=[]
         for col in ["Z","P","EAF","N"]:
-            output_stats_cols.append("{}_{}".format(col, i+1))
+            output_stats_cols.append(f"{col}_{i+1}")
 
         rename_dict = {
              "rsID":"snpid",
@@ -50,10 +52,10 @@ def _run_mtag(sumstats_multi: 'SumstatsMulti',
              "POS":"bpos",
              "EA":"a1",
              "NEA":"a2",
-             "EAF_{}".format( i+1) :"freq",
-             "Z_{}".format( i+1)   :"z",
-             "P_{}".format( i+1)   :"pval",
-             "N_{}".format( i+1)   :"n",
+             f"EAF_{i+1}" :"freq",
+             f"Z_{i+1}"   :"z",
+             f"P_{i+1}"   :"pval",
+             f"N_{i+1}"   :"n",
 
         }
         csv_path = _path(study = study,
@@ -62,17 +64,17 @@ def _run_mtag(sumstats_multi: 'SumstatsMulti',
 
         sumstats_multi.data[output_snp_info_cols+ output_stats_cols].rename(columns=rename_dict).to_csv(csv_path, index=None,sep="\t")
         sumstats_paths.append(csv_path)
-    
+
     sumstats_multi.offload()
-    
+
     python_log=""
     if out_prefix is None:
-        out_prefix = _path(study=study, 
+        out_prefix = _path(study=study,
                            nstudy = nstudy)
-        
+
         #out_prefix = "./{study}_{nstudy}studies".format(study=study, nstudy=nstudy)
     if ld_ref_panel is not None:
-        ld_ref_flag = "--ld_ref_panel {}".format(ld_ref_panel)
+        ld_ref_flag = f"--ld_ref_panel {ld_ref_panel}"
     else:
         ld_ref_flag=""
 
@@ -85,13 +87,13 @@ def _run_mtag(sumstats_multi: 'SumstatsMulti',
     if fdr == True:
         special_flags += "--fdr "
 
-    script='''
+    script="""
 {python} {mtag} {special_flags} {ld_ref_flag} \
 --sumstats {sumstats_paths_string} \
 --out {out_prefix} \
 --n_min {n_min} \
 --stream_stdout &
-        '''.format(
+        """.format(
             python=python,
             n_min=n_min,
             mtag=mtag,
@@ -100,19 +102,19 @@ def _run_mtag(sumstats_multi: 'SumstatsMulti',
             ld_ref_flag=ld_ref_flag,
             sumstats_paths_string = ",".join(sumstats_paths)
         )
-    log.write("MTAG script: {} ".format(script), verbose=verbose)
+    log.write(f"MTAG script: {script} ", verbose=verbose)
 
     temp_script_path = _path(tmp=True,
                              study=study,
-                             analysis="mtag", 
+                             analysis="mtag",
                              suffix="sh"
     )
 
     with open(temp_script_path,"w") as file:
             file.write(script)
-    
-    os.chmod(temp_script_path, 0o700)   
-    
+
+    os.chmod(temp_script_path, 0o700)
+
     try:
         log.write(" -Running MTAG from command line...", verbose=verbose)
         output = subprocess.check_output(os.path.join(temp_script_path)
@@ -124,5 +126,5 @@ def _run_mtag(sumstats_multi: 'SumstatsMulti',
         log.write(e.output)
 
     sumstats_multi.reload()
-    
+
     log.write("Finished MTAG.", verbose=verbose)

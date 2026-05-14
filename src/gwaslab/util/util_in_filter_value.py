@@ -1,27 +1,26 @@
-from typing import TYPE_CHECKING, Union, Optional, Dict, Any, List
-import re
-import pandas as pd
-import numpy as np
-import polars as pl
-from os import path
-from pathlib import Path
-from functools import wraps
-from gwaslab.info.g_Log import Log
-from gwaslab.info.g_vchange_status import vchange_status
-from gwaslab.qc.qc_fix_sumstats import _sort_coordinate
-from gwaslab.qc.qc_fix_sumstats import _process_build
-from gwaslab.qc.qc_check_datatype import check_dataframe_shape
-from gwaslab.qc.qc_decorator import with_logging
-from gwaslab.qc.qc_normalize_args import _normalize_region
-from gwaslab.bd.bd_common_data import get_high_ld, get_par
-from gwaslab.bd.bd_common_data import get_chr_to_number
-from gwaslab.hm.hm_harmonize_sumstats import is_palindromic
-from gwaslab.info.g_version import _get_version
-from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
-from gwaslab.io.io_ucsc_bed import read_bed, bed_to_sumstats_coordinates
 import gc
 import os
+import re
+from functools import wraps
+from os import path
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
 import numpy as np
+import pandas as pd
+import polars as pl
+
+from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.bd.bd_common_data import get_chr_to_number, get_high_ld, get_par
+from gwaslab.hm.hm_harmonize_sumstats import is_palindromic
+from gwaslab.info.g_Log import Log
+from gwaslab.info.g_vchange_status import vchange_status
+from gwaslab.info.g_version import _get_version
+from gwaslab.io.io_ucsc_bed import bed_to_sumstats_coordinates, read_bed
+from gwaslab.qc.qc_check_datatype import check_dataframe_shape
+from gwaslab.qc.qc_decorator import with_logging
+from gwaslab.qc.qc_fix_sumstats import _process_build, _sort_coordinate
+from gwaslab.qc.qc_normalize_args import _normalize_region
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
@@ -33,14 +32,14 @@ def _get_hapmap_df_polars(build: str) -> pl.DataFrame:
     """Get Hapmap3 coordinates as a Polars DataFrame for fast lookup."""
     if build in _HAPMAP_DF_CACHE:
         return _HAPMAP_DF_CACHE[build]
-    
+
     # Read directly with Polars - no pandas conversion
     base = Path(__file__).parents[1] / "data" / "hapmap3_SNPs"
     if build == "19":
         p = base / "hapmap3_db150_hg19.snplist.gz"
     else:
         p = base / "hapmap3_db151_hg38.snplist.gz"
-    
+
     # Read with Polars - keep as Polars DataFrame
     # File is tab-separated, so we use "\t" as separator
     try:
@@ -56,7 +55,7 @@ def _get_hapmap_df_polars(build: str) -> pl.DataFrame:
         df = pd.read_csv(p, sep="\t", usecols=["#CHROM", "POS"], dtype={"#CHROM": "Int64", "POS": "Int64"})
         df = df.rename(columns={"#CHROM": "CHR"})
         hapmap_df = pl.from_pandas(df[["CHR", "POS"]])
-    
+
     _HAPMAP_DF_CACHE[build] = hapmap_df
     return hapmap_df
 
@@ -78,19 +77,19 @@ def _get_hapmap_full_polars(build: str, include_alleles: bool = True) -> pl.Data
     cache_key = f"{build}_{include_alleles}"
     if cache_key in _HAPMAP_FULL_CACHE:
         return _HAPMAP_FULL_CACHE[cache_key]
-    
+
     # Read directly with Polars - no pandas conversion
     base = Path(__file__).parents[1] / "data" / "hapmap3_SNPs"
     if build == "19":
         p = base / "hapmap3_db150_hg19.snplist.gz"
     else:
         p = base / "hapmap3_db151_hg38.snplist.gz"
-    
+
     # Determine columns to read
     columns = ["#CHROM", "POS", "rsid"]
     if include_alleles:
         columns.extend(["A1", "A2"])
-    
+
     # Read directly with Polars - file is tab-separated
     # Define schema for type safety and performance
     schema = {
@@ -101,7 +100,7 @@ def _get_hapmap_full_polars(build: str, include_alleles: bool = True) -> pl.Data
     if include_alleles:
         schema["A1"] = pl.Utf8
         schema["A2"] = pl.Utf8
-    
+
     try:
         hapmap_df = pl.read_csv(
             p,
@@ -113,9 +112,9 @@ def _get_hapmap_full_polars(build: str, include_alleles: bool = True) -> pl.Data
     except Exception:
         # Fallback to pandas if Polars fails, then convert to Polars
         df = pd.read_csv(
-            p, 
-            sep="\t", 
-            usecols=columns, 
+            p,
+            sep="\t",
+            usecols=columns,
             dtype={"#CHROM": "Int64", "POS": "Int64", "rsid": "string"}
         )
         df = df.rename(columns={"#CHROM": "CHR"})
@@ -126,7 +125,7 @@ def _get_hapmap_full_polars(build: str, include_alleles: bool = True) -> pl.Data
                 pl.col("A1").cast(pl.Utf8),
                 pl.col("A2").cast(pl.Utf8)
             ])
-    
+
     _HAPMAP_FULL_CACHE[cache_key] = hapmap_df
     return hapmap_df
 
@@ -138,17 +137,17 @@ def with_logging_filter(start_to_msg: str, finished_msg: str) -> Any:
             sig = inspect.signature(func)
             bound_kwargs = sig.bind(*args, **kwargs)
             bound_kwargs.apply_defaults()
-            
-            log = bound_kwargs.arguments.get('log', Log())
-            verbose = bound_kwargs.arguments.get('verbose', True)
-            
+
+            log = bound_kwargs.arguments.get("log", Log())
+            verbose = bound_kwargs.arguments.get("verbose", True)
+
             # Log start message
             log.log_operation_start(start_to_msg, version=_get_version(), verbose=verbose)
-            
+
             # Try to find Sumstats object instance for shape/memory tracking
             # First check if log has a reference to Sumstats object
-            sumstats_obj = getattr(log, '_sumstats_obj', None)
-            
+            sumstats_obj = getattr(log, "_sumstats_obj", None)
+
             # If not found, try to find it in arguments
             if sumstats_obj is None:
                 try:
@@ -157,8 +156,8 @@ def with_logging_filter(start_to_msg: str, finished_msg: str) -> Any:
                     if args and isinstance(args[0], Sumstats):
                         sumstats_obj = args[0]
                     # Check if 'sumstats_obj' is in arguments
-                    elif 'sumstats_obj' in bound_kwargs.arguments:
-                        potential_obj = bound_kwargs.arguments['sumstats_obj']
+                    elif "sumstats_obj" in bound_kwargs.arguments:
+                        potential_obj = bound_kwargs.arguments["sumstats_obj"]
                         if isinstance(potential_obj, Sumstats):
                             sumstats_obj = potential_obj
                     # Check if any kwarg is a Sumstats instance
@@ -169,11 +168,11 @@ def with_logging_filter(start_to_msg: str, finished_msg: str) -> Any:
                                 break
                 except:
                     pass
-            
+
             # Extract sumstats DataFrame
             # Try multiple possible parameter names
             sumstats = None
-            for param_name in ['sumstats', 'sumstats_obj', 'sumstats_or_dataframe']:
+            for param_name in ["sumstats", "sumstats_obj", "sumstats_or_dataframe"]:
                 if param_name in bound_kwargs.arguments:
                     potential_sumstats = bound_kwargs.arguments[param_name]
                     # Check if it's a DataFrame directly
@@ -190,7 +189,7 @@ def with_logging_filter(start_to_msg: str, finished_msg: str) -> Any:
                                 break
                         except:
                             pass
-            
+
             # If not found in named arguments, check first positional argument
             if sumstats is None and args:
                 first_arg = args[0]
@@ -204,18 +203,18 @@ def with_logging_filter(start_to_msg: str, finished_msg: str) -> Any:
                             sumstats = first_arg.data
                     except:
                         pass
-            
+
             # If we have a sumstats_obj but no sumstats DataFrame yet, extract it
             if sumstats is None and sumstats_obj is not None:
                 try:
                     sumstats = sumstats_obj.data
                 except:
                     pass
-            
+
             # If still not found, default to empty DataFrame
             if sumstats is None:
                 sumstats = pd.DataFrame()
-            
+
             check_dataframe_shape(sumstats=sumstats, log=log, verbose=verbose, sumstats_obj=sumstats_obj)
             prenum = len(sumstats)
 
@@ -227,7 +226,7 @@ def with_logging_filter(start_to_msg: str, finished_msg: str) -> Any:
             check_dataframe_shape(sumstats=result, log=log, verbose=verbose, sumstats_obj=sumstats_obj)
             # Log finish message
             log.write(f"Finished {finished_msg}.", verbose=verbose)
-            
+
             return result
         return wrapper
     return decorator
@@ -241,7 +240,7 @@ value thresholds, genomic regions, and special variant types.
 
 @with_logging_filter("filter variants by condition...","filtering variants")
 
-def _filter_values(sumstats_obj: Union['Sumstats', pd.DataFrame], expr: str, remove: bool = False, verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
+def _filter_values(sumstats_obj: Union["Sumstats", pd.DataFrame], expr: str, remove: bool = False, verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
     """
     Filter variants based on a query expression.
     
@@ -276,13 +275,13 @@ def _filter_values(sumstats_obj: Union['Sumstats', pd.DataFrame], expr: str, rem
         # Called with Sumstats object
         sumstats = sumstats_obj.data
     log.write(" -Expression:",expr, verbose=verbose)
-    
+
     # Extract @ variables from caller's frame and prepare local_dict for query()
     import inspect
     local_dict = {}
-    if '@' in expr:
+    if "@" in expr:
         # Find variables referenced with @ syntax (e.g., @odd_chromosomes)
-        pattern = r'@(\w+)'
+        pattern = r"@(\w+)"
         matches = re.findall(pattern, expr)
         if matches:
             # Search through call stack to find variables
@@ -307,13 +306,13 @@ def _filter_values(sumstats_obj: Union['Sumstats', pd.DataFrame], expr: str, rem
                     current_frame = current_frame.f_back
             finally:
                 del frame
-    
+
     # Try standard query first
     try:
         if local_dict:
-            sumstats = sumstats.query(expr, engine='python', local_dict=local_dict).copy()
+            sumstats = sumstats.query(expr, engine="python", local_dict=local_dict).copy()
         else:
-            sumstats = sumstats.query(expr, engine='python').copy()
+            sumstats = sumstats.query(expr, engine="python").copy()
     except Exception as e:
         # Check if error is related to string slicing (which query() doesn't support)
         error_msg = str(e).lower()
@@ -321,31 +320,31 @@ def _filter_values(sumstats_obj: Union['Sumstats', pd.DataFrame], expr: str, rem
             # String slicing or .str accessor detected - use eval() with column namespace instead
             log.write(" -String slicing or .str accessor detected, using alternative evaluation method...", verbose=verbose)
             sumstats_copy = sumstats.copy()
-            
+
             # Detect columns used with .str accessor in the expression
             str_columns = set()
             # Pattern to match column names before .str (e.g., "STATUS.str" -> "STATUS")
-            pattern = r'(\w+)\.str\b'
+            pattern = r"(\w+)\.str\b"
             matches = re.findall(pattern, expr)
             str_columns.update(matches)
-            
+
             # Convert columns that use .str accessor to string type
             for col in str_columns:
                 if col in sumstats_copy.columns:
                     # Convert to string, handling NaN values
-                    sumstats_copy[col] = sumstats_copy[col].astype(str).replace('nan', '')
-            
+                    sumstats_copy[col] = sumstats_copy[col].astype(str).replace("nan", "")
+
             # Create namespace with all columns accessible
             env = {col: sumstats_copy[col] for col in sumstats_copy.columns}
-            env.update({'pd': pd, 'np': np})
+            env.update({"pd": pd, "np": np})
             # Add local variables from caller (for @ variable references)
             env.update(local_dict)
-            
+
             # Replace @variable with variable in expression for eval()
             eval_expr = expr
             for var_name in local_dict.keys():
-                eval_expr = re.sub(r'@' + re.escape(var_name) + r'\b', var_name, eval_expr)
-            
+                eval_expr = re.sub(r"@" + re.escape(var_name) + r"\b", var_name, eval_expr)
+
             # Evaluate expression using eval() which supports string slicing
             try:
                 mask = eval(eval_expr, {"__builtins__": {}}, env)
@@ -360,7 +359,7 @@ def _filter_values(sumstats_obj: Union['Sumstats', pd.DataFrame], expr: str, rem
                                    f"Note: Ensure the column can be converted to string type.")
                 else:
                     raise ValueError(f"Unable to evaluate expression with string slicing: {expr}. "
-                                   f"Error: {str(eval_error)}. "
+                                   f"Error: {eval_error!s}. "
                                    f"Note: String slicing operations (e.g., .str[:2]) are not supported "
                                    f"in pandas query(). Consider using .str.slice() or creating a temporary column.")
         else:
@@ -375,13 +374,13 @@ def _filter_values(sumstats_obj: Union['Sumstats', pd.DataFrame], expr: str, rem
 
 @with_logging_filter("filter out variants based on threshold values...", "filtering variants")
 def _filter_out(
-    sumstats_obj: Union['Sumstats', pd.DataFrame], 
-    interval: Dict[str, Any] = {}, 
-    lt: Dict[str, Any] = {}, 
-    gt: Dict[str, Any] = {}, 
-    eq: Dict[str, Any] = {}, 
-    remove: bool = False, 
-    verbose: bool = True, 
+    sumstats_obj: Union["Sumstats", pd.DataFrame],
+    interval: dict[str, Any] = {},
+    lt: dict[str, Any] = {},
+    gt: dict[str, Any] = {},
+    eq: dict[str, Any] = {},
+    remove: bool = False,
+    verbose: bool = True,
     log: Log = Log()
 ) -> pd.DataFrame:
     """
@@ -437,12 +436,12 @@ def _filter_out(
 
 @with_logging_filter("filter in variants based on threshold values", "filtering variants")
 def _filter_in(
-    sumstats_obj: Union['Sumstats', pd.DataFrame], 
-    lt: Dict[str, Any] = {}, 
-    gt: Dict[str, Any] = {}, 
-    eq: Dict[str, Any] = {}, 
-    remove: bool = False, 
-    verbose: bool = True, 
+    sumstats_obj: Union["Sumstats", pd.DataFrame],
+    lt: dict[str, Any] = {},
+    gt: dict[str, Any] = {},
+    eq: dict[str, Any] = {},
+    remove: bool = False,
+    verbose: bool = True,
     log: Log = Log()
 ) -> pd.DataFrame:
     """
@@ -500,7 +499,7 @@ def _filter_in(
     return sumstats
 
 @with_logging_filter("filter in variants if in intervals defined in bed files", "filtering variants")
-def _filter_region_in(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], path: Optional[str] = None, chrom: str = "CHR", pos: str = "POS", high_ld: bool = False, build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
+def _filter_region_in(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], path: str | None = None, chrom: str = "CHR", pos: str = "POS", high_ld: bool = False, build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
     """
     Keep variants located within specified genomic regions from a BED file.
     
@@ -537,14 +536,14 @@ def _filter_region_in(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], pa
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
+
     # Get BED file path (either from high_ld or provided path)
     if high_ld is True:
         path = get_high_ld(build=build)
         log.write(" -Using high LD regions for hg" + build, verbose=verbose)
     elif path is None:
         raise ValueError("Either 'path' must be provided or 'high_ld' must be True")
-    
+
     # Use the new _filter_bed function with keep=True
     return _filter_bed(
         sumstats_or_dataframe=sumstats,
@@ -557,7 +556,7 @@ def _filter_region_in(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], pa
     )
 
 @with_logging_filter("filter out variants if in intervals defined in bed files", "filtering variants")
-def _filter_region_out(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], path: Optional[str] = None, chrom: str = "CHR", pos: str = "POS", high_ld: bool = False, build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
+def _filter_region_out(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], path: str | None = None, chrom: str = "CHR", pos: str = "POS", high_ld: bool = False, build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
     """
     Remove variants located within specified genomic regions from a BED file.
     
@@ -594,14 +593,14 @@ def _filter_region_out(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], p
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
+
     # Get BED file path (either from high_ld or provided path)
     if high_ld is True:
         path = get_high_ld(build=build)
         log.write(" -Using high LD regions for hg" + build, verbose=verbose)
     elif path is None:
         raise ValueError("Either 'path' must be provided or 'high_ld' must be True")
-    
+
     # Use the new _filter_bed function with keep=False
     return _filter_bed(
         sumstats_or_dataframe=sumstats,
@@ -615,12 +614,12 @@ def _filter_region_out(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], p
 
 @with_logging_filter("filter variants using BED file with chromosome mapper", "filtering variants")
 def _filter_bed(
-    sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], 
-    path: Optional[str] = None, 
-    chrom: str = "CHR", 
-    pos: str = "POS", 
+    sumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
+    path: str | None = None,
+    chrom: str = "CHR",
+    pos: str = "POS",
     keep: bool = True,
-    verbose: bool = True, 
+    verbose: bool = True,
     log: Log = Log()
 ) -> pd.DataFrame:
     """
@@ -694,27 +693,27 @@ def _filter_bed(
         sumstats = sumstats_or_dataframe.copy()
     else:
         sumstats = sumstats_or_dataframe.data.copy()
-    
+
     if path is None:
         raise ValueError("BED file path must be provided")
-    
+
     # Sort sumstats by CHR and POS for efficient matching
     sumstats = _sort_coordinate(sumstats, verbose=verbose)
-    
+
     # Initialize ChromosomeMapper for format conversion
     mapper = ChromosomeMapper(species="homo sapiens", log=log, verbose=verbose)
-    
+
     # Detect sumstats format
     mapper.detect_sumstats_format(sumstats[chrom])
-    
+
     # Read and convert BED file using io_ucsc_bed module
-    log.write(" -Loading BED file: {}".format(path), verbose=verbose)
+    log.write(f" -Loading BED file: {path}", verbose=verbose)
     bed_df = read_bed(path, verbose=verbose, log=log)
-    
+
     if len(bed_df) == 0:
         log.write(" -Warning: BED file is empty.", verbose=verbose)
         return sumstats if keep else sumstats.iloc[0:0].copy()
-    
+
     # Build reference layer from BED so chrX / NC_* contigs map to the same middle layer as sumstats
     mapper.detect_reference_format(path)
 
@@ -739,38 +738,38 @@ def _filter_bed(
 
     bed_chr_numeric = bed_df["chrom"].map(_bed_chrom_to_middle)
     bed_df["_chr_num"] = bed_chr_numeric
-    
+
     # Filter out unconvertible chromosomes
     bed_valid = bed_chr_numeric.notna()
     n_invalid_bed = (~bed_valid).sum()
-    
+
     if n_invalid_bed > 0:
-        log.write(" -Warning: {} BED regions have unconvertible chromosome notation.".format(n_invalid_bed), verbose=verbose)
-    
+        log.write(f" -Warning: {n_invalid_bed} BED regions have unconvertible chromosome notation.", verbose=verbose)
+
     bed_df = bed_df[bed_valid].copy()
     bed_chr_numeric = bed_chr_numeric[bed_valid]
-    
+
     if len(bed_df) == 0:
         log.write(" -Error: No valid regions found in BED file after chromosome conversion.", verbose=verbose)
         return sumstats if keep else sumstats.iloc[0:0].copy()
-    
+
     # Convert sumstats chromosomes to numeric for matching (only if needed)
     # Check if already numeric to avoid unnecessary conversion
     if pd.api.types.is_numeric_dtype(sumstats[chrom]):
         # Already numeric, use directly (convert to int for consistency)
-        sumstats_chr_numeric = sumstats[chrom].astype('Int64')  # Nullable integer
+        sumstats_chr_numeric = sumstats[chrom].astype("Int64")  # Nullable integer
     else:
         # Not numeric, convert using mapper
         sumstats_chr_numeric = sumstats[chrom].apply(
             lambda x: mapper.sumstats_to_number(x) if pd.notna(x) else None
         )
-    
+
     # Use packed uint8 bitmask for efficient filtering (1 bit per base, 8x memory efficient)
     log.write(" -Matching variants with BED regions using packed uint8 bitmask...", verbose=verbose)
-    
+
     # Process chromosome by chromosome
     bed_indicator = np.zeros(len(sumstats), dtype=np.bool_)
-    
+
     def _set_interval_packed(mask_u8: np.ndarray, start: int, end: int) -> None:
         """
         Set bits for [start, end) in packed uint8 array.
@@ -799,87 +798,87 @@ def _filter_bed(
 
         # Last byte: set bits 0..o1
         mask_u8[b1] |= np.uint8((1 << (o1 + 1)) - 1)
-    
+
     def _lookup_packed(mask_u8: np.ndarray, pos0: np.ndarray) -> np.ndarray:
         """Vectorized membership lookup for 0-based positions in packed uint8 array."""
         byte_idx = pos0 >> 3  # byte index
         bit_idx = pos0 & 7  # bit offset within byte
         return ((mask_u8[byte_idx] >> bit_idx) & 1).astype(np.bool_)
-    
+
     for chr_num in sumstats_chr_numeric.dropna().unique():
         # Get BED regions for this chromosome (using original 0-based coordinates)
         bed_chr = bed_df[bed_chr_numeric == chr_num].copy()
         if len(bed_chr) == 0:
             continue
-        
+
         # Get sumstats variants on this chromosome
         mask_chr = (sumstats_chr_numeric == chr_num)
         if not mask_chr.any():
             continue
-        
+
         chr_indices = np.where(mask_chr)[0]
         positions = sumstats.loc[mask_chr, pos].values
-        
+
         # Get max position for this chromosome to determine array size
         # Use position directly as index (no offset)
         max_pos = int(positions.max())
         # Packed uint8 array: ceil((max_pos+1)/8) bytes, 1 bit per base
         mask_size_bytes = (max_pos + 1 + 7) // 8
-        
+
         # Build packed uint8 mask for this chromosome (1 bit per base)
         chr_mask_u8 = np.zeros(mask_size_bytes, dtype=np.uint8)
-        
+
         # Mark all positions in BED intervals using packed bit operations
         # BED uses 0-based half-open [chromStart, chromEnd)
         # According to UCSC BED spec: BED [chromStart, chromEnd) in 0-based = [chromStart+1, chromEnd] in 1-based (both inclusive)
         for _, row in bed_chr.iterrows():
             chrom_start = row["chromStart"]
             chrom_end = row["chromEnd"]
-            
+
             # Convert to 1-based inclusive range for sumstats
             start_1based = chrom_start + 1
             end_1based = chrom_end  # chromEnd in 0-based (exclusive) = chromEnd in 1-based (inclusive)
-            
+
             # Clamp to valid array range
             start_idx = max(start_1based, 0)
             end_idx = min(end_1based, max_pos)
-            
+
             if start_idx <= end_idx:
                 # Set interval in packed mask: [start_idx, end_idx+1) for inclusive end
                 _set_interval_packed(chr_mask_u8, start_idx, end_idx + 1)
-        
+
         # Vectorized lookup using packed mask
         # Convert positions to 0-based for bit operations
         pos0 = positions.astype(np.int64)
-        
+
         # Check if positions are in valid range
         valid_mask = (pos0 >= 0) & (pos0 <= max_pos)
-        
+
         if valid_mask.any():
             # Vectorized packed lookup (O(1) per position)
             marked_mask = _lookup_packed(chr_mask_u8, pos0[valid_mask])
             bed_indicator[chr_indices[valid_mask]] = marked_mask
-    
+
     # Apply filter based on keep parameter using boolean mask
     if keep:
         result = sumstats.loc[bed_indicator, :]
-        log.write(" -Number of variants in BED regions to keep: {}".format(bed_indicator.sum()), verbose=verbose)
+        log.write(f" -Number of variants in BED regions to keep: {bed_indicator.sum()}", verbose=verbose)
     else:
         result = sumstats.loc[~bed_indicator, :]
-        log.write(" -Number of variants in BED regions to remove: {}".format((~bed_indicator).sum()), verbose=verbose)
-    
+        log.write(f" -Number of variants in BED regions to remove: {(~bed_indicator).sum()}", verbose=verbose)
+
     gc.collect()
-    
+
     return result
 
-@with_logging("infer genome build version using hapmap3 SNPs", 
+@with_logging("infer genome build version using hapmap3 SNPs",
               "inferring genome build version using hapmap3 SNPs",
               start_function=".infer_build()",
               start_cols=["CHR","POS"],
               check_dtype=True)
-def _infer_build(sumstats: Union['Sumstats', pd.DataFrame], status: str = "STATUS", chrom: str = "CHR", pos: str = "POS", 
+def _infer_build(sumstats: Union["Sumstats", pd.DataFrame], status: str = "STATUS", chrom: str = "CHR", pos: str = "POS",
                ea: str = "EA", nea: str = "NEA", build: str = "19",
-               change_status: bool = True, 
+               change_status: bool = True,
                verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
     """
     Infer genome build version using Hapmap3 SNPs.
@@ -910,11 +909,11 @@ def _infer_build(sumstats: Union['Sumstats', pd.DataFrame], status: str = "STATU
     hapmap3_df_19 = _get_hapmap_df_polars("19")
     hapmap3_df_38 = _get_hapmap_df_polars("38")
     log.write(" -CHR and POS will be used for matching...", verbose=verbose)
-    
+
     # Convert sumstats to Polars for fast matching (no pandas operations)
     # with_logging decorator with check_dtype=True ensures CHR and POS are Int64
     sumstats_pl = pl.from_pandas(sumstats_data[[chrom, pos]])
-    
+
     # Filter out null values and ensure correct types
     sumstats_pl = sumstats_pl.filter(
         pl.col(chrom).is_not_null() & pl.col(pos).is_not_null()
@@ -922,7 +921,7 @@ def _infer_build(sumstats: Union['Sumstats', pd.DataFrame], status: str = "STATU
         pl.col(chrom).cast(pl.Int64).alias("CHR"),
         pl.col(pos).cast(pl.Int64).alias("POS")
     ])
-    
+
     # Use Polars semi_join for fast counting - more efficient than full join
     # semi_join only checks existence without creating full join result
     # This is highly optimized in Polars and avoids pandas conversions
@@ -934,34 +933,34 @@ def _infer_build(sumstats: Union['Sumstats', pd.DataFrame], status: str = "STATU
     ).height
     log.write(" -Matching variants for hg19: num_hg19 = ", match_count_for_19, verbose=verbose)
     log.write(" -Matching variants for hg38: num_hg38 = ", match_count_for_38, verbose=verbose)
-    
+
     if max(match_count_for_19, match_count_for_38)<10000:
-        log.warning("Please be cautious due to the limited number of variants.", verbose=verbose) 
-    
+        log.warning("Please be cautious due to the limited number of variants.", verbose=verbose)
+
     if match_count_for_19 > match_count_for_38:
-        log.write(" -Since num_hg19 >> num_hg38, set the genome build to hg19 for the STATUS code....", verbose=verbose) 
+        log.write(" -Since num_hg19 >> num_hg38, set the genome build to hg19 for the STATUS code....", verbose=verbose)
         if change_status==True:
             sumstats_data[status] = vchange_status(sumstats_data[status],1,"9","1")
         inferred_build="19"
     elif match_count_for_19 < match_count_for_38:
-        log.write(" -Since num_hg19 << num_hg38, set the genome build to hg38 for the STATUS code....", verbose=verbose) 
+        log.write(" -Since num_hg19 << num_hg38, set the genome build to hg38 for the STATUS code....", verbose=verbose)
         if change_status==True:
             sumstats_data[status] = vchange_status(sumstats_data[status],1,"9","3")
             sumstats_data[status] = vchange_status(sumstats_data[status],2,"9","8")
         inferred_build="38"
     else:
-        log.write(" -Since num_hg19 = num_hg38, unable to infer...", verbose=verbose) 
-    
+        log.write(" -Since num_hg19 = num_hg38, unable to infer...", verbose=verbose)
+
     # Update Sumstats object if called with one
     if not is_dataframe:
         sumstats_obj.data = sumstats_data
         # Use setter to ensure consistency between self.build and meta
         sumstats_obj.build = inferred_build
-    
+
     return sumstats_data
 
 @with_logging_filter("randomly select variants from the sumstats", "sampling")
-def _sampling(sumstats: pd.DataFrame, n: int = 1, p: Optional[float] = None, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
+def _sampling(sumstats: pd.DataFrame, n: int = 1, p: float | None = None, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
     """
     Randomly sample variants from summary statistics.
     
@@ -991,15 +990,14 @@ def _sampling(sumstats: pd.DataFrame, n: int = 1, p: Optional[float] = None, ver
     if p is None:
         log.write(" -Number of variants selected from the sumstats:",n, verbose=verbose)
         if n > len(sumstats):
-            raise ValueError("Please input a number < {}".format(len(sumstats)))
+            raise ValueError(f"Please input a number < {len(sumstats)}")
+    elif p>-0.00000001 and p<1.00000001:
+        log.write(" -Percentage of variants selected from the sumstats: ",p, verbose=verbose)
+        n = int(len(sumstats)*p)
+        log.write(" -Number of variants selected from the sumstats:",n, verbose=verbose)
     else:
-        if p>-0.00000001 and p<1.00000001:
-            log.write(" -Percentage of variants selected from the sumstats: ",p, verbose=verbose)
-            n = int(len(sumstats)*p)
-            log.write(" -Number of variants selected from the sumstats:",n, verbose=verbose)
-        else:
-            raise ValueError("Please input a number in (0,1)")
-    
+        raise ValueError("Please input a number in (0,1)")
+
     if "random_state" in kwargs.keys():
         log.write(" -Random state (seed): {}".format(kwargs["random_state"]), verbose=verbose)
     else:
@@ -1010,7 +1008,7 @@ def _sampling(sumstats: pd.DataFrame, n: int = 1, p: Optional[float] = None, ver
     return sampled
 
 @with_logging_filter("extract variants in the flanking regions", "extracting variants in the flanking regions")
-def _get_flanking(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], snpid: str, windowsizekb: int = 500, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
+def _get_flanking(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], snpid: str, windowsizekb: int = 500, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
     """
     Extract variants in flanking regions around a specified variant.
     
@@ -1042,27 +1040,27 @@ def _get_flanking(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], snpid:
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
-    log.write(" - Central variant: {}".format(snpid))
-    
+
+    log.write(f" - Central variant: {snpid}")
+
     row = sumstats.loc[sumstats["SNPID"]==snpid,:]
-    
+
     for index, row in row.iterrows():
         chrom = row["CHR"]
         left = row["POS"] - 1000 * windowsizekb
         right = row["POS"] + 1000 * windowsizekb
-    
-    log.write(" - Flanking regions: {}:{}-{}".format(chrom, left, right ))
 
-    flanking = sumstats.query("CHR==@chrom & POS > @left & POS < @right ", engine='python')
-    
-    log.write(" - Extracted {} variants in the regions.".format(len(flanking)),verbose=verbose)
+    log.write(f" - Flanking regions: {chrom}:{left}-{right}")
+
+    flanking = sumstats.query("CHR==@chrom & POS > @left & POS < @right ", engine="python")
+
+    log.write(f" - Extracted {len(flanking)} variants in the regions.",verbose=verbose)
     log.write("Finished extracting variants in the flanking regions.",verbose=verbose)
 
     return flanking
 
 @with_logging_filter("extract variants in the flanking regions using rsID or SNPID", "extracting variants in the flanking regions")
-def _get_flanking_by_id(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], snpid: Union[str, List[str]], windowsizekb: int = 500, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
+def _get_flanking_by_id(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], snpid: Union[str, list[str]], windowsizekb: int = 500, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
     """
     Extract variants in flanking regions using rsID or SNPID.
     
@@ -1094,13 +1092,13 @@ def _get_flanking_by_id(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], 
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
-    log.write(" - Central variants: {}".format(snpid), verbose=verbose)
-    log.write(" - Flanking windowsize in kb: {}".format(windowsizekb), verbose=verbose)
+
+    log.write(f" - Central variants: {snpid}", verbose=verbose)
+    log.write(f" - Flanking windowsize in kb: {windowsizekb}", verbose=verbose)
 
     if type(snpid) == str:
         snpid = [snpid]
-    
+
     if "rsID" in sumstats.columns and "SNPID" not in sumstats.columns:
         is_specified = sumstats["rsID"].isin(snpid)
     elif "rsID" not in sumstats.columns and "SNPID" in sumstats.columns:
@@ -1109,30 +1107,30 @@ def _get_flanking_by_id(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], 
         is_specified = sumstats["rsID"].isin(snpid) | sumstats["SNPID"].isin(snpid)
 
     row = sumstats.loc[is_specified,:]
-    
+
     is_flanking = None
     for index, row in row.iterrows():
         chrom = row["CHR"]
         left =  row["POS"] - 1000 * windowsizekb
         right = row["POS"] + 1000 * windowsizekb
         is_flancking_in_this_region = (sumstats["CHR"] == chrom) & (sumstats["POS"] >= left) & (sumstats["POS"] <= right)
-        
-        log.write(" - Variants in flanking region {}:{}-{} : {}".format(chrom, left, right, sum(is_flancking_in_this_region) ))
-        
+
+        log.write(f" - Variants in flanking region {chrom}:{left}-{right} : {sum(is_flancking_in_this_region)}")
+
         if is_flanking is None:
             is_flanking = is_flancking_in_this_region
         else:
             is_flanking = is_flanking | is_flancking_in_this_region
-    
+
     flanking = sumstats.loc[is_flanking,:]
-    
-    log.write(" - Extracted {} variants in the regions.".format(len(flanking)),verbose=verbose)
+
+    log.write(f" - Extracted {len(flanking)} variants in the regions.",verbose=verbose)
     log.write("Finished extracting variants in the flanking regions.",verbose=verbose)
 
     return flanking
 
 @with_logging_filter("extract variants in the flanking regions using CHR and POS", "extracting variants in the flanking regions")
-def _get_flanking_by_chrpos(sumstats: pd.DataFrame, chrpos: Union[List[Union[int, float]], List[List[Union[int, float]]]], windowsizekb: int = 500, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
+def _get_flanking_by_chrpos(sumstats: pd.DataFrame, chrpos: Union[list[Union[int, float]], list[list[Union[int, float]]]], windowsizekb: int = 500, verbose: bool = True, log: Log = Log(), **kwargs: Any) -> pd.DataFrame:
     """
     Extract variants in flanking regions using chromosome and position.
     
@@ -1165,9 +1163,9 @@ def _get_flanking_by_chrpos(sumstats: pd.DataFrame, chrpos: Union[List[Union[int
     else:
         # Assume it's a Sumstats object, extract .data
         sumstats = sumstats.data
-    
-    log.write(" - Central positions: {}".format(chrpos), verbose=verbose)
-    log.write(" - Flanking windowsize in kb: {}".format(windowsizekb), verbose=verbose)
+
+    log.write(f" - Central positions: {chrpos}", verbose=verbose)
+    log.write(f" - Flanking windowsize in kb: {windowsizekb}", verbose=verbose)
 
     if type(chrpos) == tuple or type(chrpos) == list:
         chrpos_to_check = [chrpos]
@@ -1175,23 +1173,23 @@ def _get_flanking_by_chrpos(sumstats: pd.DataFrame, chrpos: Union[List[Union[int
         chrpos_to_check = chrpos
 
     is_flanking = None
-    
+
     for index, row in enumerate(chrpos_to_check):
         chrom = row[0]
         left =  row[1] - 1000 * windowsizekb
         right = row[1] + 1000 * windowsizekb
         is_flancking_in_this_region = (sumstats["CHR"] == chrom) & (sumstats["POS"] >= left) & (sumstats["POS"] <= right)
-        
-        log.write(" - Variants in flanking region {}:{}-{} : {}".format(chrom, left, right, sum(is_flancking_in_this_region) ))
-        
+
+        log.write(f" - Variants in flanking region {chrom}:{left}-{right} : {sum(is_flancking_in_this_region)}")
+
         if is_flanking is None:
             is_flanking = is_flancking_in_this_region
         else:
             is_flanking = is_flanking | is_flancking_in_this_region
-    
+
     flanking = sumstats.loc[is_flanking,:]
-    
-    log.write(" - Extracted {} variants in the regions.".format(len(flanking)),verbose=verbose)
+
+    log.write(f" - Extracted {len(flanking)} variants in the regions.",verbose=verbose)
     return flanking
 
 @with_logging_filter("filter palindromic variants", "filtering variants")
@@ -1217,10 +1215,10 @@ def _filter_palindromic(sumstats: pd.DataFrame, mode: str = "in", ea: str = "EA"
         if ``inplace=False``, or updates the Sumstats object in place (modifies ``self.data``)
         and returns ``None`` if ``inplace=True``.
     """
-    is_palindromic_snp = is_palindromic(sumstats[[nea,ea]],a1=nea,a2=ea)   
-    
-    log.write(" -Identified palindromic variants: {}".format(sum(is_palindromic_snp)),verbose=verbose)
-    
+    is_palindromic_snp = is_palindromic(sumstats[[nea,ea]],a1=nea,a2=ea)
+
+    log.write(f" -Identified palindromic variants: {sum(is_palindromic_snp)}",verbose=verbose)
+
     if mode=="in":
         palindromic = sumstats.loc[is_palindromic_snp,:]
     else:
@@ -1251,9 +1249,9 @@ def _filter_indel(sumstats: pd.DataFrame, mode: str = "in", ea: str = "EA", nea:
         if ``inplace=False``, or updates the Sumstats object in place (modifies ``self.data``)
         and returns ``None`` if ``inplace=True``.
     """
-    is_indel = (sumstats[ea].str.len()!=sumstats[nea].str.len()) 
-    
-    log.write(" -Identified indels: {}".format(sum(is_indel)),verbose=verbose)
+    is_indel = (sumstats[ea].str.len()!=sumstats[nea].str.len())
+
+    log.write(f" -Identified indels: {sum(is_indel)}",verbose=verbose)
     if mode=="in":
         indel = sumstats.loc[is_indel,:]
     else:
@@ -1284,8 +1282,8 @@ def _filter_snp(sumstats: pd.DataFrame, mode: str = "in", ea: str = "EA", nea: s
         and returns ``None`` if ``inplace=True``.
     """
     is_snp = (sumstats[ea].str.len()==1) &(sumstats[nea].str.len()==1)
-    
-    log.write(" -Identified SNPs: {}".format(sum(is_snp)),verbose=verbose)
+
+    log.write(f" -Identified SNPs: {sum(is_snp)}",verbose=verbose)
     if mode=="in":
         snp = sumstats.loc[is_snp,:]
     else:
@@ -1293,7 +1291,7 @@ def _filter_snp(sumstats: pd.DataFrame, mode: str = "in", ea: str = "EA", nea: s
     return snp
 
 @with_logging_filter("exclude variants in HLA regions", "filtering variants")
-def _exclude_hla(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS", lower: Optional[int] = None, upper: Optional[int] = None, build: Optional[str] = None, mode: str = "xmhc", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
+def _exclude_hla(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS", lower: int | None = None, upper: int | None = None, build: str | None = None, mode: str = "xmhc", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
     """
     Exclude variants in HLA regions based on genomic coordinates.
     
@@ -1333,7 +1331,7 @@ def _exclude_hla(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS", l
         # hg19 : 25,726,291 ~ 33,368,421
 
         # HLA : GABBR1 ~ 3.78mb ~ KIFC1
-        # reference: Shiina, T., Hosomichi, K., Inoko, H., & Kulski, J. K. (2009). The HLA genomic loci map: expression, interaction, diversity and disease. Journal of human genetics, 54(1), 15-39. 
+        # reference: Shiina, T., Hosomichi, K., Inoko, H., & Kulski, J. K. (2009). The HLA genomic loci map: expression, interaction, diversity and disease. Journal of human genetics, 54(1), 15-39.
         # hg38:  29,602,238 ~ 33,409,896
         # hg19:  29,570,015 ~ 33,377,673
 
@@ -1359,28 +1357,28 @@ def _exclude_hla(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS", l
         if mode =="hla" or mode =="mhc":
             lower=29500000
             upper=33500000
-        
+
     raw_len = len(sumstats)
-    
+
     # Ensure POS column is numeric for comparison
-    pos_numeric = pd.to_numeric(sumstats[pos], errors='coerce')
-    
+    pos_numeric = pd.to_numeric(sumstats[pos], errors="coerce")
+
     if str(sumstats[chrom].dtype) == "string":
         is_in_hla = (sumstats[chrom].astype("string")=="6")&(pos_numeric>lower)&(pos_numeric<upper)
     else:
-        chrom_numeric = pd.to_numeric(sumstats[chrom], errors='coerce')
+        chrom_numeric = pd.to_numeric(sumstats[chrom], errors="coerce")
         is_in_hla = (chrom_numeric==6)&(pos_numeric>lower)&(pos_numeric<upper)
-    
+
     sumstats = sumstats.loc[~is_in_hla, : ]
-    
+
     after_len = len(sumstats)
-    
-    log.write(" -Excluded {} variants in HLA region (chr6: {}-{} )...".format(raw_len - after_len,lower,upper),verbose=verbose)
-    
+
+    log.write(f" -Excluded {raw_len - after_len} variants in HLA region (chr6: {lower}-{upper} )...",verbose=verbose)
+
     return sumstats
 
 @with_logging_filter("exclude variants on sex chromosomes", "filtering variants")
-def _exclude_sexchr(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS", sexchrs: List[int] = [23,24,25], log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
+def _exclude_sexchr(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS", sexchrs: list[int] = [23,24,25], log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
     """
     Exclude variants on sex chromosomes.
     
@@ -1402,23 +1400,23 @@ def _exclude_sexchr(sumstats: pd.DataFrame, chrom: str = "CHR", pos: str = "POS"
         Filtered summary statistics table with sex chromosome variants removed
     """
     raw_len = len(sumstats)
-    
+
     if str(sumstats[chrom].dtype) == "string":
         sexchrs_string = [str(i) for i in sexchrs]
         is_in_sexchr = sumstats[chrom].astype("string").isin(sexchrs_string)
     else:
         is_in_sexchr = sumstats[chrom].isin(sexchrs)
-    
+
     sumstats = sumstats.loc[~is_in_sexchr, : ]
-    
+
     after_len = len(sumstats)
-    
-    log.write(" -Excluded {} variants on sex chromosomes ({})...".format(raw_len - after_len,sexchrs),verbose=verbose)
-    
+
+    log.write(f" -Excluded {raw_len - after_len} variants on sex chromosomes ({sexchrs})...",verbose=verbose)
+
     return sumstats
 
 @with_logging_filter("exclude variants in pseudo-autosomal regions (PAR)", "filtering variants")
-def _filter_par(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], chrom: str = "CHR", pos: str = "POS", build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
+def _filter_par(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], chrom: str = "CHR", pos: str = "POS", build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
     """
     Exclude variants located in pseudo-autosomal regions (PAR) on the X chromosome.
     
@@ -1451,11 +1449,11 @@ def _filter_par(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], chrom: s
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
+
     # Get PAR BED file path
     par_path = get_par(build=build)
     log.write(" -Using PAR regions for hg" + build, verbose=verbose)
-    
+
     # Use _filter_bed to exclude variants in PAR regions
     return _filter_bed(
         sumstats_or_dataframe=sumstats,
@@ -1468,7 +1466,7 @@ def _filter_par(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], chrom: s
     )
 
 @with_logging_filter("exclude variants in high LD regions", "filtering variants")
-def _filter_high_ld(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], chrom: str = "CHR", pos: str = "POS", build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
+def _filter_high_ld(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], chrom: str = "CHR", pos: str = "POS", build: str = "19", verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
     """
     Exclude variants located in high linkage disequilibrium (LD) regions.
     
@@ -1501,11 +1499,11 @@ def _filter_high_ld(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], chro
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
+
     # Get high LD BED file path
     high_ld_path = get_high_ld(build=build)
     log.write(" -Using high LD regions for hg" + build, verbose=verbose)
-    
+
     # Use _filter_bed to exclude variants in high LD regions
     return _filter_bed(
         sumstats_or_dataframe=sumstats,
@@ -1518,7 +1516,7 @@ def _filter_high_ld(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], chro
     )
 
 @with_logging_filter("extract specific variants by ID", "extracting variants")
-def _extract(sumstats: pd.DataFrame, extract: Optional[List[str]] = None, id_use: str = "SNPID", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
+def _extract(sumstats: pd.DataFrame, extract: list[str] | None = None, id_use: str = "SNPID", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
     """
     Extract specific variants by ID.
     
@@ -1540,13 +1538,13 @@ def _extract(sumstats: pd.DataFrame, extract: Optional[List[str]] = None, id_use
         Subset of summary statistics with specified variants
     """
     if extract is not None:
-        log.write(" -Extracting {} variants from sumstats...".format(len(extract)),verbose=verbose)
+        log.write(f" -Extracting {len(extract)} variants from sumstats...",verbose=verbose)
         sumstats = sumstats.loc[sumstats[id_use].isin(extract),:]
-        log.write(" -Extracted {} variants from sumstats...".format(len(sumstats)),verbose=verbose)
+        log.write(f" -Extracted {len(sumstats)} variants from sumstats...",verbose=verbose)
     return sumstats
 
 @with_logging_filter("exclude specific variants by ID", "filtering variants")
-def _exclude(sumstats: pd.DataFrame, exclude: Optional[List[str]] = None, id_use: str = "SNPID", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
+def _exclude(sumstats: pd.DataFrame, exclude: list[str] | None = None, id_use: str = "SNPID", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
     """
     Exclude specific variants by ID.
     
@@ -1568,13 +1566,13 @@ def _exclude(sumstats: pd.DataFrame, exclude: Optional[List[str]] = None, id_use
         Subset of summary statistics without excluded variants
     """
     if exclude is not None:
-        log.write(" -Excluding {} variants from sumstats...".format(len(exclude)),verbose=verbose)
+        log.write(f" -Excluding {len(exclude)} variants from sumstats...",verbose=verbose)
         sumstats = sumstats.loc[~sumstats[id_use].isin(exclude),:]
-        log.write(" -Excluded {} variants from sumstats...".format(len(sumstats)),verbose=verbose)
+        log.write(f" -Excluded {len(sumstats)} variants from sumstats...",verbose=verbose)
     return sumstats
 
 @with_logging_filter("filter variants within a specific genomic region", "filtering variants")
-def _filter_region(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], region: Optional[Union[List[Union[int, str]], str]] = None, chrom: str = "CHR", pos: str = "POS", build: str = "19", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
+def _filter_region(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], region: Union[list[Union[int, str]], str] | None = None, chrom: str = "CHR", pos: str = "POS", build: str = "19", log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
     """
     Filter variants within a specific genomic region.
     
@@ -1618,7 +1616,7 @@ def _filter_region(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], regio
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
+
     if region is not None:
         # Handle special region strings
         if isinstance(region, str):
@@ -1664,18 +1662,18 @@ def _filter_region(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], regio
                 region_chr, region_start, region_end = normalized_region
             except (ValueError, Exception) as e:
                 raise ValueError(f"Invalid region format. Expected list/tuple [chr, start, end] or string. Error: {e}")
-        
+
         # Filter variants in the normalized region
         in_region_snp = (sumstats[chrom] == region_chr) & (sumstats[pos] < region_end) & (sumstats[pos] > region_start)
         n_in_region = sum(in_region_snp)
         if verbose and n_in_region > 0:
-            log.write(" -Filtered to region chr{}:{}-{} ({} variants)".format(region_chr, region_start, region_end, n_in_region), verbose=verbose)
+            log.write(f" -Filtered to region chr{region_chr}:{region_start}-{region_end} ({n_in_region} variants)", verbose=verbose)
         sumstats = sumstats.loc[in_region_snp, :]
         return sumstats.copy()
-    
-    return sumstats    
-    
-def _search_variants(sumstats: pd.DataFrame, snplist: Optional[List[Union[str, List[Union[int, float]]]]] = None, 
+
+    return sumstats
+
+def _search_variants(sumstats: pd.DataFrame, snplist: list[Union[str, list[Union[int, float]]]] | None = None,
                      snpid: str = "SNPID", rsid: str = "rsID",
                      chrom: str = "CHR", pos: str = "POS", ea: str = "EA", nea: str = "NEA",
                      log: Log = Log(), verbose: bool = True) -> pd.DataFrame:
@@ -1710,24 +1708,24 @@ def _search_variants(sumstats: pd.DataFrame, snplist: Optional[List[Union[str, L
     >>> variants = _search_variants(sumstats, snplist=["rs1234", "1:100500", [2, 202000], "19:45100000:C:T"])
     >>> print(variants.shape)
     """
-    # create a boolean col with FALSE 
+    # create a boolean col with FALSE
     if snplist is None:
         return sumstats.iloc[0:0,:].copy()
-    
+
     if snpid in sumstats.columns:
         is_extract = sumstats[snpid]!=sumstats[snpid]
     else:
         is_extract = sumstats[rsid]!=sumstats[rsid]
-    
+
     # search each variant
-    for variant in snplist:        
-        
+    for variant in snplist:
+
         if pd.api.types.is_list_like(variant):
             # (1:1234)
             single_chrom=variant[0]
             single_pos=variant[1]
             is_extract = is_extract | ((sumstats[pos] == single_pos ) &(sumstats[chrom] == single_chrom))
-        
+
         elif pd.api.types.is_string_dtype(type(variant)):
             # rs123
             if "rsID" in sumstats.columns:
@@ -1738,8 +1736,8 @@ def _search_variants(sumstats: pd.DataFrame, snplist: Optional[List[Union[str, L
                 is_extract = is_extract | (sumstats["SNPID"] == variant)
 
             # 1:123:A:D -> (1:1234)
-            a= re.match(r'^(chr|Chr|CHR)?(\d+)[:_-](\d+)([:_-]([ATCG]+)[:_-]([ATCG]+))?$', variant, flags=0)
-            
+            a= re.match(r"^(chr|Chr|CHR)?(\d+)[:_-](\d+)([:_-]([ATCG]+)[:_-]([ATCG]+))?$", variant, flags=0)
+
             if a is not None:
                 if a[4] is None:
                     single_chrom=int(a[2])
@@ -1752,9 +1750,9 @@ def _search_variants(sumstats: pd.DataFrame, snplist: Optional[List[Union[str, L
                     single_nea = a[6]
                     a_match = ((sumstats[nea] == single_nea) & (sumstats[ea] == single_ea)) | ((sumstats[nea] == single_ea) & (sumstats[ea] == single_nea))
                     is_extract = is_extract | ((sumstats[pos] == single_pos ) &(sumstats[chrom] == single_chrom)  & a_match)
-                        
+
     to_search =  sumstats.loc[is_extract,:].copy()
-    log.write(" -Found {} variants...".format(len(to_search)),verbose=verbose)
+    log.write(f" -Found {len(to_search)} variants...",verbose=verbose)
 
     log.write("Finished searching variants.", verbose=verbose)
     return to_search
@@ -1764,8 +1762,8 @@ def _get_region_start_and_end(
     pos: Union[int, float, str],
     windowsizekb: int = 500,
     verbose: bool = True,
-    log: Optional[Log] = None,
-    **kwargs: Any) -> List[Union[int, str]]:
+    log: Log | None = None,
+    **kwargs: Any) -> list[Union[int, str]]:
     """
     Determine the [chr, start, end] for a region. 
 
@@ -1816,8 +1814,8 @@ def _get_region_start_and_end(
     return [chrom, start, end]
 
 @with_logging_filter("filter duplicate/multiallelic variants", "filtering variants")
-def _filter_dup(sumstats_obj: Union['Sumstats', pd.DataFrame], mode: str = "dm", chrom: str = "CHR", pos: str = "POS", snpid: str = "SNPID", ea: str = "EA", nea: str = "NEA", rsid: str = "rsID", 
-keep: Union[str, bool] = 'first', keep_col: str = "P", remove_na: bool = False, keep_ascend: bool = True, verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
+def _filter_dup(sumstats_obj: Union["Sumstats", pd.DataFrame], mode: str = "dm", chrom: str = "CHR", pos: str = "POS", snpid: str = "SNPID", ea: str = "EA", nea: str = "NEA", rsid: str = "rsID",
+keep: Union[str, bool] = "first", keep_col: str = "P", remove_na: bool = False, keep_ascend: bool = True, verbose: bool = True, log: Log = Log()) -> pd.DataFrame:
     """
     Filter to keep only duplicate or multiallelic variants based on user-selected criteria.
     
@@ -1862,21 +1860,21 @@ keep: Union[str, bool] = 'first', keep_col: str = "P", remove_na: bool = False, 
     else:
         # Called with Sumstats object
         sumstats = sumstats_obj.data.copy()
-    
-    log.write(" -Filtering mode: {}".format(mode), verbose=verbose)
-    log.write(" -Which duplicates to show: {}".format(keep), verbose=verbose)
-    
+
+    log.write(f" -Filtering mode: {mode}", verbose=verbose)
+    log.write(f" -Which duplicates to show: {keep}", verbose=verbose)
+
     # Sort the variants using the specified column before filtering (for consistency)
     if keep_col is not None:
         if keep_col in sumstats.columns:
-            log.write(" -Sorting the sumstats using {}...".format(keep_col), verbose=verbose)
+            log.write(f" -Sorting the sumstats using {keep_col}...", verbose=verbose)
             sumstats = sumstats.sort_values(by=keep_col, ascending=keep_ascend)
         else:
-            log.write(" -Column {} was not detected... skipping...".format(keep_col), verbose=verbose)
-    
+            log.write(f" -Column {keep_col} was not detected... skipping...", verbose=verbose)
+
     total_number = len(sumstats)
     is_duplicate = pd.Series([False] * len(sumstats), index=sumstats.index)
-    
+
     # Filter by duplicated SNPID
     if (snpid in sumstats.columns) and ("d" in mode or "s" in mode):
         log.write(" -Filtering duplicated variants based on SNPID...", verbose=verbose)
@@ -1886,8 +1884,8 @@ keep: Union[str, bool] = 'first', keep_col: str = "P", remove_na: bool = False, 
             # Exclude NA values
             is_dup_snpid = is_dup_snpid & sumstats[snpid].notna()
             is_duplicate = is_duplicate | is_dup_snpid
-            log.write(" -Found {} duplicate variants based on SNPID...".format(is_dup_snpid.sum()), verbose=verbose)
-    
+            log.write(f" -Found {is_dup_snpid.sum()} duplicate variants based on SNPID...", verbose=verbose)
+
     # Filter by duplicated rsID
     if (rsid in sumstats.columns) and ("d" in mode or "r" in mode):
         log.write(" -Filtering duplicated variants based on rsID...", verbose=verbose)
@@ -1897,8 +1895,8 @@ keep: Union[str, bool] = 'first', keep_col: str = "P", remove_na: bool = False, 
             # Exclude NA values
             is_dup_rsid = is_dup_rsid & sumstats[rsid].notna()
             is_duplicate = is_duplicate | is_dup_rsid
-            log.write(" -Found {} duplicate variants based on rsID...".format(is_dup_rsid.sum()), verbose=verbose)
-    
+            log.write(f" -Found {is_dup_rsid.sum()} duplicate variants based on rsID...", verbose=verbose)
+
     # Filter by duplicated variants by CHR:POS:NEA:EA
     if (chrom in sumstats.columns) and (pos in sumstats.columns) and (nea in sumstats.columns) and (ea in sumstats.columns) and ("d" in mode or "c" in mode):
         log.write(" -Filtering duplicated variants based on CHR,POS,EA and NEA...", verbose=verbose)
@@ -1909,8 +1907,8 @@ keep: Union[str, bool] = 'first', keep_col: str = "P", remove_na: bool = False, 
         is_dup_chrpos = sumstats.duplicated(subset=[chrom, pos, ea, nea], keep=keep)
         is_dup_chrpos = is_dup_chrpos & ~has_na
         is_duplicate = is_duplicate | is_dup_chrpos
-        log.write(" -Found {} duplicate variants based on CHR,POS,EA and NEA...".format(is_dup_chrpos.sum()), verbose=verbose)
-    
+        log.write(f" -Found {is_dup_chrpos.sum()} duplicate variants based on CHR,POS,EA and NEA...", verbose=verbose)
+
     # Filter by multiallelic variants by CHR:POS
     if (chrom in sumstats.columns) and (pos in sumstats.columns) and "m" in mode:
         log.write(" -Filtering multiallelic variants based on CHR:POS...", verbose=verbose)
@@ -1921,14 +1919,14 @@ keep: Union[str, bool] = 'first', keep_col: str = "P", remove_na: bool = False, 
         is_dup_multiallelic = sumstats.duplicated(subset=[chrom, pos], keep=keep)
         is_dup_multiallelic = is_dup_multiallelic & ~has_na
         is_duplicate = is_duplicate | is_dup_multiallelic
-        log.write(" -Found {} multiallelic variants based on CHR:POS...".format(is_dup_multiallelic.sum()), verbose=verbose)
-    
+        log.write(f" -Found {is_dup_multiallelic.sum()} multiallelic variants based on CHR:POS...", verbose=verbose)
+
     # Filter to keep only duplicates
     sumstats = sumstats.loc[is_duplicate, :]
     after_number = len(sumstats)
-    
-    log.write(" -Found {} duplicate/multiallelic variants in total...".format(after_number), verbose=verbose)
-    
+
+    log.write(f" -Found {after_number} duplicate/multiallelic variants in total...", verbose=verbose)
+
     # Remove NAs if requested
     if "n" in mode or remove_na == True:
         log.write(" -Removing NAs...", verbose=verbose)
@@ -1957,16 +1955,16 @@ keep: Union[str, bool] = 'first', keep_col: str = "P", remove_na: bool = False, 
         if specified_columns:
             sumstats = sumstats.loc[~sumstats[specified_columns].isna().any(axis=1), :]
             after_number = len(sumstats)
-            log.write(" -Removed {} variants with NA values in {}...".format(pre_number - after_number, specified_columns), verbose=verbose)
-    
+            log.write(f" -Removed {pre_number - after_number} variants with NA values in {specified_columns}...", verbose=verbose)
+
     # Sort the coordinates
     if keep_col is not None:
         log.write(" -Sorting the coordinates based on CHR and POS...", verbose=verbose)
         sumstats = _sort_coordinate(sumstats, verbose=False)
-    
+
     gc.collect()
     # Update sumstats_obj.data with filtered result only if called with Sumstats object
     if not isinstance(sumstats_obj, pd.DataFrame):
         sumstats_obj.data = sumstats
-    
+
     return sumstats

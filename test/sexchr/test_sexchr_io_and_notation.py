@@ -41,9 +41,9 @@ NC_HUMAN_38_Y = _nc.NC_HUMAN_38_Y
 
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
 from gwaslab.info.g_Log import Log
+from gwaslab.io.io_bedpe import bedpe_to_sumstats_coordinates, read_bedpe
 from gwaslab.io.io_gtf import read_gtf
-from gwaslab.io.io_bedpe import read_bedpe, bedpe_to_sumstats_coordinates
-from gwaslab.io.io_ucsc_bed import read_bed, bed_to_sumstats_coordinates
+from gwaslab.io.io_ucsc_bed import bed_to_sumstats_coordinates, read_bed
 
 
 class TestSexChrIoFormats(unittest.TestCase):

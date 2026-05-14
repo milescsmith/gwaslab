@@ -1,6 +1,9 @@
-from typing import Callable, Any
 import functools
+from collections.abc import Callable
+from typing import Any
+
 import matplotlib.pyplot as plt
+
 
 def add_doc(src: Callable[..., Any]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def deco(func):

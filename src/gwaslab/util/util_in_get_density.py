@@ -1,9 +1,11 @@
-from typing import TYPE_CHECKING, Union, Optional
-import pandas as pd
+import gc
+from typing import TYPE_CHECKING, Optional, Union
+
 import numpy as np
+import pandas as pd
+
 from gwaslab.info.g_Log import Log
 from gwaslab.qc.qc_decorator import with_logging
-import gc
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
@@ -13,13 +15,13 @@ if TYPE_CHECKING:
         finished_msg="calculating signal DENSITY successfully!"
 )
 def _get_signal_density2(
-    insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
+    insumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
     snpid: str = "SNPID",
     chrom: str = "CHR",
     pos: str = "POS",
     bwindowsizekb: int = 100,
-    sig_sumstats: Optional[pd.DataFrame] = None,
-    log: Optional[Log] = None,
+    sig_sumstats: pd.DataFrame | None = None,
+    log: Log | None = None,
     verbose: bool = True
     ) -> pd.DataFrame:
     """
@@ -61,17 +63,17 @@ def _get_signal_density2(
         insumstats = insumstats_or_dataframe
     else:
         insumstats = insumstats_or_dataframe.data
-    
+
     if log is None:
         class Dummy:
             def write(self, *args, **kwargs): pass
         log = Dummy()
-    
+
     # Auto-detect ID column: prefer SNPID, fallback to rsID
     if snpid == "SNPID" and snpid not in insumstats.columns:
         if "rsID" in insumstats.columns:
             snpid = "rsID"
-    
+
     wsize = bwindowsizekb * 1000
 
     sumstats = insumstats.copy()
@@ -88,26 +90,26 @@ def _get_signal_density2(
         sig_sumstats = sig_sumstats.copy()
         sig_sumstats[pos] = pd.to_numeric(sig_sumstats[pos], errors="coerce")
         sig_valid_mask = sig_sumstats[chrom].notna() & sig_sumstats[pos].notna()
-        
+
         # Initialize density to 0 for all variants
         densities = pd.Series(0, index=sumstats.index, dtype="Int32")
         counter = 0
-        
+
         # For each significant variant, count how many variants in insumstats are within window
         for chrom_i, sig_chr in sig_sumstats.loc[sig_valid_mask, :].groupby(chrom, sort=False):
             sig_chr_valid = sig_chr.loc[sig_chr[pos].notna(), :]
             if sig_chr_valid.empty:
                 continue
-                
+
             # Get corresponding chromosome data from sumstats
             chr_mask = (sumstats[chrom] == chrom_i) & valid_mask
             if not chr_mask.any():
                 continue
-                
+
             chr_data = sumstats.loc[chr_mask, :]
             chr_positions = chr_data[pos].to_numpy()
             sig_positions = sig_chr_valid[pos].to_numpy()
-            
+
             # For each significant variant, find all variants within window
             for sig_pos in sig_positions:
                 counter += 1
@@ -117,7 +119,7 @@ def _get_signal_density2(
                 # Increment density for variants in this window
                 chr_indices = chr_data.index[left_idx:right_idx]
                 densities.loc[chr_indices] += 1
-                
+
                 if counter % 1000 == 0:
                     log.write(f" -Processed {counter//1000}k signals", verbose=verbose)
                     gc.collect()
@@ -153,7 +155,7 @@ def _get_signal_density2(
         else:
             bsd = 0.0
         bmax = density_valid.max()
-        
+
         # Ensure snpid column exists for reporting
         if snpid not in sumstats.columns:
             if "rsID" in sumstats.columns:

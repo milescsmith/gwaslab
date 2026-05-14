@@ -1,8 +1,8 @@
 import os
-import sys
-import unittest
 import shutil
+import sys
 import tempfile
+import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "src")
@@ -79,7 +79,7 @@ class TestIOToFormats(unittest.TestCase):
         self.gl.to_format(prefix, fmt="bed", gzip=False, verbose=False)
         out_path = prefix + ".bed"
         self.assertTrue(os.path.exists(out_path))
-        with open(out_path, "r") as f:
+        with open(out_path) as f:
             lines = [line.strip().split("\t") for line in f.readlines()]
         # SNP row: start = POS-1, end = POS-1 + len(NEA)
         chrom, start, end, alleles, strand, snpid = lines[0]
@@ -104,7 +104,7 @@ class TestIOToFormats(unittest.TestCase):
         self.gl.to_format(prefix, fmt="vep", gzip=False, verbose=False)
         out_path = prefix + ".vep"
         self.assertTrue(os.path.exists(out_path))
-        with open(out_path, "r") as f:
+        with open(out_path) as f:
             lines = [line.strip().split("\t") for line in f.readlines()]
         # SNP row: start=end=POS + len(NEA) - 1
         _, start, end, alleles, strand, snpid = lines[0]
@@ -129,7 +129,7 @@ class TestIOToFormats(unittest.TestCase):
         self.gl.to_format(prefix, fmt="annovar", gzip=False, verbose=False)
         out_path = prefix + ".annovar"
         self.assertTrue(os.path.exists(out_path))
-        with open(out_path, "r") as f:
+        with open(out_path) as f:
             lines = [line.strip().split("\t") for line in f.readlines()]
         # SNP row: start = POS, end = POS-1 + len(NEA), columns NEA_out, EA_out
         _, start, end, nea_out, ea_out, snpid = lines[0]
@@ -156,7 +156,7 @@ class TestIOToFormats(unittest.TestCase):
         self.gl.to_format(prefix, fmt="vcf", verbose=False)
         out_path = prefix + ".vcf"
         self.assertTrue(os.path.exists(out_path))
-        with open(out_path, "r") as f:
+        with open(out_path) as f:
             content = f.read()
         self.assertIn("##gwaslab_version", content)
         self.assertIn("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", content)

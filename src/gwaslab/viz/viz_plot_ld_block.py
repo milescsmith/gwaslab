@@ -1,19 +1,22 @@
-from typing import TYPE_CHECKING, Optional, Union, Tuple, Any
+from typing import TYPE_CHECKING, Any, Optional, Tuple, Union
+
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib
 from matplotlib.patches import ConnectionPatch
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
 from gwaslab.info.g_Log import Log
 from gwaslab.viz.viz_aux_save_figure import save_figure
 from gwaslab.viz.viz_aux_style_options import set_plot_style
 
 if TYPE_CHECKING:
-    from matplotlib.figure import Figure
     from matplotlib.axes import Axes
-    from gwaslab.g_Sumstats import Sumstats
+    from matplotlib.figure import Figure
+
     from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+    from gwaslab.g_Sumstats import Sumstats
 
 
 def _edges_from_centers(x):
@@ -33,16 +36,16 @@ def _edges_from_centers(x):
 
 def _prepare_ld_data_from_vcf(
     vcf_path: str,
-    region: Tuple[Union[int, str], int, int],
-    sumstats: Union[pd.DataFrame, 'Sumstats'],
+    region: tuple[Union[int, str], int, int],
+    sumstats: Union[pd.DataFrame, "Sumstats"],
     pos_col: str,
     nea_col: str,
     ea_col: str,
-    tabix: Optional[bool],
-    mapper: Optional[Any],
+    tabix: bool | None,
+    mapper: Any | None,
     log: Log,
     verbose: bool
-) -> Tuple[np.ndarray, pd.DataFrame, pd.DataFrame, bool, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, bool, np.ndarray | None]:
     """
     Extract LD matrix from VCF and prepare data for plotting.
     
@@ -61,10 +64,10 @@ def _prepare_ld_data_from_vcf(
     """
     if sumstats is None:
         raise ValueError("sumstats must be provided when using vcf_path and region")
-    
+
     log.write("Extracting LD matrix from VCF file...", verbose=verbose)
     from gwaslab.io.io_vcf import _get_ld_matrix_from_vcf
-    
+
     matched_sumstats, ld_matrix = _get_ld_matrix_from_vcf(
         sumstats_or_dataframe=sumstats,
         vcf_path=vcf_path,
@@ -77,16 +80,16 @@ def _prepare_ld_data_from_vcf(
         mapper=mapper,
         tabix=tabix
     )
-    
+
     if ld_matrix.size == 0:
         raise ValueError("No valid variants found in VCF for the specified region")
-    
+
     # Get original sumstats filtered to region (all variants in region, not just matched)
-    if hasattr(sumstats, 'data'):
+    if hasattr(sumstats, "data"):
         original_sumstats = sumstats.data
     else:
         original_sumstats = sumstats
-    
+
     # Filter original sumstats to region to get all variant positions
     from gwaslab.util.util_in_filter_value import _filter_region
     region_sumstats = _filter_region(
@@ -97,10 +100,10 @@ def _prepare_ld_data_from_vcf(
         log=log,
         verbose=verbose
     )
-    
+
     if len(region_sumstats) == 0:
         raise ValueError("No variants found in sumstats for the specified region")
-    
+
     # Check if we should use "i" coordinate for alignment
     use_i_coordinate = False
     all_i_positions = None
@@ -108,7 +111,7 @@ def _prepare_ld_data_from_vcf(
         all_i_positions = region_sumstats.sort_values(pos_col)["i"].values.astype(float)
         use_i_coordinate = True
         log.write("Using 'i' coordinate system for x-axis alignment with regional plot", verbose=verbose)
-    
+
     return ld_matrix, matched_sumstats, region_sumstats, use_i_coordinate, all_i_positions
 
 
@@ -119,7 +122,7 @@ def _prepare_ld_matrix(
     pos_col: str,
     log: Log,
     verbose: bool
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Prepare full LD matrix with all variant positions, filling in LD values for matched variants.
     
@@ -149,15 +152,15 @@ def _prepare_ld_matrix(
     region_sumstats = region_sumstats.sort_values(pos_col)
     all_positions = region_sumstats[pos_col].values.astype(float)
     n_all = len(all_positions)
-    
+
     # Create mapping from position to index in all_positions
     pos_to_idx = {int(p): idx for idx, p in enumerate(all_positions)}
-    
+
     # Get matched positions from VCF
     if pos_col not in matched_sumstats.columns:
         raise ValueError(f"{pos_col} column not found in matched sumstats")
     matched_positions = matched_sumstats[pos_col].values.astype(int)
-    
+
     # Find indices of matched variants in the full position grid
     matched_indices = []
     valid_matched = []
@@ -165,21 +168,21 @@ def _prepare_ld_matrix(
         if mp in pos_to_idx:
             matched_indices.append(pos_to_idx[mp])
             valid_matched.append(i)
-    
+
     matched_indices = np.array(matched_indices, dtype=int)
     valid_matched = np.array(valid_matched, dtype=int)
     n_matched = len(matched_indices)
-    
+
     if n_matched != ld_matrix.shape[0]:
         log.write(f"Warning: Number of matched variants ({n_matched}) doesn't match LD matrix size ({ld_matrix.shape[0]})", verbose=verbose)
         # Use only valid matched variants
         n_matched = min(n_matched, ld_matrix.shape[0], len(valid_matched))
         matched_indices = matched_indices[:n_matched]
         valid_matched = valid_matched[:n_matched]
-    
+
     # Create full LD matrix with white (NaN) for empty positions
     full_ld_matrix = np.full((n_all, n_all), np.nan, dtype=float)
-    
+
     # Fill in LD values for matched variants
     for i, valid_i in enumerate(valid_matched[:n_matched]):
         idx_i = matched_indices[i]
@@ -190,17 +193,17 @@ def _prepare_ld_matrix(
                     full_ld_matrix[idx_i, idx_j] = ld_matrix[valid_i, valid_j]
                     if idx_i != idx_j:  # Symmetric
                         full_ld_matrix[idx_j, idx_i] = ld_matrix[valid_i, valid_j]
-    
+
     log.write(f"Created LD matrix: {n_all} variant positions in region, {n_matched} with LD data, {n_all - n_matched} empty (white)", verbose=verbose)
-    
+
     return full_ld_matrix, all_positions
 
 
 def _calculate_regional_xlim(
-    region: Tuple[Union[int, str], int, int],
-    sumstats: Union[pd.DataFrame, 'Sumstats'],
+    region: tuple[Union[int, str], int, int],
+    sumstats: Union[pd.DataFrame, "Sumstats"],
     pos_col: str
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Calculate xlim for regional plot mode to align with regional plot's x-axis.
     
@@ -218,27 +221,27 @@ def _calculate_regional_xlim(
     xlim : tuple
         (xmin, xmax) for x-axis limits.
     """
-    if hasattr(sumstats, 'data'):
+    if hasattr(sumstats, "data"):
         region_sumstats = sumstats.data
     else:
         region_sumstats = sumstats
-    
+
     if "i" not in region_sumstats.columns or pos_col not in region_sumstats.columns:
         raise ValueError("Sumstats must contain 'i' and position columns for regional mode")
-    
+
     # Calculate gene_track_start_i the same way as regional plot
     most_left_snp = region_sumstats["i"].idxmin()
     gene_track_offset = region_sumstats.loc[most_left_snp, pos_col] - region[1]
     gene_track_start_i = region_sumstats.loc[most_left_snp, "i"] - gene_track_offset - region[1]
-    
+
     # The regional plot x-axis shows: [gene_track_start_i + region[1], gene_track_start_i + region[2]]
     regional_xlim = [gene_track_start_i + region[1], gene_track_start_i + region[2]]
-    
+
     return regional_xlim[0], regional_xlim[1]
 
 
 def _set_axis_limits(
-    ax: 'Axes',
+    ax: "Axes",
     ranks: np.ndarray,
     ld_tri: np.ma.MaskedArray,
     mode: str
@@ -267,7 +270,7 @@ def _set_axis_limits(
     U_edges = (X_edges + Y_edges) / 2.0
     V_edges = (Y_edges - X_edges) / 2.0
     V_edges_negated = -V_edges
-    
+
     # Get the full range of edge coordinates (these define the cell boundaries)
     # For upper triangle, we only need the lower half (V_negated <= 0)
     u_min_edge = np.min(U_edges)
@@ -275,7 +278,7 @@ def _set_axis_limits(
     v_neg_min_edge = np.min(V_edges_negated)
     # For upper triangle, maximum V_negated is 0 (at the diagonal)
     v_neg_max_edge = 0.0
-    
+
     # Set xlim: use U edge coordinate range with padding
     u_range = u_max_edge - u_min_edge
     padding = max(0.005 * u_range, abs(u_min_edge) * 1e-6) if u_range > 0 else 0.01
@@ -283,7 +286,7 @@ def _set_axis_limits(
     current_xlim = ax.get_xlim()
     if current_xlim == (0.0, 1.0):  # Default matplotlib xlim
         ax.set_xlim(u_min_edge - padding, u_max_edge + padding)
-    
+
     # Set ylim using edge coordinates with padding
     # Only show lower half: from v_neg_min_edge to 0
     v_neg_range = v_neg_max_edge - v_neg_min_edge  # This is 0 - v_neg_min_edge
@@ -296,15 +299,15 @@ def _set_axis_limits(
 
 
 def _plot_ld_triangle(
-    ax: 'Axes',
+    ax: "Axes",
     ld: np.ndarray,
     ranks: np.ndarray,
     cmap: Union[str, matplotlib.colors.Colormap],
     vmin: float,
     vmax: float,
-    i_coords: Optional[np.ndarray] = None,
+    i_coords: np.ndarray | None = None,
     **kwargs
-) -> Tuple[matplotlib.collections.QuadMesh, np.ma.MaskedArray]:
+) -> tuple[matplotlib.collections.QuadMesh, np.ma.MaskedArray]:
     """
     Plot the LD triangle using pcolormesh with 45° rotation.
     Uses variant ranks (0, 1, 2, ..., n-1) for uniform cell sizes.
@@ -343,21 +346,21 @@ def _plot_ld_triangle(
     # Combine masks: mask lower triangle OR NaN values
     combined_mask = mask_lower | mask_nan
     ld_tri = np.ma.array(ld, mask=combined_mask)
-    
+
     # Build corner grid using ranks (uniform spacing)
     # Always use ranks for the grid to maintain uniform cell sizes
     # In regional mode, ax_ld_block does NOT share x-axis, so it uses rank-based coordinates
     e = _edges_from_centers(ranks)  # (n+1,)
-    
+
     X, Y = np.meshgrid(e, e, indexing="ij")  # corners for pcolormesh
-    
+
     # 45°-style transform (scaled; visually nice for LD triangles)
     U = (X + Y) / 2.0
     V = (Y - X) / 2.0
-    
+
     # Negate V to create inverted triangle (without using invert_yaxis)
     V_negated = -V
-    
+
     # Plot using pcolormesh with negated V to create inverted triangle
     m = ax.pcolormesh(
         U, V_negated, ld_tri,
@@ -367,20 +370,20 @@ def _plot_ld_triangle(
         vmax=vmax,
         **kwargs
     )
-    
+
     return m, ld_tri
 
 
 def _plot_position_bar(
-    ax_pos: 'Axes',
+    ax_pos: "Axes",
     actual_positions: np.ndarray,
     ranks: np.ndarray,
     fontsize: float = 10,
     font_family: str = "Arial",
     show_xticks: bool = True,
     region_step: int = 21,
-    xlabel: Optional[str] = None,
-    region: Optional[Tuple[Union[int, str], int, int]] = None,
+    xlabel: str | None = None,
+    region: tuple[Union[int, str], int, int] | None = None,
     position_bar_bg: bool = True
 ) -> None:
     """
@@ -411,20 +414,20 @@ def _plot_position_bar(
         Whether to show the gray background bar. Default: True.
     """
     n = len(ranks)
-    
+
     # Use actual positions for x-axis (not ranks)
     pos_min = actual_positions.min()
     pos_max = actual_positions.max()
     pos_range = pos_max - pos_min
-    
+
     # Plot the position bar as a horizontal line/bar spanning the actual position range
     if position_bar_bg:
         bar_height = 0.1
-        ax_pos.barh(0, width=pos_range, left=pos_min, height=bar_height, color='gray', alpha=0.3)
-    
+        ax_pos.barh(0, width=pos_range, left=pos_min, height=bar_height, color="gray", alpha=0.3)
+
     # Add vertical lines at ALL variant positions (using actual positions) that fill ylim(0, 0.05)
-    ax_pos.vlines(actual_positions, 0, 0.05, colors='black', linewidth=1, zorder=3)
-    
+    ax_pos.vlines(actual_positions, 0, 0.05, colors="black", linewidth=1, zorder=3)
+
     # Set x-axis limits based on actual positions (only if not shared)
     # In regional mode, xlim is set by shared x-axis
     #if not (hasattr(ax_pos, '_shared_axes') and 'x' in ax_pos._shared_axes):
@@ -440,19 +443,19 @@ def _plot_position_bar(
     if show_xticks:
         # Set xticks using np.linspace like in viz_plot_regional2.py (line 533)
         tick_positions = np.linspace(pos_min, pos_max, num=region_step)
-        
+
         # Format position labels like region_ticks in viz_plot_regional2.py (line 523)
         # Format as MB with 3 decimal places
-        tick_labels = list(map('{:.3f}'.format, tick_positions.astype("int")/1000000))
-        
+        tick_labels = list(map("{:.3f}".format, tick_positions.astype("int")/1000000))
+
         # Set xticks and xticklabels like in viz_plot_regional2.py (lines 533-534)
         ax_pos.set_xticks(tick_positions)
         ax_pos.set_xticklabels(tick_labels, rotation=45)
-        
+
         # Configure x-axis to show ticks on top
-        ax_pos.xaxis.set_ticks_position('top')
-        ax_pos.xaxis.set_label_position('top')
-        ax_pos.tick_params(axis='x', which='major', top=True, bottom=False, labeltop=True, labelbottom=False)
+        ax_pos.xaxis.set_ticks_position("top")
+        ax_pos.xaxis.set_label_position("top")
+        ax_pos.tick_params(axis="x", which="major", top=True, bottom=False, labeltop=True, labelbottom=False)
 
         # Set xlabel like in viz_plot_manhattan_like.py (lines 388-394)
         if region is not None:
@@ -460,27 +463,27 @@ def _plot_position_bar(
         else:
             xlabel = "Genomic position"
         ax_pos.set_xlabel(xlabel, fontsize=fontsize, family=font_family)
-    
+
     # Remove y-axis
     ax_pos.set_yticks([])
-    ax_pos.spines['left'].set_visible(True)
-    ax_pos.spines['right'].set_visible(True)
-    ax_pos.spines['top'].set_visible(True)  # Show top spine since bar is on top
-    ax_pos.spines['bottom'].set_visible(True)  # Hide bottom spine
+    ax_pos.spines["left"].set_visible(True)
+    ax_pos.spines["right"].set_visible(True)
+    ax_pos.spines["top"].set_visible(True)  # Show top spine since bar is on top
+    ax_pos.spines["bottom"].set_visible(True)  # Hide bottom spine
 
 
 def _add_annotation_lines(
-    ax_ld: 'Axes',
-    ax_pos: 'Axes',
+    ax_ld: "Axes",
+    ax_pos: "Axes",
     ranks: np.ndarray,
     actual_positions: np.ndarray,
-    n_lines: Optional[int] = None,
-    line_color: str = 'gray',
+    n_lines: int | None = None,
+    line_color: str = "gray",
     line_alpha: float = 0.3,
-    line_style: str = '--',
+    line_style: str = "--",
     line_width: float = 0.5,
-    lead_snp_is: Optional[list] = None,
-    lead_snp_is_color: Optional[list] = None
+    lead_snp_is: list | None = None,
+    lead_snp_is_color: list | None = None
 ) -> None:
     """
     Add annotation lines connecting position bar to LD block cell right top corners.
@@ -513,13 +516,13 @@ def _add_annotation_lines(
         List of colors corresponding to lead SNPs. Default: None.
     """
     n = len(ranks)
-    
+
     # Create a mapping from actual positions to lead SNP colors
     lead_snp_color_map = {}
     if lead_snp_is is not None and lead_snp_is_color is not None:
-        for lead_pos, lead_color in zip(lead_snp_is, lead_snp_is_color):
+        for lead_pos, lead_color in zip(lead_snp_is, lead_snp_is_color, strict=False):
             lead_snp_color_map[lead_pos] = lead_color
-    
+
     # Select positions to annotate - all if n_lines is None, otherwise subset
     if n_lines is None:
         indices = np.arange(n)  # All variants
@@ -527,15 +530,15 @@ def _add_annotation_lines(
         indices = np.arange(n)
     else:
         indices = np.linspace(0, n-1, n_lines, dtype=int)
-    
+
     # Get position bar ylim
     ylim_pos = [0]*len(actual_positions) #ax_pos.get_ylim()
-    
+
     # For each selected variant, draw a line from position bar to LD block
     for idx in indices:
         rank = ranks[idx]
         actual_pos = actual_positions[idx]
-        
+
         # Determine color and line width for this line: use lead SNP color and thicker width if available
         current_color = line_color
         current_linewidth = line_width
@@ -544,11 +547,11 @@ def _add_annotation_lines(
             current_color = lead_snp_color_map[actual_pos]
             # Make lead SNP lines more visible with thicker width
             current_linewidth = max(line_width * 2.5, 2.0)  # At least 2.0, or 2.5x the default width
-        
+
         # Start point: position bar (actual position, bottom of bar)
         x_start = actual_pos  # Use actual position, not rank
         y_start = ylim_pos[0]  # Bottom of position bar (since it's on top)
-        
+
         # End point: LD block cell right top corner
         # For a cell at rank i, the right top corner in the rotated coordinate system:
         # - The cell spans from rank i to rank i+1 in both X and Y
@@ -557,18 +560,18 @@ def _add_annotation_lines(
         # - In transformed coordinates: U = (X + Y) / 2, V_negated = -(Y - X) / 2
         # - For the right top corner of cell (i, i): X = i+1, Y = i+1
         # - So U = (i+1 + i+1) / 2 = i+1, V_negated = -(i+1 - i+1) / 2 = 0
-        
+
         # Calculate edge coordinates
         e = _edges_from_centers(ranks)
         if int(rank) + 1 < len(e):
             cell_right = e[int(rank) + 1]
         else:
             cell_right = e[-1]
-        
+
         # Right top corner: U = cell_right, V_negated = 0
         x_end = cell_right - 0.5
         y_end = 0.0 + 0.5
-        
+
         # Draw line using ConnectionPatch
         con = ConnectionPatch(
             xyA=(x_start, y_start), xyB=(x_end, y_end),
@@ -581,9 +584,9 @@ def _add_annotation_lines(
 
 
 def _draw_ld_block_grid(
-    ax: 'Axes',
+    ax: "Axes",
     ranks: np.ndarray,
-    grid_kwargs: Optional[dict] = None
+    grid_kwargs: dict | None = None
 ) -> None:
     """
     Draw grid lines on the LD block plot.
@@ -599,83 +602,83 @@ def _draw_ld_block_grid(
         Default: None.
     """
     n = len(ranks)
-    
+
     # Get edge coordinates (same as used in _plot_ld_triangle)
     e = _edges_from_centers(ranks)  # (n+1,)
-    
+
     # Default grid styling
     default_grid_kwargs = {
-        'color': 'gray',
-        'linewidth': 0.5,
-        'alpha': 0.3,
-        'linestyle': '-',
-        'zorder': 5
+        "color": "gray",
+        "linewidth": 0.5,
+        "alpha": 0.3,
+        "linestyle": "-",
+        "zorder": 5
     }
-    
+
     # Update with user-provided kwargs if any
     if grid_kwargs is not None:
         default_grid_kwargs.update(grid_kwargs)
-    
+
     # Draw grid lines along cell boundaries in the transformed coordinate system
     # For the upper triangle, we draw lines along the edges of cells
-    
+
     # Draw lines along constant X (from diagonal to top boundary)
     for i in range(len(e)):
         x_edge = e[i]
         y_max = e[-1]
-        
+
         # Only draw if this X edge is within the triangle (x_edge <= y_max)
         if x_edge <= y_max:
             # Start at diagonal where Y = X: U = x_edge, V_negated = 0
             u_start = x_edge
             v_neg_start = 0.0
-            
+
             # End at top boundary where Y = y_max
             u_end = (x_edge + y_max) / 2.0
             v_neg_end = -(y_max - x_edge) / 2.0
-            
+
             # Only draw if end point is in upper triangle (V_negated <= 0)
             if v_neg_end <= 0:
                 ax.plot([u_start, u_end], [v_neg_start, v_neg_end], **default_grid_kwargs)
-    
+
     # Draw lines along constant Y (from diagonal to right boundary)
     for j in range(len(e)):
         y_edge = e[j]
         x_max = e[-1]
-        
+
         # Only draw if this Y edge is within the triangle (y_edge <= x_max for upper triangle)
         # Actually, for upper triangle, we want y_edge >= 0 and the line should go from diagonal to right
         if y_edge >= 0:
             # Start at diagonal where X = Y: U = y_edge, V_negated = 0
             u_start = y_edge
             v_neg_start = 0.0
-            
+
             # End at right boundary where X = x_max (only if y_edge <= x_max)
             if y_edge <= x_max:
                 u_end = (x_max + y_edge) / 2.0
                 v_neg_end = -(y_edge - x_max) / 2.0
-                
+
                 # Only draw if end point is in upper triangle (V_negated <= 0)
                 if v_neg_end <= 0:
                     ax.plot([u_start, u_end], [v_neg_start, v_neg_end], **default_grid_kwargs)
 
 
 def _annotate_ld_block_left_side(
-    ax: 'Axes',
+    ax: "Axes",
     ranks: np.ndarray,
     actual_positions: np.ndarray,
-    region: Optional[Tuple[Union[int, str], int, int]] = None,
-    region_sumstats: Optional[pd.DataFrame] = None,
+    region: tuple[Union[int, str], int, int] | None = None,
+    region_sumstats: pd.DataFrame | None = None,
     pos_col: str = "POS",
     snpid_col: str = "SNPID",
-    anno_col: Optional[str] = None,
-    anno_set: Optional[Union[list, set, np.ndarray]] = None,
+    anno_col: str | None = None,
+    anno_set: Union[list, set, np.ndarray] | None = None,
     fontsize: float = 8,
     font_family: str = "Arial",
     color: str = "black",
     tick_length: float = 0.02,
     offset: float = 0.05,
-    ld_block_anno_kwargs: Optional[dict] = None
+    ld_block_anno_kwargs: dict | None = None
 ) -> None:
     """
     Add annotations on the left side of the LD block triangle.
@@ -718,24 +721,24 @@ def _annotate_ld_block_left_side(
         it will override the auto-calculation. Default: None.
     """
     n = len(ranks)
-    
+
     # Get annotation text for each variant
     annotation_texts = []
     snpids = []
-    
+
     if region_sumstats is not None:
         # Sort region_sumstats by position to match ranks order
         if pos_col in region_sumstats.columns:
             region_sumstats_sorted = region_sumstats.sort_values(pos_col).reset_index(drop=True)
         else:
             region_sumstats_sorted = region_sumstats.copy()
-        
+
         # Get SNPIDs for filtering
         if snpid_col in region_sumstats_sorted.columns:
             snpids = region_sumstats_sorted[snpid_col].values.tolist()
         else:
             snpids = [None] * len(region_sumstats_sorted)
-        
+
         # Get annotation text from anno_col if provided, otherwise use chr:pos
         if anno_col is not None and anno_col in region_sumstats_sorted.columns:
             # Use specified column for annotation
@@ -749,10 +752,10 @@ def _annotate_ld_block_left_side(
                 chromosomes = [str(region[0])] * len(region_sumstats_sorted)
             else:
                 chromosomes = ["?"] * len(region_sumstats_sorted)
-            
+
             positions = region_sumstats_sorted[pos_col].values if pos_col in region_sumstats_sorted.columns else actual_positions
-            annotation_texts = [f"{chr}:{int(pos)}" for chr, pos in zip(chromosomes, positions)]
-        
+            annotation_texts = [f"{chr}:{int(pos)}" for chr, pos in zip(chromosomes, positions, strict=False)]
+
         # Ensure we have the same length as ranks
         if len(annotation_texts) != n:
             # If lengths don't match, try to match by position
@@ -760,7 +763,7 @@ def _annotate_ld_block_left_side(
             snpids_matched = []
             pos_to_text = {}
             pos_to_snpid = {}
-            
+
             for idx, row in region_sumstats_sorted.iterrows():
                 if pos_col in row and pd.notna(row[pos_col]):
                     pos_key = int(row[pos_col])
@@ -771,7 +774,7 @@ def _annotate_ld_block_left_side(
                         pos_to_text[pos_key] = f"{chr_val}:{int(pos_key)}"
                     if snpid_col in row:
                         pos_to_snpid[pos_key] = row[snpid_col]
-            
+
             for pos in actual_positions:
                 pos_int = int(pos)
                 if pos_int in pos_to_text:
@@ -782,7 +785,7 @@ def _annotate_ld_block_left_side(
                     chr_str = str(region[0]) if region is not None else "?"
                     annotation_texts_matched.append(f"{chr_str}:{pos_int}")
                     snpids_matched.append(None)
-            
+
             annotation_texts = annotation_texts_matched
             snpids = snpids_matched
     else:
@@ -792,10 +795,10 @@ def _annotate_ld_block_left_side(
             chromosomes = [chr_str] * n
         else:
             chromosomes = ["?"] * n
-        
-        annotation_texts = [f"{chr}:{int(pos)}" for chr, pos in zip(chromosomes, actual_positions)]
+
+        annotation_texts = [f"{chr}:{int(pos)}" for chr, pos in zip(chromosomes, actual_positions, strict=False)]
         snpids = [None] * n
-    
+
     # Filter variants based on anno_set if provided
     if anno_set is not None:
         # Convert anno_set to set for fast lookup
@@ -813,68 +816,67 @@ def _annotate_ld_block_left_side(
     else:
         # Annotate all variants
         annotate_mask = [True] * n
-    
+
     # Get current axis limits to calculate offsets
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     x_range = xlim[1] - xlim[0]
     y_range = ylim[1] - ylim[0]
-    
+
     # Calculate offset from left edge (in U coordinate)
     # The left edge of the triangle is at X = 0 (first variant)
     # In transformed coordinates: U = (X + Y) / 2, V_negated = -(Y - X) / 2
     # For the left edge (X = 0): U = Y / 2, V_negated = -Y / 2
     # So along left edge: U = -V_negated
-    
+
     # For each variant at rank i, find its position on the left edge
     # The left edge point for variant i would be at X = 0, Y = i (if it exists)
     # But since we're in upper triangle, for variant i, the leftmost point is at X = i, Y = i
     # However, for the left side annotation, we want to place it along the left boundary
     # which is the line X = 0. For variant i, we project to this line.
-    
+
     # Actually, for the left side, we want to place annotations along the left vertical edge
     # of the triangle. The left edge is where X = 0 (the first column).
     # For variant at rank i, we find where the left edge (X=0) intersects with its row.
     # But in upper triangle, row i starts at X = i, so we need to extrapolate.
-    
+
     # Better approach: Place annotations along the left boundary line X = 0
     # For variant at rank i, the left boundary point would be at X = 0, Y = i
     # U = (0 + i) / 2 = i / 2
     # V_negated = -(i - 0) / 2 = -i / 2
-    
+
     # Calculate offset perpendicular to the left edge
     # The left edge has slope: U = -V_negated, so a perpendicular offset
     # For simplicity, offset in U direction (to the left)
     u_offset = -offset * x_range
-    
+
     # Calculate tick length in data coordinates
     tick_len_data = tick_length * y_range
-    
+
     # Auto-calculate font size to prevent overlapping
     # Calculate minimum spacing between consecutive annotations along the left edge
     # Only consider variants that will actually be annotated
     annotated_indices = [i for i in range(n) if annotate_mask[i]]
-    
+
     if len(annotated_indices) > 1:
         # Calculate positions for annotations along the left edge
         # For rank i: V_negated = -i/2
         v_negated_positions = [-rank / 2.0 for rank in ranks]
-        
+
         # Find minimum spacing between consecutive annotated variants in data coordinates
-        min_spacing_data = float('inf')
+        min_spacing_data = float("inf")
         for j in range(len(annotated_indices) - 1):
             i1 = annotated_indices[j]
             i2 = annotated_indices[j + 1]
             spacing = abs(v_negated_positions[i2] - v_negated_positions[i1])
-            if spacing < min_spacing_data:
-                min_spacing_data = spacing
-        
+            min_spacing_data = min(min_spacing_data, spacing)
+
         # Convert minimum spacing to display coordinates (pixels)
         # Get transform from data to display coordinates
         transform = ax.transData
         # Use actual annotation positions to calculate spacing in pixels
         # Find the pair with minimum spacing and convert to pixels
-        min_spacing_pixels = float('inf')
+        min_spacing_pixels = float("inf")
         for j in range(len(annotated_indices) - 1):
             i1 = annotated_indices[j]
             i2 = annotated_indices[j + 1]
@@ -883,87 +885,86 @@ def _annotate_ld_block_left_side(
             v1 = v_negated_positions[i1]
             u2 = ranks[i2] / 2.0
             v2 = v_negated_positions[i2]
-            
+
             # Transform to display coordinates
             point1 = transform.transform((u1, v1))
             point2 = transform.transform((u2, v2))
-            
+
             # Calculate distance in pixels (vertical distance along the left edge)
             spacing_pix = abs(point2[1] - point1[1])
-            if spacing_pix < min_spacing_pixels:
-                min_spacing_pixels = spacing_pix
-        
+            min_spacing_pixels = min(min_spacing_pixels, spacing_pix)
+
         spacing_pixels = min_spacing_pixels
-        
+
         # Estimate text height in pixels for a given font size
         # Font size in points: 1 point ≈ 1.33 pixels at 96 DPI
         # Text height is approximately fontsize * 1.2 (line height factor) * 1.33
-        dpi = ax.figure.get_dpi() if hasattr(ax.figure, 'get_dpi') else 100
+        dpi = ax.figure.get_dpi() if hasattr(ax.figure, "get_dpi") else 100
         points_to_pixels = dpi / 72.0
         text_height_factor = 1.3  # Factor to account for line height
-        
+
         # Calculate maximum font size that fits in the spacing
         # We want: fontsize * text_height_factor * points_to_pixels < spacing_pixels * overlap_factor
         overlap_factor = 0.85  # Use 85% of spacing to prevent overlap
         max_fontsize_points = (spacing_pixels * overlap_factor) / (text_height_factor * points_to_pixels)
-        
+
         # Clamp fontsize between reasonable bounds
         min_fontsize = 4.0
         max_fontsize = 20.0
         auto_fontsize = max(min_fontsize, min(max_fontsize, max_fontsize_points))
-        
+
         # Use the smaller of user-specified fontsize or auto-calculated fontsize
         # But allow user override if explicitly set in kwargs
-        if ld_block_anno_kwargs is not None and 'fontsize' in ld_block_anno_kwargs:
+        if ld_block_anno_kwargs is not None and "fontsize" in ld_block_anno_kwargs:
             # User explicitly set fontsize, use it
-            final_fontsize = ld_block_anno_kwargs['fontsize']
+            final_fontsize = ld_block_anno_kwargs["fontsize"]
         else:
             # Use auto-calculated fontsize, but don't exceed user's initial fontsize
             final_fontsize = min(fontsize, auto_fontsize)
     else:
         final_fontsize = fontsize
-    
+
     # Extract tick_length and offset from ld_block_anno_kwargs if provided
     if ld_block_anno_kwargs is not None:
-        if 'tick_length' in ld_block_anno_kwargs:
-            tick_length = ld_block_anno_kwargs['tick_length']
+        if "tick_length" in ld_block_anno_kwargs:
+            tick_length = ld_block_anno_kwargs["tick_length"]
             tick_len_data = tick_length * y_range
-        if 'offset' in ld_block_anno_kwargs:
-            offset = ld_block_anno_kwargs['offset']
+        if "offset" in ld_block_anno_kwargs:
+            offset = ld_block_anno_kwargs["offset"]
             u_offset = -offset * x_range
-    
+
     # Prepare default text kwargs
     default_text_kwargs = {
-        'ha': 'right',  # Right alignment so right end is aligned
-        'va': 'center',
-        'fontsize': final_fontsize,
-        'fontfamily': font_family,
-        'color': color,
-        'zorder': 10  # High zorder to appear on top
+        "ha": "right",  # Right alignment so right end is aligned
+        "va": "center",
+        "fontsize": final_fontsize,
+        "fontfamily": font_family,
+        "color": color,
+        "zorder": 10  # High zorder to appear on top
     }
-    
+
     # Update with user-provided kwargs if any (excluding non-text params)
     if ld_block_anno_kwargs is not None:
         # Filter out non-text parameters
-        non_text_params = {'tick_length', 'offset'}
+        non_text_params = {"tick_length", "offset"}
         text_kwargs = {k: v for k, v in ld_block_anno_kwargs.items() if k not in non_text_params}
         default_text_kwargs.update(text_kwargs)
-    
+
     # Annotate each variant along the left edge of the triangle (only those in annotate_mask)
     for i in range(n):
         if not annotate_mask[i]:
             continue  # Skip variants not in anno_set
-        
+
         rank = ranks[i]
         text = annotation_texts[i] if i < len(annotation_texts) else f"?:{int(actual_positions[i])}"
-        
+
         # Position on the left edge: X = 0, Y = rank
         # In transformed coordinates:
         # U = (0 + rank) / 2 = rank / 2
         # V_negated = -(rank - 0) / 2 = -rank / 2
         u_pos = rank / 2.0
         v_negated_pos = -rank / 2.0
-        
+
         # Add offset to place text to the left of the edge
         # Offset perpendicular to the left edge (which has direction along U = -V_negated)
         # For a perpendicular offset, we offset in both U and V_negated
@@ -971,21 +972,21 @@ def _annotate_ld_block_left_side(
         # So offset: delta_U = -offset * cos(45°), delta_V = offset * sin(45°)
         # But simpler: just offset in U direction (to the left)
         u_text = u_pos + u_offset
-        
+
         # Draw tick mark extending from left edge to the left (perpendicular to edge)
         # Tick extends along the perpendicular direction, length controlled by tick_length
         # tick_len_data is in y-range units, convert to u-coordinate offset
         tick_end_u = u_pos - tick_len_data  # Negative to extend leftward
         # Keep V_negated the same for horizontal tick (perpendicular to left edge)
-        ax.plot([u_pos, tick_end_u], [v_negated_pos, v_negated_pos], 
+        ax.plot([u_pos, tick_end_u], [v_negated_pos, v_negated_pos],
                 color=color, linewidth=0.8, zorder=9, clip_on=False)
-        
+
         # Add text annotation (right-aligned so right end is aligned)
         ax.text(u_text, v_negated_pos, text, **default_text_kwargs)
 
 
 def _annotate_ld_cells(
-    ax: 'Axes',
+    ax: "Axes",
     ld: np.ndarray,
     ranks: np.ndarray,
     ld_tri: np.ma.MaskedArray,
@@ -993,7 +994,7 @@ def _annotate_ld_cells(
     fontsize: float = 8,
     font_family: str = "Arial",
     color: str = "black",
-    anno_cell_kwargs: Optional[dict] = None
+    anno_cell_kwargs: dict | None = None
 ) -> None:
     """
     Add text annotations to LD cells showing the r² values.
@@ -1021,101 +1022,101 @@ def _annotate_ld_cells(
         These will override default text styling (fontsize, fontfamily, color, etc.).
     """
     n = len(ranks)
-    
+
     # Get edge coordinates (same as used in _plot_ld_triangle)
     e = _edges_from_centers(ranks)  # (n+1,)
-    
+
     # Iterate over upper triangle (j >= i)
     for i in range(n):
         for j in range(i, n):
             # Skip if masked (lower triangle or NaN)
             if ld_tri.mask[i, j]:
                 continue
-            
+
             # Get LD value from the masked array
             ld_value = ld_tri[i, j]
             # Check if value is masked or NaN
             if isinstance(ld_value, np.ma.core.MaskedConstant) or np.isnan(ld_value):
                 continue
-            
+
             # Calculate cell center in rank coordinates
             # Cell spans from e[i] to e[i+1] in X, and e[j] to e[j+1] in Y
             x_center = (e[i] + e[i+1]) / 2.0
             y_center = (e[j] + e[j+1]) / 2.0
-            
+
             # Transform to U, V_negated coordinates (same as in _plot_ld_triangle)
             u_center = (x_center + y_center) / 2.0
             v_negated_center = -(y_center - x_center) / 2.0
-            
+
             # Format the text using the format string
             try:
                 text = anno_cell_fmt.format(float(ld_value))
             except (ValueError, TypeError):
                 # Fallback to default format if custom format fails
                 text = f"{float(ld_value):.2f}"
-            
+
             # Prepare default text kwargs
             default_text_kwargs = {
-                'ha': 'center',
-                'va': 'center',
-                'fontsize': fontsize,
-                'fontfamily': font_family,
-                'color': color,
-                'zorder': 10  # High zorder to appear on top
+                "ha": "center",
+                "va": "center",
+                "fontsize": fontsize,
+                "fontfamily": font_family,
+                "color": color,
+                "zorder": 10  # High zorder to appear on top
             }
-            
+
             # Update with user-provided kwargs if any
             if anno_cell_kwargs is not None:
                 default_text_kwargs.update(anno_cell_kwargs)
-            
+
             # Add text annotation
             ax.text(u_center, v_negated_center, text, **default_text_kwargs)
 
 
 def plot_ld_block(
-    ld: Optional[np.ndarray] = None,
-    pos: Optional[np.ndarray] = None,
-    vcf_path: Optional[str] = None,
-    region: Optional[Tuple[Union[int, str], int, int]] = None,
-    sumstats: Optional[Union[pd.DataFrame, 'Sumstats']] = None,
+    ld: np.ndarray | None = None,
+    pos: np.ndarray | None = None,
+    vcf_path: str | None = None,
+    region: tuple[Union[int, str], int, int] | None = None,
+    sumstats: Union[pd.DataFrame, "Sumstats"] | None = None,
     pos_col: str = "POS",
     nea_col: str = "NEA",
     ea_col: str = "EA",
-    tabix: Optional[bool] = None,
-    mapper: Optional[Any] = None,
-    ax: Optional['Axes'] = None,
-    ax_pos: Optional['Axes'] = None,
-    mode: Optional[str] = None,
+    tabix: bool | None = None,
+    mapper: Any | None = None,
+    ax: Optional["Axes"] = None,
+    ax_pos: Optional["Axes"] = None,
+    mode: str | None = None,
     cmap: Union[str, matplotlib.colors.Colormap, None] = None,
     vmin: float = 0.0,
     vmax: float = 1.0,
     xlabel: str = "Genomic position",
-    title: Optional[str] = None,
+    title: str | None = None,
     cbar: bool = True,
     cbar_label: str = "LD $\\mathregular{r^2}$",
-    cbar_kwargs: Optional[dict] = None,
-    fig_kwargs: Optional[dict] = None,
-    save: Optional[Union[bool, str]] = None,
-    save_kwargs: Optional[dict] = None,
+    cbar_kwargs: dict | None = None,
+    fig_kwargs: dict | None = None,
+    save: Union[bool, str] | None = None,
+    save_kwargs: dict | None = None,
     fontsize: float = 10,
     font_family: str = "Arial",
     region_step: int = 21,
-    lead_snp_is: Optional[list] = None,
-    lead_snp_is_color: Optional[list] = None,
+    lead_snp_is: list | None = None,
+    lead_snp_is_color: list | None = None,
     anno_cell: bool = False,
     anno_cell_fmt: str = "{:.2f}",
-    anno_cell_kwargs: Optional[dict] = None,
+    anno_cell_kwargs: dict | None = None,
     ld_block_grid: bool = False,
-    ld_block_grid_kwargs: Optional[dict] = None,
+    ld_block_grid_kwargs: dict | None = None,
     ld_block_anno: Union[bool, str] = False,
-    ld_block_anno_kwargs: Optional[dict] = None,
-    ld_block_anno_set: Optional[Union[list, set, np.ndarray]] = None,
+    ld_block_anno_kwargs: dict | None = None,
+    ld_block_anno_set: Union[list, set, np.ndarray] | None = None,
     ld_block_anno_max_rows: int = 100,
     position_bar_bg: bool = True,
     log: Log = Log(),
     verbose: bool = True,
     **kwargs
-) -> Tuple['Figure', 'Axes']:
+) -> tuple["Figure", "Axes"]:
     """
     Plot the upper triangle of an LD matrix as a 45°-rotated inverted triangle.
     
@@ -1230,14 +1231,14 @@ def plot_ld_block(
         Axes object.
     """
     log.write("Start to create LD block plot (45° rotated inverted triangle)...", verbose=verbose)
- 
+
     # ============================================================================
     # STEP 1: Prepare LD data
     # ============================================================================
     use_i_coordinate = False
     all_i_positions = None
     region_sumstats = None
-    
+
     if vcf_path is not None and region is not None:
         # Extract LD from VCF
         ld_matrix, matched_sumstats, region_sumstats, use_i_coordinate, all_i_positions = \
@@ -1253,7 +1254,7 @@ def plot_ld_block(
                 log=log,
                 verbose=verbose
             )
-        
+
         # Prepare full LD matrix with all variant positions
         ld, all_positions = _prepare_ld_matrix(
             ld_matrix=ld_matrix,
@@ -1263,28 +1264,28 @@ def plot_ld_block(
             log=log,
             verbose=verbose
         )
-        
+
         # Store actual positions for position bar
         actual_positions = all_positions.copy()
     else:
         # If not using VCF, we need to get actual positions from pos parameter
         actual_positions = None
-    
+
     # Validate that ld is provided
     if ld is None:
         raise ValueError("ld must be provided, or vcf_path and region must be provided")
-    
+
     # Convert to numpy array
     ld = np.asarray(ld, dtype=float)
     n = ld.shape[0]
-    
+
     if ld.shape != (n, n):
         raise ValueError(f"ld must be square, got shape {ld.shape}")
-    
+
     # Use variant ranks (0, 1, 2, ..., n-1) for uniform cell sizes
     ranks = np.arange(n, dtype=float)
     log.write(f"Using variant ranks (0 to {n-1}) for uniform cell sizes", verbose=verbose)
-    
+
     # Store actual positions if provided, otherwise use ranks as positions
     if actual_positions is None:
         if pos is not None:
@@ -1294,20 +1295,20 @@ def plot_ld_block(
             log.write(f"Using provided positions for position bar (range: {actual_positions.min():.0f} to {actual_positions.max():.0f})", verbose=verbose)
         else:
             actual_positions = ranks.copy()
-            log.write(f"Using ranks as positions for position bar", verbose=verbose)
-    
+            log.write("Using ranks as positions for position bar", verbose=verbose)
+
     # ============================================================================
     # STEP 2: Determine plot mode
     # ============================================================================
     if mode is None:
         # Auto-detect mode: regional if ax is provided AND we have region/sumstats with i-coordinates
         if ax is not None and region is not None and sumstats is not None and use_i_coordinate:
-            mode = 'regional'
+            mode = "regional"
         else:
-            mode = 'standalone'
-    elif mode not in ['regional', 'standalone']:
+            mode = "standalone"
+    elif mode not in ["regional", "standalone"]:
         raise ValueError(f"mode must be 'regional' or 'standalone', got '{mode}'")
-    
+
     # ============================================================================
     # STEP 3: Set up figure and axes
     # ============================================================================
@@ -1323,7 +1324,7 @@ def plot_ld_block(
     fig_kwargs = style.get("fig_kwargs", {})
     save_kwargs = style.get("save_kwargs", {})
     fontsize = style["fontsize"]
-    
+
     # Create figure/axes if not provided
     if ax is None:
         # Create figure with subplots: position bar on top, LD block on bottom
@@ -1338,15 +1339,15 @@ def plot_ld_block(
         fig = ax.figure
         # If ax is provided (regional mode), ax_pos should also be provided
         # Both axes are created by _process_layout in plot_mqq
-    
+
     # Set default colormap to match region plot LD categories
     if cmap is None:
         # Create continuous gradient from region plot LD colors
         # Colors: dark blue -> light blue -> green -> orange -> red
         ld_colors = ["#020080", "#86CEF9", "#24FF02", "#FDA400", "#FF0000"]
         from matplotlib.colors import LinearSegmentedColormap
-        cmap = LinearSegmentedColormap.from_list('ld_block', ld_colors, N=256)
-    
+        cmap = LinearSegmentedColormap.from_list("ld_block", ld_colors, N=256)
+
     # ============================================================================
     # STEP 4: Plot LD triangle using ranks
     # ============================================================================
@@ -1362,11 +1363,11 @@ def plot_ld_block(
         i_coords=None,  # Always use ranks, not i coordinates
         **kwargs
     )
-    
+
     # ============================================================================
     # STEP 5: Set axis limits
     # ============================================================================
-    if mode == 'regional':
+    if mode == "regional":
         # In regional mode, ax_ld_block does NOT share x-axis
         # Grid uses ranks (uniform cells), x-axis is in rank space
         # Calculate edge coordinates from ranks
@@ -1375,32 +1376,32 @@ def plot_ld_block(
         U_edges = (X_edges + Y_edges) / 2.0
         V_edges = (Y_edges - X_edges) / 2.0
         V_edges_negated = -V_edges
-        
+
         # For upper triangle, we only need the lower half (V_negated <= 0)
         u_min_edge = np.min(U_edges)
         u_max_edge = np.max(U_edges)
         v_neg_min_edge = np.min(V_edges_negated)
         v_neg_max_edge = 0.0
-        
+
         # Set xlim based on rank-based U edges (no padding, as requested)
         ax.set_xlim(u_min_edge, u_max_edge)
-        
+
         # Set ylim considering the 4/n part (upper half of a cell when rotated 45°)
         # The aspect ratio is 2:(1 + 4/n), so y-range = x-range / 2 * (1 + 4/n)
         x_range = u_max_edge - u_min_edge
         y_range = (x_range / 2.0) * (1.0 + 4.0 / n)
-        
+
         # Center ylim around the V_negated range, but ensure it covers from v_neg_min_edge to 0
         y_center = v_neg_max_edge  # Center at 0 (the diagonal)
         ylim_top = y_center + y_range / 2.0
         ylim_bottom = y_center - y_range / 2.0
-        
+
         # Ensure we cover the full range from v_neg_min_edge to 0
         if ylim_bottom > v_neg_min_edge:
             ylim_bottom = v_neg_min_edge
             # Adjust top to maintain y_range
             ylim_top = ylim_bottom + y_range
-        
+
         ax.set_ylim(ylim_bottom, ylim_top)
     else:
         # Standalone mode: use _set_axis_limits
@@ -1410,7 +1411,7 @@ def plot_ld_block(
             ld_tri=ld_tri,
             mode=mode
         )
-    
+
     # ============================================================================
     # STEP 6: Draw grid if requested
     # ============================================================================
@@ -1420,7 +1421,7 @@ def plot_ld_block(
             ranks=ranks,
             grid_kwargs=ld_block_grid_kwargs
         )
-    
+
     # ============================================================================
     # STEP 7: Add cell annotations if requested
     # ============================================================================
@@ -1436,7 +1437,7 @@ def plot_ld_block(
             color="black",
             anno_cell_kwargs=anno_cell_kwargs
         )
-    
+
     # ============================================================================
     # STEP 7.5: Add left-side annotations if requested
     # ============================================================================
@@ -1453,22 +1454,22 @@ def plot_ld_block(
                     for idx, row in region_sumstats.iterrows():
                         if pos_col in row and "SNPID" in row and pd.notna(row[pos_col]) and pd.notna(row["SNPID"]):
                             pos_to_snpid[int(row[pos_col])] = row["SNPID"]
-                    
-                    n_variants_to_annotate = sum(1 for pos in actual_positions 
-                                                  if int(pos) in pos_to_snpid 
+
+                    n_variants_to_annotate = sum(1 for pos in actual_positions
+                                                  if int(pos) in pos_to_snpid
                                                   and pos_to_snpid[int(pos)] in anno_set_set)
                 else:
                     n_variants_to_annotate = 0
             else:
                 n_variants_to_annotate = 0
-        
+
         # Check if number of variants exceeds the limit
         if n_variants_to_annotate > ld_block_anno_max_rows:
             log.write(f"Skipping LD block annotations: {n_variants_to_annotate} variants exceed maximum limit of {ld_block_anno_max_rows}", verbose=verbose)
         else:
             # Extract column name from ld_block_anno if it's a string, otherwise use None (chr:pos format)
             anno_col = ld_block_anno if isinstance(ld_block_anno, str) else None
-            
+
             _annotate_ld_block_left_side(
                 ax=ax,
                 ranks=ranks,
@@ -1484,17 +1485,17 @@ def plot_ld_block(
                 color="black",
                 ld_block_anno_kwargs=ld_block_anno_kwargs
             )
-    
+
     # ============================================================================
     # STEP 8: Apply cosmetics
     # ============================================================================
     # Remove spine lines
     for spine in ax.spines.values():
         spine.set_visible(False)
-    
+
 
     # For standalone mode, adjust figure to fill properly
-    if mode == 'standalone':
+    if mode == "standalone":
         # Calculate edge coordinates from ranks (same as used in pcolormesh)
         # This ensures we use the actual converted data coordinates
         e = _edges_from_centers(ranks)  # (n+1,)
@@ -1502,7 +1503,7 @@ def plot_ld_block(
         U_edges = (X_edges + Y_edges) / 2.0
         V_edges = (Y_edges - X_edges) / 2.0
         V_edges_negated = -V_edges
-        
+
         # Get the full range of edge coordinates (these define the cell boundaries)
         # Using edge coordinates ensures complete edge cells
         # For upper triangle, we only need the lower half (V_negated <= 0)
@@ -1511,7 +1512,7 @@ def plot_ld_block(
         v_neg_min_edge = np.min(V_edges_negated)
         # For upper triangle, maximum V_negated is 0 (at the diagonal)
         v_neg_max_edge = 0.0
-        
+
         # Set figure size: aspect ratio for ax = 2:(1 + 4/n)
         # Account for position bar (height_ratios=[1, 14])
         ax_aspect_ratio = 2.0 / (1.0 + 4.0 / n)
@@ -1520,41 +1521,41 @@ def plot_ld_block(
         # LD block gets 14/15 of height, so adjust for that
         fig_height = (fig_width / ax_aspect_ratio) * (15.0 / 14.0) * 1.1  # 1.1 for colorbar/labels
         fig.set_size_inches(fig_width, fig_height)
-        
+
         # Use tight_layout
         fig.tight_layout()
-        
+
         # Set xlim from edge coordinates (no padding)
         ax.set_xlim(u_min_edge, u_max_edge)
-        
+
         # Set ylim considering the 4/n part (upper half of a cell when rotated 45°)
         # The aspect ratio is 2:(1 + 4/n), so y-range = x-range / 2 * (1 + 4/n)
         xlim = ax.get_xlim()
         x_range = xlim[1] - xlim[0]
         y_range = (x_range / 2.0) * (1.0 + 4.0 / n)
-        
+
         # Center ylim around the V_negated range, but ensure it covers from v_neg_min_edge to 0
         # The 4/n part represents the upper half, so we extend upward from v_neg_max_edge (0)
         y_center = v_neg_max_edge  # Center at 0 (the diagonal)
         ylim_top = y_center + y_range / 2.0
         ylim_bottom = y_center - y_range / 2.0
-        
+
         # Ensure we cover the full range from v_neg_min_edge to 0
         if ylim_bottom > v_neg_min_edge:
             ylim_bottom = v_neg_min_edge
             # Adjust top to maintain y_range
             ylim_top = ylim_bottom + y_range
-        
+
         ax.set_ylim(ylim_bottom, ylim_top)
-    
+
     if title is not None:
         ax.set_title(title, fontsize=fontsize, fontfamily=font_family)
-    
+
     # ============================================================================
     # STEP 6.5: Add position bar and annotation lines
     # ============================================================================
     if ax_pos is not None:
-        if mode == 'standalone':
+        if mode == "standalone":
             log.write("Adding position bar and annotation lines (standalone mode)...", verbose=verbose)
             # Plot position bar (on top, using actual positions)
             _plot_position_bar(
@@ -1569,7 +1570,7 @@ def plot_ld_block(
                 region=region,
                 position_bar_bg=position_bar_bg
             )
-            
+
             # Add annotation lines for all variants
             _add_annotation_lines(
                 ax_ld=ax,
@@ -1577,14 +1578,14 @@ def plot_ld_block(
                 ranks=ranks,
                 actual_positions=actual_positions,
                 n_lines=None,  # None means annotate all variants
-                line_color='gray',
+                line_color="gray",
                 line_alpha=0.3,
-                line_style='--',
+                line_style="--",
                 line_width=0.5,
                 lead_snp_is=lead_snp_is,
                 lead_snp_is_color=lead_snp_is_color
             )
-        elif mode == 'regional':
+        elif mode == "regional":
             log.write("Adding position bar (regional mode, using i coordinates)...", verbose=verbose)
             # In regional mode, position bar should use i coordinates to align with regional plot
             # Use i coordinates if available, otherwise use actual positions
@@ -1592,7 +1593,7 @@ def plot_ld_block(
                 pos_for_bar = all_i_positions
             else:
                 pos_for_bar = actual_positions
-            
+
             # Plot position bar using i coordinates
             _plot_position_bar(
                 ax_pos=ax_pos,
@@ -1606,7 +1607,7 @@ def plot_ld_block(
                 region=region,
                 position_bar_bg=position_bar_bg
             )
-            
+
             # Add annotation lines
             _add_annotation_lines(
                 ax_ld=ax,
@@ -1614,14 +1615,14 @@ def plot_ld_block(
                 ranks=ranks,
                 actual_positions=pos_for_bar,
                 n_lines=None,
-                line_color='gray',
+                line_color="gray",
                 line_alpha=0.3,
-                line_style='--',
+                line_style="--",
                 line_width=0.5,
                 lead_snp_is=lead_snp_is,
                 lead_snp_is_color=lead_snp_is_color
             )
-    
+
     # ============================================================================
     # STEP 7: Add colorbar
     # ============================================================================
@@ -1632,36 +1633,36 @@ def plot_ld_block(
         # Position: lower right, inside axes coordinates (0-1 range)
         # For inverted triangle, the lower right area has space
         # bbox_to_anchor must be 4-tuple when using relative units for width/height
-        cax = inset_axes(ax, width="25%", height="5%", loc='lower right', 
+        cax = inset_axes(ax, width="25%", height="5%", loc="lower right",
                         bbox_to_anchor=(0.0, 0.05, 1, 1), bbox_transform=ax.transAxes,
                         borderpad=0)
-        cbar_obj = plt.colorbar(m, cax=cax, orientation='horizontal', **cbar_kwargs)
+        cbar_obj = plt.colorbar(m, cax=cax, orientation="horizontal", **cbar_kwargs)
         # Set label and ticks on top of horizontal colorbar
-        cbar_obj.ax.xaxis.set_label_position('top')
-        cbar_obj.ax.xaxis.set_ticks_position('top')
+        cbar_obj.ax.xaxis.set_label_position("top")
+        cbar_obj.ax.xaxis.set_ticks_position("top")
         cbar_obj.ax.tick_params(labeltop=True, labelbottom=False)
         cbar_obj.set_label(cbar_label, fontsize=fontsize, fontfamily=font_family)
-    
+
     log.write("Finished creating LD block plot!", verbose=verbose)
-    
+
     # Remove y-axis ticks
     ax.set_yticks([])
-    
+
     # Set x ticks and labels based on mode
-    if mode == 'regional':
+    if mode == "regional":
         # In regional mode, ax_ld_block does NOT share x-axis, no ticks or labels
         ax.set_xticks([])
         ax.set_xlabel("")
-        ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False, labeltop=False)
+        ax.tick_params(axis="x", which="both", bottom=False, top=False, labelbottom=False, labeltop=False)
     else:
         # Standalone mode: remove x-axis labels (position bar will show them)
         ax.set_xticks([])
         ax.set_xlabel("")
-    
+
     # ============================================================================
     # STEP 8: Save figure (only in standalone mode)
     # ============================================================================
-    if mode == 'standalone':
+    if mode == "standalone":
         save_figure(fig, save, keyword="ld_block", save_kwargs=save_kwargs, log=log, verbose=verbose)
-    
+
     return fig, ax

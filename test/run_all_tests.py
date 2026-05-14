@@ -11,11 +11,11 @@ Options:
 - --seed: integer seed to make --shuffle deterministic
 """
 
+import argparse
 import os
+import random
 import sys
 import unittest
-import argparse
-import random
 
 
 def _iter_tests(suite):

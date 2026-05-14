@@ -8,6 +8,7 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 import random
+
 import pandas as pd
 
 from gwaslab.g_Sumstats import Sumstats

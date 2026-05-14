@@ -21,8 +21,8 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 from gwaslab import Sumstats
-from gwaslab.io.io_to_formats import _to_format
 from gwaslab.info.g_Log import Log
+from gwaslab.io.io_to_formats import _to_format
 from gwaslab.util.util_in_filter_value import _filter_bed, _filter_region
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

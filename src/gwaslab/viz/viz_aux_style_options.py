@@ -1,7 +1,9 @@
 import matplotlib
-from gwaslab.io.io_process_kwargs import _update_kwargs, _update_arg
+
 from gwaslab.info.g_Log import Log
+from gwaslab.io.io_process_kwargs import _update_arg, _update_kwargs
 from gwaslab.viz.viz_aux_params import VizParamsManager, load_viz_config
+
 
 def set_plot_style(
     plot="plot_mqq",
@@ -165,7 +167,7 @@ def set_plot_style(
     default_anno_height = defaults_map.get("anno_height", 1)
     default_repel_force = defaults_map.get("repel_force", 0.03)
     default_line_kwargs = {}
-    default_helper_line_kwargs = defaults_map.get("helper_line_kwargs", {"color":'black', "linestyle":'-',"lw":1})
+    default_helper_line_kwargs = defaults_map.get("helper_line_kwargs", {"color":"black", "linestyle":"-","lw":1})
     default_threshold_line_kwargs = defaults_map.get("threshold_line_kwargs", {})
     default_reg_line_kwargs = defaults_map.get("reg_line_kwargs", {})
     default_histplot_kwargs = defaults_map.get("histplot_kwargs", {})
@@ -246,7 +248,7 @@ def set_plot_style(
     anno_kwargs = _update_kwargs(anno_kwargs, default_anno_kwargs)
     anno_kwargs = _update_kwargs(anno_kwargs, anno_kwargs)
     anno_set = _update_arg(anno_set, default_anno_set)
- 
+
     anno_alias = _update_kwargs(anno_alias, default_anno_alias)
     anno_d = _update_kwargs(anno_d, default_anno_d)
     highlight_anno_kwargs = _update_kwargs(highlight_anno_kwargs, default_highlight_anno_kwargs)

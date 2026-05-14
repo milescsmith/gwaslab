@@ -189,18 +189,20 @@ For each variant, the algorithm outputs:
 ================================================================================
 """
 
+import os
+import shutil
+import subprocess
+import tempfile
 from typing import TYPE_CHECKING, Optional
+
 import numpy as np
 import pandas as pd
-import os
-import subprocess
-import shutil
-import tempfile
+from scipy.linalg import eigh, inv, pinv, solve
 from scipy.stats import norm
 from scipy.stats.distributions import chi2
-from scipy.linalg import inv, pinv, eigh, solve
-from gwaslab.info.g_Log import Log
+
 from gwaslab.g_Sumstats import Sumstats
+from gwaslab.info.g_Log import Log
 
 if TYPE_CHECKING:
     from gwaslab.g_SumstatsMulti import SumstatsMulti
@@ -208,9 +210,9 @@ if TYPE_CHECKING:
 
 def _parse_mrmega_output(
     output_file: str,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     verbose: bool = True
-) -> Optional[Sumstats]:
+) -> Sumstats | None:
     """
     Parse MR-MEGA output file (.result file).
     
@@ -238,14 +240,14 @@ def _parse_mrmega_output(
     """
     if log is None:
         log = Log()
-    
+
     try:
         # Read MR-MEGA result file (tab-delimited)
         result_df = pd.read_csv(output_file, sep="\t", comment="#")
-        
+
         log.write(f"MR-MEGA output columns: {list(result_df.columns)}", verbose=verbose)
         log.write(f"MR-MEGA output shape: {result_df.shape}", verbose=verbose)
-        
+
         # Map MR-MEGA columns to GWASLab format
         column_mapping = {
             "MarkerName": "SNPID",
@@ -256,12 +258,12 @@ def _parse_mrmega_output(
             "EAF": "EAF",
             "Nsample": "N",
         }
-        
+
         # Rename columns
         for old_col, new_col in column_mapping.items():
             if old_col in result_df.columns and new_col not in result_df.columns:
                 result_df = result_df.rename(columns={old_col: new_col})
-        
+
         # Extract main effect (beta_0 is the intercept in MR-MEGA's regression model)
         # MR-MEGA model: Y = beta_0 + beta_1*PC1 + beta_2*PC2 + ... + error
         # beta_0 is the intercept (main association effect)
@@ -270,31 +272,31 @@ def _parse_mrmega_output(
         if "beta_0" in result_df.columns:
             # Convert "NA" strings to NaN
             result_df["beta_0"] = result_df["beta_0"].replace("NA", np.nan)
-            result_df["BETA"] = pd.to_numeric(result_df["beta_0"], errors='coerce')
+            result_df["BETA"] = pd.to_numeric(result_df["beta_0"], errors="coerce")
         if "se_0" in result_df.columns:
             result_df["se_0"] = result_df["se_0"].replace("NA", np.nan)
-            result_df["SE"] = pd.to_numeric(result_df["se_0"], errors='coerce')
-        
+            result_df["SE"] = pd.to_numeric(result_df["se_0"], errors="coerce")
+
         # Use P-value_association as the main p-value
         if "P-value_association" in result_df.columns:
             result_df["P-value_association"] = result_df["P-value_association"].replace("NA", np.nan)
-            result_df["P"] = pd.to_numeric(result_df["P-value_association"], errors='coerce')
-        
+            result_df["P"] = pd.to_numeric(result_df["P-value_association"], errors="coerce")
+
         # Calculate Z-score from BETA and SE if available
         if "BETA" in result_df.columns and "SE" in result_df.columns:
             result_df["Z"] = result_df["BETA"] / result_df["SE"]
-        
+
         # Map heterogeneity statistics (handle "NA" strings)
         if "chisq_residual_het" in result_df.columns:
             result_df["chisq_residual_het"] = result_df["chisq_residual_het"].replace("NA", np.nan)
-            result_df["Q"] = pd.to_numeric(result_df["chisq_residual_het"], errors='coerce')
+            result_df["Q"] = pd.to_numeric(result_df["chisq_residual_het"], errors="coerce")
         if "ndf_residual_het" in result_df.columns:
             result_df["ndf_residual_het"] = result_df["ndf_residual_het"].replace("NA", np.nan)
-            result_df["DOF"] = pd.to_numeric(result_df["ndf_residual_het"], errors='coerce').astype("Int64")
+            result_df["DOF"] = pd.to_numeric(result_df["ndf_residual_het"], errors="coerce").astype("Int64")
         if "P-value_residual_het" in result_df.columns:
             result_df["P-value_residual_het"] = result_df["P-value_residual_het"].replace("NA", np.nan)
-            result_df["P_HET"] = pd.to_numeric(result_df["P-value_residual_het"], errors='coerce')
-        
+            result_df["P_HET"] = pd.to_numeric(result_df["P-value_residual_het"], errors="coerce")
+
         # Calculate I2 if Q and DOF are available
         if "Q" in result_df.columns and "DOF" in result_df.columns:
             # I2 = max(0, (Q - df) / Q)
@@ -303,7 +305,7 @@ def _parse_mrmega_output(
                 np.maximum(0.0, (result_df["Q"] - result_df["DOF"]) / result_df["Q"]),
                 0.0
             )
-        
+
         # Ensure required columns exist
         required_cols = ["SNPID", "CHR", "POS", "EA", "NEA"]
         if not all(col in result_df.columns for col in required_cols):
@@ -312,23 +314,23 @@ def _parse_mrmega_output(
                 verbose=verbose
             )
             return None
-        
+
         # Create Sumstats object
         # Keep MR-MEGA specific columns as "other" columns
         standard_cols = required_cols + ["BETA", "SE", "P", "Z", "EAF", "N", "Q", "DOF", "P_HET", "I2"]
         other_cols = [col for col in result_df.columns if col not in standard_cols]
-        
+
         result_sumstats = Sumstats(result_df, fmt="gwaslab", other=other_cols)
         return result_sumstats
-        
+
     except Exception as e:
-        log.write(f"Error parsing MR-MEGA output: {str(e)}", verbose=verbose)
+        log.write(f"Error parsing MR-MEGA output: {e!s}", verbose=verbose)
         import traceback
         log.write(traceback.format_exc(), verbose=verbose)
         return None
 
 
-def _check_mrmega_available(mrmega_path: Optional[str] = None) -> Optional[str]:
+def _check_mrmega_available(mrmega_path: str | None = None) -> str | None:
     """
     Check if MR-MEGA is available in PATH or at specified path.
     
@@ -346,7 +348,7 @@ def _check_mrmega_available(mrmega_path: Optional[str] = None) -> Optional[str]:
         if os.path.isfile(mrmega_path) and os.access(mrmega_path, os.X_OK):
             return mrmega_path
         return None
-    
+
     # Search in PATH
     mrmega_path = shutil.which("MR-MEGA") or shutil.which("mrmega") or shutil.which("MRMEGA")
     return mrmega_path
@@ -375,13 +377,13 @@ def _calculate_eaf_distance_matrix(
     # eaf_matrix should already be float64 from caller, but ensure for safety
     if eaf_matrix.dtype != np.float64:
         eaf_matrix = eaf_matrix.astype(np.float64, copy=False)
-    
+
     # Vectorized distance calculation: use broadcasting to compute all pairwise differences
     # eaf_matrix[:, :, None] - eaf_matrix[:, None, :] gives (n_markers, n_cohorts, n_cohorts)
     # Then sum over markers and divide by n_markers
     diff_sq = np.sum((eaf_matrix[:, :, None] - eaf_matrix[:, None, :]) ** 2, axis=0, dtype=np.float64)
     dist_matrix = diff_sq / n_markers
-    
+
     return dist_matrix
 
 
@@ -408,47 +410,47 @@ def _calculate_mds_from_distance(
         MDS coordinates of shape (n_cohorts, n_components)
     """
     n_cohorts = dist_matrix.shape[0]
-    
+
     # dist_matrix should already be float64 from caller, but ensure for safety
     if dist_matrix.dtype != np.float64:
         dist_matrix = dist_matrix.astype(np.float64, copy=False)
-    
+
     # Double-centering: B = -0.5 * (D - row_means - col_means + grand_mean)
     # This is equivalent to: B[i,j] = -0.5 * (D[i,j] - mean_i - mean_j + mean_all)
     row_means = dist_matrix.mean(axis=1, keepdims=True, dtype=np.float64)
     col_means = dist_matrix.mean(axis=0, keepdims=True, dtype=np.float64)
     grand_mean = dist_matrix.mean(dtype=np.float64)
-    
+
     # Double-centered matrix (result is float64)
     B = -0.5 * (dist_matrix - row_means - col_means + grand_mean)
-    
+
     # Eigendecomposition (for symmetric matrix, equivalent to SVD)
     # MR-MEGA uses SVD, but for symmetric matrices, eigendecomposition gives same result
     # eigh returns float64 by default
     eigenvalues, eigenvectors = eigh(B)
-    
+
     # Sort by eigenvalue (descending) and get indices
     idx = np.argsort(eigenvalues)[::-1]
     eigenvalues_sorted = eigenvalues[idx]
     eigenvectors_sorted = eigenvectors[:, idx]
-    
+
     # Take top n_components
     n_components = min(n_components, n_cohorts)
-    
+
     # Create list of eigenvalue indices (matching MR-MEGA's elist)
     elist = idx[:n_components].tolist()
-    
+
     # Calculate sqrt of eigenvalues (only non-negative) - vectorized
     # Result is float64 from np.where and np.sqrt
     sqrt_eigenvalues = np.where(eigenvalues >= 0, np.sqrt(eigenvalues), 0.0)
-    
+
     # Vectorized MDS coordinate calculation
     mds_coords = np.zeros((n_cohorts, n_components), dtype=np.float64)
     for c2 in range(n_components):  # PC index
         i2 = elist[c2]  # original eigenvalue index (before sorting)
         # Vectorize across cohorts: multiply eigenvector column by sqrt_eigenvalue
         mds_coords[:, c2] = eigenvectors_sorted[:, c2] * sqrt_eigenvalues[i2]
-    
+
     return mds_coords
 
 
@@ -487,10 +489,10 @@ def _weighted_least_squares(
     """
     n, p = X.shape
     df = n - p
-    
+
     if df < 1:
         return None, None, None, None, None, None
-    
+
     # Inputs should already be float64, but ensure for safety (only if needed)
     if X.dtype != np.float64:
         X = X.astype(np.float64, copy=False)
@@ -498,14 +500,14 @@ def _weighted_least_squares(
         Y = Y.astype(np.float64, copy=False)
     if W.dtype != np.float64:
         W = W.astype(np.float64, copy=False)
-    
+
     # Use einsum for efficient weighted matrix operations (avoids intermediate arrays)
-    XtWX = np.einsum('ki,k,kj->ij', X, W, X, optimize=True)
-    
+    XtWX = np.einsum("ki,k,kj->ij", X, W, X, optimize=True)
+
     # Reuse W * Y computation (needed for both XtWy and Y_bar/TSS0)
     WY = W * Y
-    XtWy = np.einsum('ki,k->i', X, WY, optimize=True)
-    
+    XtWy = np.einsum("ki,k->i", X, WY, optimize=True)
+
     # Use solve instead of inversion (faster and more numerically stable)
     try:
         beta_hat = np.linalg.solve(XtWX, XtWy)
@@ -518,30 +520,30 @@ def _weighted_least_squares(
         # Fall back to pseudo-inverse if singular
         XtWX_inv = pinv(XtWX)
         beta_hat = XtWX_inv @ XtWy
-    
+
     # Calculate predicted values and residuals
     Y_pred = X @ beta_hat
     residuals = Y - Y_pred
-    
+
     # Calculate weighted mean of Y (reuse WY)
     W_sum = np.sum(W, dtype=np.float64)
     Y_bar = np.sum(WY, dtype=np.float64) / W_sum
-    
+
     # Optimized sums of squares (reuse WY and compute Y-Y_bar once)
     Y_centered = Y - Y_bar
     TSS = np.sum(W * Y_centered ** 2, dtype=np.float64)
     TSS0 = np.sum(WY * Y, dtype=np.float64)  # Reuse WY: W * Y^2 = (W*Y) * Y
     RSS = np.sum(W * residuals ** 2, dtype=np.float64)
-    
+
     # Mean squared error (result is float64)
     MSE = RSS / df if df > 0 else 0.0
-    
+
     # Variance-covariance matrix: MSE * (X' W X)^(-1) (result is float64)
     var_cov = MSE * XtWX_inv
-    
+
     # Standard errors (result is float64)
     se_beta = np.sqrt(np.diag(var_cov))
-    
+
     return beta_hat, se_beta, TSS, TSS0, RSS, var_cov
 
 
@@ -588,10 +590,10 @@ def _weighted_least_squares_batch(
     n_variants, n_valid = Y.shape
     p = X.shape[1]
     df = n_valid - p
-    
+
     if df < 1:
         return None, None, None, None, None
-    
+
     # Ensure float64
     if X.dtype != np.float64:
         X = X.astype(np.float64, copy=False)
@@ -599,31 +601,31 @@ def _weighted_least_squares_batch(
         Y = Y.astype(np.float64, copy=False)
     if W.dtype != np.float64:
         W = W.astype(np.float64, copy=False)
-    
+
     # Pre-compute XtWX once (same for all variants since X is the same)
     # XtWX = X^T @ diag(W_mean) @ X, but we need per-variant weights
     # Actually, we need to compute XtWX for each variant since W varies
     # Use einsum for batch computation: 'vki,k,vk,vkj->vij'
     # where v = variant index, k = study index, i/j = predictor index
-    XtWX = np.einsum('ki,vk,kj->vij', X, W, X, optimize=True)  # (n_variants, p, p)
-    
+    XtWX = np.einsum("ki,vk,kj->vij", X, W, X, optimize=True)  # (n_variants, p, p)
+
     # Compute WY for all variants
     WY = W * Y  # (n_variants, n_valid)
-    
+
     # Compute XtWy for all variants: X^T @ (W * Y)
-    XtWy = np.einsum('ki,vk->vi', X, WY, optimize=True)  # (n_variants, p)
-    
+    XtWy = np.einsum("ki,vk->vi", X, WY, optimize=True)  # (n_variants, p)
+
     # Use batched linear algebra operations from SciPy
     # According to https://docs.scipy.org/doc/scipy-1.17.0/tutorial/linalg_batch.html
     # SciPy's solve() and inv() support batched operations when input arrays have
     # batch dimensions (first dimensions) followed by core dimensions (last 2 dims)
     beta_hat = np.zeros((n_variants, p), dtype=np.float64)
     XtWX_inv = np.zeros((n_variants, p, p), dtype=np.float64)
-    
+
     # Reshape XtWy for batched solve: (n_variants, p) -> (n_variants, p, 1)
     # This matches the batched solve API: solve(A, b) where A is (batch, n, n) and b is (batch, n, 1)
     XtWy_batched = XtWy[:, :, np.newaxis]  # (n_variants, p, 1)
-    
+
     try:
         # Attempt batched solve: solve all linear systems at once
         # XtWX shape: (n_variants, p, p) - batch shape (n_variants,), core shape (p, p)
@@ -631,13 +633,13 @@ def _weighted_least_squares_batch(
         # Result shape: (n_variants, p, 1)
         beta_hat_batched = solve(XtWX, XtWy_batched)
         beta_hat = beta_hat_batched[:, :, 0]  # Extract from (n_variants, p, 1) to (n_variants, p)
-        
+
         # Attempt batched inverse: compute all matrix inverses at once
         # XtWX shape: (n_variants, p, p) - batch shape (n_variants,), core shape (p, p)
         # Result shape: (n_variants, p, p)
         XtWX_inv = inv(XtWX)
-        
-    except (np.linalg.LinAlgError, ValueError) as e:
+
+    except (np.linalg.LinAlgError, ValueError):
         # Fall back to per-variant processing if batched operations fail
         # This can happen if some matrices in the batch are singular
         # Process each variant individually with proper error handling
@@ -653,42 +655,42 @@ def _weighted_least_squares_batch(
                 XtWX_inv_v = pinv(XtWX[v])
                 XtWX_inv[v] = XtWX_inv_v
                 beta_hat[v] = XtWX_inv_v @ XtWy[v]
-    
+
     # Calculate predicted values and residuals for all variants
     Y_pred = (X @ beta_hat.T).T  # (n_variants, n_valid)
     residuals = Y - Y_pred  # (n_variants, n_valid)
-    
+
     # Calculate weighted mean of Y for each variant
     W_sum = np.sum(W, axis=1, dtype=np.float64, keepdims=True)  # (n_variants, 1)
     Y_bar = np.sum(WY, axis=1, dtype=np.float64, keepdims=True) / W_sum  # (n_variants, 1)
-    
+
     # Calculate sums of squares for all variants
     Y_centered = Y - Y_bar  # (n_variants, n_valid)
     TSS = np.sum(W * Y_centered ** 2, axis=1, dtype=np.float64)  # (n_variants,)
     TSS0 = np.sum(WY * Y, axis=1, dtype=np.float64)  # (n_variants,)
     RSS = np.sum(W * residuals ** 2, axis=1, dtype=np.float64)  # (n_variants,)
-    
+
     # Calculate MSE and standard errors
     MSE = RSS / df if df > 0 else np.zeros(n_variants, dtype=np.float64)
-    
+
     # Variance-covariance matrices: MSE * (X' W X)^(-1)
     # Extract diagonal (standard errors) efficiently
-    var_diag = np.einsum('v,vii->vi', MSE, XtWX_inv)  # (n_variants, p)
+    var_diag = np.einsum("v,vii->vi", MSE, XtWX_inv)  # (n_variants, p)
     se_beta = np.sqrt(var_diag)  # (n_variants, p)
-    
+
     return beta_hat, se_beta, TSS, TSS0, RSS
 
 
 def meta_regress_mrmega_python(
-    sumstats_multi: 'SumstatsMulti',
+    sumstats_multi: "SumstatsMulti",
     num_pcs: int = 2,
     use_genomic_control: bool = True,
     use_gco: bool = True,
     min_maf: float = 0.01,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     verbose: bool = True,
-    selected_marker_snpids: Optional[list] = None
-) -> Optional[Sumstats]:
+    selected_marker_snpids: list | None = None
+) -> Sumstats | None:
     """
     Perform meta-regression using MR-MEGA algorithm implemented in pure Python.
     
@@ -726,9 +728,9 @@ def meta_regress_mrmega_python(
     """
     if log is None:
         log = Log()
-    
+
     nstudy = sumstats_multi.meta["gwaslab"]["number_of_studies"]
-    
+
     # Check constraint: num_pcs < nstudy - 2
     max_allowed_pcs = max(1, nstudy - 3)
     if num_pcs > max_allowed_pcs:
@@ -738,7 +740,7 @@ def meta_regress_mrmega_python(
             verbose=verbose
         )
         num_pcs = max_allowed_pcs
-    
+
     log.write(f"Running MR-MEGA algorithm in Python (nstudy={nstudy}, npcs={num_pcs})", verbose=verbose)
     log.write(
         "Citation: Mägi, R., Horikoshi, M., Sofer, T., Mahajan, A., Kitajima, H., "
@@ -747,66 +749,66 @@ def meta_regress_mrmega_python(
         "and improves fine-mapping resolution. Human molecular genetics, 26(18), 3639-3650.",
         verbose=verbose
     )
-    
+
     # Get data
     if sumstats_multi.engine == "polars":
         data = sumstats_multi.data.to_pandas()
     else:
         data = sumstats_multi.data.copy()
-    
+
     data = data.sort_values(by=["CHR", "POS"]).reset_index(drop=True)
-    
+
     # Extract columns
     beta_cols = [f"BETA_{i+1}" for i in range(nstudy)]
     se_cols = [f"SE_{i+1}" for i in range(nstudy)]
     n_cols = [f"N_{i+1}" for i in range(nstudy)]
     eaf_cols = [f"EAF_{i+1}" for i in range(nstudy)]
-    
+
     # Step 1: Select markers for MDS calculation
     # Markers must have:
     # - Valid EAF in all cohorts
     # - MAF > min_maf in all cohorts (0.01 < EAF < 0.99)
     # - Valid CHR and POS
     log.write("Selecting markers for MDS calculation...", verbose=verbose)
-    
+
     use_pre_selected = False
     if selected_marker_snpids is not None and len(selected_marker_snpids) > 0:
         selected_mask = data["SNPID"].isin(selected_marker_snpids)
         selected_markers = data.loc[selected_mask].copy()
         selected_indices = selected_markers.index
-        
+
         if len(selected_markers) == 0:
             log.write("Warning: None of the pre-selected markers found in data. Using default selection.", verbose=verbose)
             use_pre_selected = False
         else:
             use_pre_selected = True
-    
+
     if not use_pre_selected:
         valid_eaf_mask = data[eaf_cols].notna().all(axis=1)
         valid_chr_pos = data["CHR"].notna() & data["POS"].notna() & (data["CHR"] > 0) & (data["POS"] > 0)
-        
+
         maf_mask = (
             (data[eaf_cols] > min_maf).all(axis=1) &
             (data[eaf_cols] < (1 - min_maf)).all(axis=1)
         )
-        
+
         good_markers_mask = valid_eaf_mask & valid_chr_pos & maf_mask
-        
+
         if good_markers_mask.sum() > 0:
             good_markers = data.loc[good_markers_mask].copy()
             good_markers["BIN"] = good_markers["POS"] // 1000000
-            
+
             good_markers = good_markers.reset_index(drop=True)
-            
+
             matrix = {}
             markerNum = 1
-            
+
             for idx, row in good_markers.iterrows():
                 chr = int(row["CHR"])
                 bin_num = int(row["BIN"])
                 matrix[(chr, bin_num)] = markerNum - 1
                 markerNum += 1
-            
+
             selected_indices_list = []
             for chr in range(1, 24):
                 for bin_num in range(0, 299):
@@ -814,14 +816,14 @@ def meta_regress_mrmega_python(
                         stored_value = matrix[(chr, bin_num)]
                         if stored_value > 0:
                             selected_indices_list.append(stored_value)
-            
+
             if len(selected_indices_list) > 0:
                 selected_indices = good_markers.index[selected_indices_list]
                 selected_markers = good_markers.loc[selected_indices].copy().reset_index(drop=True)
             else:
                 selected_markers = pd.DataFrame(columns=good_markers.columns)
                 selected_indices = pd.Index([])
-            
+
             log.write(
                 f"Selected {len(selected_markers)} markers for MDS calculation "
                 f"(from {good_markers_mask.sum()} markers with MAF >= {min_maf})",
@@ -835,21 +837,21 @@ def meta_regress_mrmega_python(
             )
             selected_markers = data.loc[valid_eaf_mask].copy()
             selected_indices = selected_markers.index
-    
+
     # Step 2: Calculate distance matrix from EAF
     log.write("Calculating EAF distance matrix...", verbose=verbose)
     eaf_matrix = selected_markers[eaf_cols].values  # shape: (n_markers, n_cohorts)
     dist_matrix = _calculate_eaf_distance_matrix(eaf_matrix)
-    
+
     # Step 3: Calculate MDS
     log.write(f"Calculating MDS with {num_pcs} components...", verbose=verbose)
     pcs = _calculate_mds_from_distance(dist_matrix, num_pcs)  # shape: (n_cohorts, num_pcs)
-    
+
     log.write("Principal components calculated:", verbose=verbose)
     for i in range(nstudy):
         pc_str = " ".join([f"{pcs[i, j]:.6f}" for j in range(num_pcs)])
         log.write(f"  Cohort {i+1}: {pc_str}", verbose=verbose)
-    
+
     # Step 4: Calculate genomic control lambda for each cohort (if enabled)
     # Pre-extract data arrays for GC calculation (before main loop)
     lambda_cohorts = np.ones(nstudy, dtype=np.float64)
@@ -867,10 +869,10 @@ def meta_regress_mrmega_python(
                 lambda_cohorts[i] = median_chi2 / 0.4549364  # median of chi2(1) distribution
                 if lambda_cohorts[i] > 1:
                     log.write(f"  Cohort {i+1}: lambda = {lambda_cohorts[i]:.4f}", verbose=verbose)
-    
+
     # Step 5: Perform regression for each marker
     log.write("Performing meta-regression for each marker...", verbose=verbose)
-    
+
     n_variants = len(data)
     # Initialize results arrays with float64 dtype to avoid conversions
     results = {
@@ -881,7 +883,7 @@ def meta_regress_mrmega_python(
     for j in range(num_pcs):
         results[f"beta_{j+1}"] = np.full(n_variants, np.nan, dtype=np.float64)
         results[f"se_{j+1}"] = np.full(n_variants, np.nan, dtype=np.float64)
-    
+
     results.update({
         "chisq_association": np.full(n_variants, np.nan, dtype=np.float64),
         "ndf_association": np.full(n_variants, np.nan, dtype=np.float64),
@@ -899,29 +901,29 @@ def meta_regress_mrmega_python(
         "EAF": np.full(n_variants, np.nan, dtype=np.float64),
         "Effects": [""] * n_variants,
     })
-    
+
     # Store association chi-squares for second GC correction (gco)
     # MR-MEGA has --gco option for second genomic control on output
     # Pre-allocate as numpy array for better performance
     good_chisq_assoc = np.full(n_variants, np.nan, dtype=np.float64)
     good_chisq_idx = 0
-    
+
     # Pre-extract data arrays for faster access (avoid repeated iloc calls)
     # Ensure float64 at extraction to avoid repeated conversions
     beta_data = data[beta_cols].values.astype(np.float64, copy=False)  # (n_variants, nstudy)
     se_data = data[se_cols].values.astype(np.float64, copy=False)  # (n_variants, nstudy)
     n_data = data[n_cols].values.astype(np.float64, copy=False) if n_cols[0] in data.columns else None
     eaf_data = data[eaf_cols].values.astype(np.float64, copy=False) if eaf_cols[0] in data.columns else None
-    
+
     snpids = data["SNPID"].values if "SNPID" in data.columns else np.array([f"variant_{i}" for i in range(n_variants)])
-    
+
     # Pre-compute valid masks for all variants (vectorized)
     # valid_masks[i, j] = True if variant i has valid data for cohort j
     valid_masks = ~(np.isnan(beta_data) | np.isnan(se_data) | (se_data <= 0))  # (n_variants, nstudy)
-    
+
     # Pre-compute count of valid studies per variant (vectorized)
     n_valid_per_variant = np.count_nonzero(valid_masks, axis=1)  # (n_variants,)
-    
+
     # Pre-apply genomic control to SE data if enabled (vectorized)
     if use_genomic_control:
         # Use broadcasting: lambda_cohorts[None, :] broadcasts to (n_variants, nstudy)
@@ -929,11 +931,11 @@ def meta_regress_mrmega_python(
         # Apply GC correction: SE *= sqrt(lambda) where lambda > 1
         # Broadcasting: sqrt(lambda_cohorts[None, :]) -> (1, nstudy) -> (n_variants, nstudy)
         se_data = np.where(gc_mask_matrix, se_data * np.sqrt(lambda_cohorts[None, :]), se_data)
-    
+
     # Cache constants and function references
     num_pcs_plus_1 = num_pcs + 1
     chi2_sf = chi2.sf  # Cache function reference to reduce lookup overhead
-    
+
     # Cache result arrays to reduce dictionary lookups
     result_beta_0 = results["beta_0"]
     result_se_0 = results["se_0"]
@@ -949,7 +951,7 @@ def meta_regress_mrmega_python(
     result_ndf_residual = results["ndf_residual_het"]
     result_p_residual = results["P-value_residual_het"]
     result_lnBF = results["lnBF"]
-    
+
     # Group variants by valid study pattern for batch processing
     # Convert valid_masks to tuples for hashing
     # Create pattern groups: variants with same valid study pattern can be processed together
@@ -963,71 +965,71 @@ def meta_regress_mrmega_python(
         if n_valid - 2 <= num_pcs:
             results["Comments"][idx] = "SmallCohortCount"
             continue
-        
+
         # Create a tuple key from the valid mask (hashable)
         valid_mask = valid_masks[idx, :]
         pattern_key = tuple(valid_mask)
-        
+
         if pattern_key not in pattern_groups:
             pattern_groups[pattern_key] = []
         pattern_groups[pattern_key].append(idx)
-    
+
     # Process each pattern group in batches
     for pattern_key, variant_indices in pattern_groups.items():
         if len(variant_indices) == 0:
             continue
-        
+
         # Convert variant_indices to numpy array for efficient indexing
         variant_indices = np.array(variant_indices, dtype=int)
-        
+
         # Get valid studies for this pattern (same for all variants in group)
         valid_mask = np.array(pattern_key, dtype=bool)
         valid_studies = np.flatnonzero(valid_mask)
         n_valid = len(valid_studies)
-        
+
         if n_valid - 2 <= num_pcs:
             for idx in variant_indices:
                 results["Comments"][idx] = "SmallCohortCount"
             continue
-        
+
         # Build design matrix X (same for all variants in this group)
         X = np.ones((n_valid, num_pcs + 1), dtype=np.float64)
         X[:, 1:] = pcs[valid_studies, :num_pcs]
-        
+
         # Extract data for all variants in this batch
         n_batch = len(variant_indices)
         Y_batch = beta_data[variant_indices][:, valid_studies]  # (n_batch, n_valid)
         SE_batch = se_data[variant_indices][:, valid_studies]  # (n_batch, n_valid)
         W_batch = 1.0 / (SE_batch ** 2)  # (n_batch, n_valid)
-        
+
         # Process batch using vectorized weighted least squares
         beta_hat_batch, se_beta_batch, TSS_batch, TSS0_batch, RSS_batch = _weighted_least_squares_batch(
             Y_batch, X, W_batch
         )
-        
+
         if beta_hat_batch is None:
             for idx in variant_indices:
                 results["Comments"][idx] = "collinear"
             continue
-        
+
         # Vectorized processing of results for all variants in batch
         # Store coefficients (vectorized)
         result_beta_0[variant_indices] = beta_hat_batch[:, 0]
         result_se_0[variant_indices] = se_beta_batch[:, 0]
-        
+
         # Store PC coefficients (vectorized)
         if num_pcs > 0:
             for j in range(num_pcs):
                 result_beta_pc[j][variant_indices] = beta_hat_batch[:, j + 1]
                 result_se_pc[j][variant_indices] = se_beta_batch[:, j + 1]
-        
+
         # Vectorized statistics calculations
         TSS_RSS_batch = np.abs(TSS_batch - RSS_batch)  # (n_batch,)
         TSS0_RSS_batch = np.abs(TSS0_batch - RSS_batch)  # (n_batch,)
         chisq_assoc_batch = TSS0_RSS_batch  # (n_batch,)
         chisq_ancestry_batch = TSS_RSS_batch  # (n_batch,)
         chisq_residual_batch = np.abs(RSS_batch)  # (n_batch,)
-        
+
         # Store association chi-squares for GCO (vectorized)
         valid_chisq_mask = chisq_assoc_batch > 0
         n_valid_chisq = valid_chisq_mask.sum()
@@ -1035,11 +1037,11 @@ def meta_regress_mrmega_python(
             end_idx = good_chisq_idx + n_valid_chisq
             good_chisq_assoc[good_chisq_idx:end_idx] = chisq_assoc_batch[valid_chisq_mask]
             good_chisq_idx = end_idx
-        
+
         # Vectorized p-value calculations
         ndf_ancestry = num_pcs
         ndf_residual = n_valid - num_pcs_plus_1
-        
+
         # Calculate p-values for ancestry heterogeneity (vectorized)
         p_ancestry_batch = np.full(n_batch, np.nan, dtype=np.float64)
         valid_ancestry_mask = chisq_ancestry_batch > 0
@@ -1047,7 +1049,7 @@ def meta_regress_mrmega_python(
             p_ancestry_batch[valid_ancestry_mask] = chi2_sf(
                 chisq_ancestry_batch[valid_ancestry_mask], ndf_ancestry
             )
-        
+
         # Calculate p-values for residual heterogeneity (vectorized)
         p_residual_batch = np.full(n_batch, np.nan, dtype=np.float64)
         valid_residual_mask = (chisq_residual_batch > 0) & (ndf_residual > 0)
@@ -1055,10 +1057,10 @@ def meta_regress_mrmega_python(
             p_residual_batch[valid_residual_mask] = chi2_sf(
                 chisq_residual_batch[valid_residual_mask], ndf_residual
             )
-        
+
         # Calculate lnBF (vectorized)
         lnBF_batch = (TSS0_RSS_batch - num_pcs_plus_1 * np.log(n_valid)) / 2.0
-        
+
         # Store statistics (vectorized assignments)
         result_chisq_assoc[variant_indices] = chisq_assoc_batch
         result_ndf_assoc[variant_indices] = num_pcs_plus_1
@@ -1070,17 +1072,17 @@ def meta_regress_mrmega_python(
         result_ndf_residual[variant_indices] = ndf_residual
         result_p_residual[variant_indices] = p_residual_batch
         result_lnBF[variant_indices] = lnBF_batch
-        
+
         # Calculate average EAF weighted by sample size (vectorized)
         if n_data is not None and eaf_data is not None:
             # Extract data for all variants in batch: (n_batch, n_valid)
             n_batch_data = n_data[variant_indices][:, valid_studies]  # (n_batch, n_valid)
             eaf_batch_data = eaf_data[variant_indices][:, valid_studies]  # (n_batch, n_valid)
-            
+
             # Vectorized weighted EAF calculation
             total_n_batch = np.nansum(n_batch_data, axis=1)  # (n_batch,)
             weighted_eaf_numerator = np.nansum(n_batch_data * eaf_batch_data, axis=1)  # (n_batch,)
-            
+
             # Only update where total_n > 0
             valid_n_mask = total_n_batch > 0
             if valid_n_mask.any():
@@ -1088,17 +1090,17 @@ def meta_regress_mrmega_python(
                     weighted_eaf_numerator[valid_n_mask] / total_n_batch[valid_n_mask]
                 )
                 results["Nsample"][variant_indices[valid_n_mask]] = total_n_batch[valid_n_mask].astype(int)
-        
+
         # Store Ncohort (vectorized)
         results["Ncohort"][variant_indices] = n_valid
-        
+
         # Effects direction string (fully vectorized)
         # Extract beta data for all variants in batch: (n_batch, nstudy)
         beta_batch_all = beta_data[variant_indices, :]  # (n_batch, nstudy)
-        
+
         # Create effects arrays for all variants at once: (n_batch, nstudy)
         effects_arrays = np.full((n_batch, nstudy), "?", dtype=object)
-        
+
         # Vectorized effects direction calculation for valid studies
         beta_batch_valid = beta_batch_all[:, valid_studies]  # (n_batch, n_valid)
         effects_valid = np.select(
@@ -1106,10 +1108,10 @@ def meta_regress_mrmega_python(
             ["+", "-", "0"],
             default="?"
         )  # (n_batch, n_valid)
-        
+
         # Assign valid study effects (vectorized)
         effects_arrays[:, valid_studies] = effects_valid
-        
+
         # Join effects arrays into strings (vectorized using list comprehension for string operations)
         # Note: String operations are inherently sequential, but we've minimized the work
         # Convert numpy array slice to list for efficient string joining
@@ -1117,7 +1119,7 @@ def meta_regress_mrmega_python(
         # Assign to list (results["Effects"] is a list, not numpy array)
         for i, idx in enumerate(variant_indices):
             results["Effects"][idx] = effects_strings[i]
-    
+
     # Step 6: Calculate second GC correction (gco) if enabled
     # MR-MEGA has --gco option (separate from --gc) that applies a second genomic control correction
     # to the output association chi-squares
@@ -1126,7 +1128,7 @@ def meta_regress_mrmega_python(
         good_chisq_assoc = good_chisq_assoc[:good_chisq_idx]
     else:
         good_chisq_assoc = np.array([], dtype=np.float64)
-    
+
     gco_lambda = 1.0
     if use_gco and len(good_chisq_assoc) > 0:
         log.write("Calculating second genomic control (gco) lambda...", verbose=verbose)
@@ -1137,24 +1139,24 @@ def meta_regress_mrmega_python(
             median_chisq = (sorted_chisq[n_chisq // 2 - 1] + sorted_chisq[n_chisq // 2]) / 2.0
         else:
             median_chisq = sorted_chisq[(n_chisq - 1) // 2]
-        
+
         # gco_lambda = median_chisq / median_of_chi2(df=num_pcs+1)
         # MR-MEGA uses invchisquaredistribution(num_pcs+1, 0.5) which is the median
         # chi2 is already imported at the top of the file
         median_expected = chi2.ppf(0.5, num_pcs + 1)  # median of chi2(df=num_pcs+1)
         gco_lambda = median_chisq / median_expected if median_expected > 0 else 1.0
-        
+
         if gco_lambda > 1.0:
             log.write(f"GCO lambda: {gco_lambda:.4f}", verbose=verbose)
-    
+
     if use_gco:
         log.write("Applying second GC correction (gco) and calculating final p-values...", verbose=verbose)
         chisq_assoc = results["chisq_association"]
         ndf_assoc = results["ndf_association"]
         valid_mask = ~(np.isnan(chisq_assoc) | (chisq_assoc <= 0) | np.isnan(ndf_assoc))
-        
+
         chisq_assoc[valid_mask] /= gco_lambda
-        
+
         # Vectorized p-value calculation (all valid variants have same ndf = num_pcs_plus_1)
         p_corrected = results["P-value_association"]
         if valid_mask.any():
@@ -1164,20 +1166,20 @@ def meta_regress_mrmega_python(
         chisq_assoc = results["chisq_association"]
         ndf_assoc = results["ndf_association"]
         valid_mask = ~(np.isnan(chisq_assoc) | (chisq_assoc <= 0) | np.isnan(ndf_assoc))
-        
+
         # Vectorized p-value calculation (all valid variants have same ndf = num_pcs_plus_1)
         p_values = results["P-value_association"]
         if valid_mask.any():
             p_values[valid_mask] = chi2_sf(chisq_assoc[valid_mask], num_pcs_plus_1)
-    
+
     # Create result DataFrame
     result_df = pd.DataFrame(results, index=data.index)
-    
+
     # Add SNP info
     for col in ["SNPID", "CHR", "POS", "EA", "NEA"]:
         if col in data.columns:
             result_df[col] = data[col].values
-    
+
     # Rename columns to match MR-MEGA output format
     column_mapping = {
         "SNPID": "MarkerName",
@@ -1185,7 +1187,7 @@ def meta_regress_mrmega_python(
         "POS": "Position",
     }
     result_df = result_df.rename(columns=column_mapping)
-    
+
     # Map to GWASLab format
     result_df["BETA"] = result_df["beta_0"]
     result_df["SE"] = result_df["se_0"]
@@ -1199,32 +1201,32 @@ def meta_regress_mrmega_python(
         np.maximum(0.0, (result_df["Q"] - result_df["DOF"]) / result_df["Q"]),
         0.0
     )
-    
+
     # Create Sumstats object
-    standard_cols = ["MarkerName", "Chromosome", "Position", "EA", "NEA", 
+    standard_cols = ["MarkerName", "Chromosome", "Position", "EA", "NEA",
                      "BETA", "SE", "P", "Z", "EAF", "Nsample", "Q", "DOF", "P_HET", "I2"]
     other_cols = [col for col in result_df.columns if col not in standard_cols]
-    
+
     # Rename back to GWASLab standard names
     result_df = result_df.rename(columns={"MarkerName": "SNPID", "Chromosome": "CHR", "Position": "POS"})
-    
+
     result_sumstats = Sumstats(result_df, fmt="gwaslab", other=other_cols)
-    
+
     log.write("MR-MEGA analysis completed successfully", verbose=verbose)
-    
+
     return result_sumstats
 
 
 def meta_regress_mrmega(
-    sumstats_multi: 'SumstatsMulti',
+    sumstats_multi: "SumstatsMulti",
     num_pcs: int = 2,
     use_genomic_control: bool = True,
     use_gco: bool = True,
     min_maf: float = 0.01,
-    log: Optional[Log] = None,
+    log: Log | None = None,
     verbose: bool = True,
-    selected_marker_snpids: Optional[list] = None
-) -> Optional[Sumstats]:
+    selected_marker_snpids: list | None = None
+) -> Sumstats | None:
     """
     Perform meta-regression using MR-MEGA algorithm (pure Python implementation).
     
@@ -1274,13 +1276,13 @@ def meta_regress_mrmega(
     """
     if log is None:
         log = Log()
-    
+
     log.write(
         "Using MR-MEGA algorithm (pure Python implementation). "
         "MDS-based approach (PCs derived from EAF correlation).",
         verbose=verbose
     )
-    
+
     # Call the Python implementation
     return meta_regress_mrmega_python(
         sumstats_multi=sumstats_multi,

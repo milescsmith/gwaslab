@@ -1,17 +1,17 @@
-from typing import Optional, Dict, List, Union, Tuple
-import os
 import json
+import os
 import tarfile
-import requests
-import pandas as pd
 from os import path
 from pathlib import Path
-from gwaslab.info.g_Log import Log
-from gwaslab.bd.bd_download import download_ref
-from gwaslab.bd.bd_download import check_and_download
-from gwaslab.bd.bd_download import update_formatbook
+from typing import Dict, List, Optional, Tuple, Union
+
+import pandas as pd
+import requests
+
 from gwaslab.bd.bd_config import options
+from gwaslab.bd.bd_download import check_and_download, download_ref, update_formatbook
 from gwaslab.bd.bd_sex_chromosomes import Chromosomes
+from gwaslab.info.g_Log import Log
 from gwaslab.qc.qc_build import _process_build
 
 # Species-specific NCBI RefSeq accession ID mappings
@@ -19,19 +19,19 @@ from gwaslab.qc.qc_build import _process_build
 # Loaded from JSON file: src/gwaslab/data/chromosomes/chromosomes_nc.json
 _NCBI_ACCESSION_IDS = None
 
-def _load_ncbi_accession_ids() -> Dict[Tuple[str, str], Dict[str, str]]:
+def _load_ncbi_accession_ids() -> dict[tuple[str, str], dict[str, str]]:
     """Load NCBI accession IDs from JSON file."""
     global _NCBI_ACCESSION_IDS
     if _NCBI_ACCESSION_IDS is not None:
         return _NCBI_ACCESSION_IDS
-    
+
     # Get the path to the JSON file
     json_path = Path(__file__).parent.parent / "data" / "chromosomes" / "chromosomes_nc.json"
-    
+
     try:
-        with open(json_path, 'r') as f:
+        with open(json_path) as f:
             json_data = json.load(f)
-        
+
         # Convert JSON format {species: {build: {chromosome: accession}}}
         # to code format {(species, build): {chromosome: accession}}
         _NCBI_ACCESSION_IDS = {}
@@ -39,14 +39,14 @@ def _load_ncbi_accession_ids() -> Dict[Tuple[str, str], Dict[str, str]]:
             for build, chromosomes in builds.items():
                 key = (species.lower(), str(build))
                 _NCBI_ACCESSION_IDS[key] = chromosomes.copy()
-        
+
         return _NCBI_ACCESSION_IDS
-    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
         # Fallback to empty dict if file not found or invalid
         _NCBI_ACCESSION_IDS = {}
         return _NCBI_ACCESSION_IDS
 
-def _get_ncbi_accession_mapping(species: Optional[str], build: str, log: Optional[Log] = None, verbose: bool = True) -> Optional[Dict[str, str]]:
+def _get_ncbi_accession_mapping(species: str | None, build: str, log: Log | None = None, verbose: bool = True) -> dict[str, str] | None:
     """
     Get NCBI RefSeq accession ID mapping for a species and build.
     
@@ -69,24 +69,24 @@ def _get_ncbi_accession_mapping(species: Optional[str], build: str, log: Optiona
     """
     # Load NCBI accession IDs from JSON if not already loaded
     ncbi_ids = _load_ncbi_accession_ids()
-    
+
     if species is None:
         species = "homo sapiens"
-    
+
     species_lower = species.lower()
-    
+
     # Process build to get normalized build code
     try:
         processed_build = _process_build(build, log=log or Log(), verbose=False, species=species)
     except (ValueError, KeyError):
         # If build processing fails, try using the original build string
         processed_build = str(build)
-    
+
     # Check if mapping exists
     key = (species_lower, processed_build)
     if key in ncbi_ids:
         return ncbi_ids[key].copy()
-    
+
     # Check for aliases (try both directions)
     species_aliases = {
         "homo sapiens": "human",
@@ -115,19 +115,19 @@ def _get_ncbi_accession_mapping(species: Optional[str], build: str, log: Optiona
         "arabidopsis thaliana": "arabidopsis",
         "arabidopsis": "arabidopsis thaliana",
     }
-    
+
     # Try alias
     alias = species_aliases.get(species_lower)
     if alias:
         key = (alias.lower(), processed_build)
         if key in ncbi_ids:
             return ncbi_ids[key].copy()
-    
+
     # Not found - return None (caller should handle this)
     return None
 
 #hard-coded data
-def get_chr_to_NC(build: str, inverse: bool = False, species: str = "homo sapiens", log: Optional[Log] = None, verbose: bool = True) -> Dict[str, str]:
+def get_chr_to_NC(build: str, inverse: bool = False, species: str = "homo sapiens", log: Log | None = None, verbose: bool = True) -> dict[str, str]:
     """
     Create a dictionary mapping chromosome identifiers to NCBI RefSeq accession IDs.
     
@@ -153,20 +153,20 @@ def get_chr_to_NC(build: str, inverse: bool = False, species: str = "homo sapien
     if log is None:
         from gwaslab.info.g_Log import Log
         log = Log()
-    
+
     # Get NCBI accession mapping
     dic = _get_ncbi_accession_mapping(species, build, log=log, verbose=verbose)
-    
+
     if dic is None:
         # No mapping available for this species/build
         dic = {}
-    
+
     if inverse is True:
         inv_dic = {v: k for k, v in dic.items()}
         return inv_dic
     return dic
 
-def get_NC_to_chr(build: str, species: str = "homo sapiens", log: Optional[Log] = None, verbose: bool = True) -> Dict[str, str]:
+def get_NC_to_chr(build: str, species: str = "homo sapiens", log: Log | None = None, verbose: bool = True) -> dict[str, str]:
     """
     Create a dictionary mapping NCBI RefSeq accession IDs to chromosome identifiers.
     
@@ -189,7 +189,7 @@ def get_NC_to_chr(build: str, species: str = "homo sapiens", log: Optional[Log] 
     return get_chr_to_NC(build=build, inverse=True, species=species, log=log, verbose=verbose)
 
 
-def get_number_to_NC(build: str, inverse: bool = False, species: str = "homo sapiens", log: Optional[Log] = None, verbose: bool = True) -> Dict[Union[int, str], str]:
+def get_number_to_NC(build: str, inverse: bool = False, species: str = "homo sapiens", log: Log | None = None, verbose: bool = True) -> dict[Union[int, str], str]:
     """
     Create a dictionary mapping chromosome numbers (int) to NCBI RefSeq accession IDs (string).
     
@@ -215,19 +215,19 @@ def get_number_to_NC(build: str, inverse: bool = False, species: str = "homo sap
     if log is None:
         from gwaslab.info.g_Log import Log
         log = Log()
-    
+
     # Get string-based mapping first
     chr_to_nc = get_chr_to_NC(build=build, inverse=False, species=species, log=log, verbose=verbose)
-    
+
     if not chr_to_nc:
         # Return empty dict if no mapping available
         return {}
-    
+
     # Convert to number-based mapping
     # Get chromosome to number mapping for this species
     chromosomes_obj = Chromosomes(species=species)
     chr_to_num = chromosomes_obj.get_chr_to_number_dict(out_chr=False, xymt_num=[23, 24, 25])
-    
+
     # Build number to NC mapping
     dic = {}
     for chrom_str, nc_id in chr_to_nc.items():
@@ -235,14 +235,14 @@ def get_number_to_NC(build: str, inverse: bool = False, species: str = "homo sap
         if chrom_str in chr_to_num:
             chrom_num = chr_to_num[chrom_str]
             dic[chrom_num] = nc_id
-    
+
     if inverse is True:
         inv_dic = {v: k for k, v in dic.items()}
         return inv_dic
     return dic
 
 
-def get_NC_to_number(build: str, species: str = "homo sapiens", log: Optional[Log] = None, verbose: bool = True) -> Dict[str, Union[int, str]]:
+def get_NC_to_number(build: str, species: str = "homo sapiens", log: Log | None = None, verbose: bool = True) -> dict[str, Union[int, str]]:
     """
     Create a dictionary mapping NCBI RefSeq accession IDs to chromosome numbers (int).
     
@@ -264,7 +264,7 @@ def get_NC_to_number(build: str, species: str = "homo sapiens", log: Optional[Lo
     """
     return get_number_to_NC(build=build, inverse=True, species=species, log=log, verbose=verbose)
 
-def get_chr_list(add_number: bool = False, n: int = 25, only_number: bool = False, species: str = "homo sapiens") -> List[Union[str, int]]:
+def get_chr_list(add_number: bool = False, n: int = 25, only_number: bool = False, species: str = "homo sapiens") -> list[Union[str, int]]:
     """
     Generate a list of chromosome identifiers.
     
@@ -290,17 +290,17 @@ def get_chr_list(add_number: bool = False, n: int = 25, only_number: bool = Fals
     if species is not None:
         chromosomes_obj = Chromosomes(species=species)
         return chromosomes_obj.get_chr_list(add_number=add_number, only_number=only_number)
-    
+
     # Legacy behavior: fallback to old implementation if species is explicitly None
     chrom_list = [str(i) for i in range(1, n+1)] + ["X", "Y", "M", "MT"]
-    
+
     if add_number:
         chrom_list = [str(i) for i in range(1, n+1)] + ["X", "Y", "M", "MT"] + [i for i in range(1, n+1)]
 
     if only_number:
         chrom_list = [i for i in range(1, n+1)]
     return chrom_list
-def get_chr_to_number(out_chr: bool = False, xymt: Optional[List[str]] = None, xymt_num: Optional[List[int]] = None, species: str = "homo sapiens", max_chr: int = 200) -> Dict[str, Union[int, str]]:
+def get_chr_to_number(out_chr: bool = False, xymt: list[str] | None = None, xymt_num: list[int] | None = None, species: str = "homo sapiens", max_chr: int = 200) -> dict[str, Union[int, str]]:
     """
     Create a dictionary mapping chromosome identifiers to numeric representations.
     
@@ -332,7 +332,7 @@ def get_chr_to_number(out_chr: bool = False, xymt: Optional[List[str]] = None, x
     if species is not None:
         chromosomes_obj = Chromosomes(species=species)
         return chromosomes_obj.get_chr_to_number_dict(out_chr=out_chr, xymt_num=xymt_num, max_chr=max_chr)
-    
+
     # Legacy behavior: fallback to old implementation if species is explicitly None
     if out_chr:
         dic = {str(i): str(i) for i in range(1, max_chr + 1)}
@@ -352,7 +352,7 @@ def get_chr_to_number(out_chr: bool = False, xymt: Optional[List[str]] = None, x
             dic[xymt[2]] = xymt_num[2]
             dic["M"] = xymt_num[2]
     return dic
-def get_number_to_chr(in_chr: bool = False, xymt: Optional[List[str]] = None, xymt_num: Optional[List[int]] = None, prefix: str = "", species: str = "homo sapiens", max_chr: int = 200) -> Dict[Union[int, str], str]:
+def get_number_to_chr(in_chr: bool = False, xymt: list[str] | None = None, xymt_num: list[int] | None = None, prefix: str = "", species: str = "homo sapiens", max_chr: int = 200) -> dict[Union[int, str], str]:
     """
     Create a dictionary mapping chromosome numbers to string representations.
     
@@ -385,7 +385,7 @@ def get_number_to_chr(in_chr: bool = False, xymt: Optional[List[str]] = None, xy
     if species is not None:
         chromosomes_obj = Chromosomes(species=species)
         return chromosomes_obj.get_number_to_chr_dict(in_chr=in_chr, xymt_num=xymt_num, prefix=prefix, max_chr=max_chr)
-    
+
     # Legacy behavior: fallback to old implementation if species is explicitly None
     if in_chr:
         dic = {str(i): prefix + str(i) for i in range(1, max_chr + 1)}
@@ -404,8 +404,8 @@ def get_number_to_chr(in_chr: bool = False, xymt: Optional[List[str]] = None, xy
         if len(xymt) > 2 and len(xymt_num) > 2:
             dic[xymt_num[2]] = prefix + xymt[2]
     return dic
-# reading from files    
-###################################################################################################################    
+# reading from files
+###################################################################################################################
 def get_high_ld(build: str = "19") -> str:
     """
     Get the path to the high LD region file for the specified genome build.
@@ -510,7 +510,7 @@ def get_format_inverse_for_export(fmt: str) -> tuple:
             continue
         inv_dic[v] = k
     return dic_meta, inv_dic, coalesce_groups
-def get_formats_list() -> List[str]:
+def get_formats_list() -> list[str]:
     """
     Retrieve a list of available format names from the format book.
     
@@ -526,7 +526,7 @@ def get_formats_list() -> List[str]:
 _RECOMBINATION_RATE_CACHE = {}
 
 
-def _recombination_chrom_candidates(chrom: Union[str, int]) -> List[str]:
+def _recombination_chrom_candidates(chrom: Union[str, int]) -> list[str]:
     """Return filename chrom candidates to try for recombination map (supports both 23 and X, etc.)."""
     if isinstance(chrom, str) and chrom.isdigit():
         c = int(chrom)
@@ -557,7 +557,7 @@ def get_recombination_rate(chrom: Union[str, int], build: str = "19") -> pd.Data
                      Returns empty DataFrame if build is not supported or data is unavailable
     """
     cache_key = f"{build}_{chrom}"
-    
+
     # Check cache first
     if cache_key in _RECOMBINATION_RATE_CACHE:
         return _RECOMBINATION_RATE_CACHE[cache_key].copy()
@@ -607,7 +607,7 @@ def get_recombination_rate(chrom: Union[str, int], build: str = "19") -> pd.Data
     _RECOMBINATION_RATE_CACHE[cache_key] = recombination_rate.copy()
     return recombination_rate
 ####################################################################################################################
-def get_chain(from_build: str = "19", to_build: str = "38") -> str:    
+def get_chain(from_build: str = "19", to_build: str = "38") -> str:
     """
     Get the path to a chain file for liftover between genome builds.
     
@@ -631,24 +631,24 @@ def get_chain(from_build: str = "19", to_build: str = "38") -> str:
         ("19", "38"): "hg19ToHg38.over.chain.gz",
         ("38", "19"): "hg38ToHg19.over.chain.gz",
     }
-    
+
     # Check for built-in chain file first
     chain_filename = chain_files.get((str(from_build), str(to_build)))
     if chain_filename:
         builtin_chain_path = path.join(Path(__file__).parents[1], "data", "chains", chain_filename)
         if path.exists(builtin_chain_path):
             return builtin_chain_path
-    
+
     # Fall back to download mechanism
-    chain_path = check_and_download("{}to{}".format(from_build, to_build))
+    chain_path = check_and_download(f"{from_build}to{to_build}")
     return chain_path
 ####################################################################################################################
-from gwaslab.io.io_gtf import gtf_to_protein_coding
-from gwaslab.io.io_gtf import gtf_to_all_gene
+from gwaslab.io.io_gtf import gtf_to_all_gene, gtf_to_protein_coding
 
-####################################################################################################################   
+
+####################################################################################################################
 # From BioPython: https://github.com/biopython/biopython/blob/c5a6b1374267d769b19c1022b4b45472316e78b4/Bio/Seq.py#L36
-def _maketrans(complement_mapping: Dict[str, str]) -> bytes:
+def _maketrans(complement_mapping: dict[str, str]) -> bytes:
     """Make a python string translation table.
 
     Arguments:
@@ -663,12 +663,12 @@ def _maketrans(complement_mapping: Dict[str, str]) -> bytes:
     values = "".join(complement_mapping.values()).encode("ASCII")
 
     return bytes.maketrans(keys + keys.lower(), values + values.lower())
-        
-####################################################################################################################   
-        
+
+####################################################################################################################
+
 def _inch_to_point(inch: float) -> float:
     #dpi: Dots per Inch
     #points: 1/72 inch
     return inch*72
-        
+
 NA_STRINGS=["na","NA","Na","Nan","NaN","<NA>","null","NULL","#N/A","#VALUE!","N/A","n/a","missing",""]

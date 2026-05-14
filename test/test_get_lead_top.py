@@ -16,6 +16,7 @@ Tests cover:
 import os
 import sys
 import unittest
+
 import numpy as np
 import pandas as pd
 
@@ -29,7 +30,7 @@ from gwaslab.g_Sumstats import Sumstats
 
 class TestGetLeadCornerCases(unittest.TestCase):
     """Test corner cases for get_lead function."""
-    
+
     def test_single_row(self):
         """Test get_lead with a single row."""
         df = pd.DataFrame({
@@ -41,13 +42,13 @@ class TestGetLeadCornerCases(unittest.TestCase):
             "EA": ["A"],
             "NEA": ["G"]
         })
-        gl = Sumstats(sumstats=df, chrom="CHR", pos="POS", p="P", mlog10p="MLOG10P", 
+        gl = Sumstats(sumstats=df, chrom="CHR", pos="POS", p="P", mlog10p="MLOG10P",
                      snpid="SNPID", ea="EA", nea="NEA", verbose=False)
         result = gl.get_lead(sig_level=5e-8, windowsizekb=500, verbose=False)
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["SNPID"], "1:1000000_A_G")
-    
+
     def test_all_significant(self):
         """Test get_lead when all variants are significant."""
         df = pd.DataFrame({
@@ -55,8 +56,8 @@ class TestGetLeadCornerCases(unittest.TestCase):
             "POS": [1000000, 1001000, 2000000, 500000, 1500000],
             "P": [1e-10, 1e-9, 1e-8, 1e-11, 1e-9],
             "MLOG10P": [10.0, 9.0, 8.0, 11.0, 9.0],
-            "SNPID": [f"1:{pos}_A_G" if chr == 1 else f"2:{pos}_A_G" 
-                     for chr, pos in zip([1, 1, 1, 2, 2], [1000000, 1001000, 2000000, 500000, 1500000])],
+            "SNPID": [f"1:{pos}_A_G" if chr == 1 else f"2:{pos}_A_G"
+                     for chr, pos in zip([1, 1, 1, 2, 2], [1000000, 1001000, 2000000, 500000, 1500000], strict=False)],
             "EA": ["A"] * 5,
             "NEA": ["G"] * 5
         })
@@ -67,7 +68,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         # Should cluster variants within window and select leads
         self.assertGreater(len(result), 0)
         self.assertLessEqual(len(result), len(df))
-    
+
     def test_duplicated_positions(self):
         """Test get_lead with duplicated positions."""
         df = pd.DataFrame({
@@ -90,7 +91,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         if len(pos_1m_results) > 0:
             # Should have the most significant P value
             self.assertEqual(pos_1m_results.iloc[0]["P"], 1e-10)
-    
+
     def test_no_significant_variants(self):
         """Test get_lead when no variants are significant."""
         df = pd.DataFrame({
@@ -108,7 +109,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         # Should return empty DataFrame or None
         if result is not None:
             self.assertEqual(len(result), 0)
-    
+
     def test_identical_p_values(self):
         """Test get_lead with identical P values."""
         df = pd.DataFrame({
@@ -126,7 +127,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         self.assertIsNotNone(result)
         # Should still select leads even with identical P values
         self.assertGreater(len(result), 0)
-    
+
     def test_nan_values(self):
         """Test get_lead with NaN values in P and MLOG10P."""
         df = pd.DataFrame({
@@ -146,7 +147,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         self.assertGreater(len(result), 0)
         # Should not include NaN values
         self.assertFalse(result["P"].isna().any())
-    
+
     def test_multiple_chromosomes(self):
         """Test get_lead across multiple chromosomes."""
         df = pd.DataFrame({
@@ -154,8 +155,8 @@ class TestGetLeadCornerCases(unittest.TestCase):
             "POS": [1000000, 2000000, 500000, 1500000, 800000],
             "P": [1e-10, 1e-9, 1e-11, 1e-8, 1e-9],
             "MLOG10P": [10.0, 9.0, 11.0, 8.0, 9.0],
-            "SNPID": [f"{chr}:{pos}_A_G" for chr, pos in 
-                      zip([1, 1, 2, 2, 3], [1000000, 2000000, 500000, 1500000, 800000])],
+            "SNPID": [f"{chr}:{pos}_A_G" for chr, pos in
+                      zip([1, 1, 2, 2, 3], [1000000, 2000000, 500000, 1500000, 800000], strict=False)],
             "EA": ["A"] * 5,
             "NEA": ["G"] * 5
         })
@@ -167,7 +168,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         self.assertGreater(len(result), 0)
         unique_chrs = result["CHR"].unique()
         self.assertGreater(len(unique_chrs), 0)
-    
+
     def test_empty_dataframe(self):
         """Test get_lead with empty DataFrame."""
         df = pd.DataFrame(columns=["CHR", "POS", "P", "MLOG10P", "SNPID", "EA", "NEA"])
@@ -177,7 +178,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         # Should return empty DataFrame or None
         if result is not None:
             self.assertEqual(len(result), 0)
-    
+
     def test_use_p_flag(self):
         """Test get_lead with use_p=True flag."""
         df = pd.DataFrame({
@@ -194,7 +195,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
         result = gl.get_lead(sig_level=5e-8, windowsizekb=500, use_p=True, verbose=False)
         self.assertIsNotNone(result)
         self.assertGreater(len(result), 0)
-    
+
     def test_small_window_size(self):
         """Test get_lead with very small window size."""
         df = pd.DataFrame({
@@ -216,7 +217,7 @@ class TestGetLeadCornerCases(unittest.TestCase):
 
 class TestGetTopCornerCases(unittest.TestCase):
     """Test corner cases for get_top function."""
-    
+
     def test_single_row(self):
         """Test get_top with a single row."""
         df = pd.DataFrame({
@@ -227,13 +228,13 @@ class TestGetTopCornerCases(unittest.TestCase):
             "EA": ["A"],
             "NEA": ["G"]
         })
-        gl = Sumstats(sumstats=df, chrom="CHR", pos="POS", snpid="SNPID", 
+        gl = Sumstats(sumstats=df, chrom="CHR", pos="POS", snpid="SNPID",
                      ea="EA", nea="NEA", verbose=False)
         result = gl.get_top(by="DENSITY", windowsizekb=500, verbose=False)
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 1)
         self.assertEqual(result.iloc[0]["SNPID"], "1:1000000_A_G")
-    
+
     def test_all_same_density(self):
         """Test get_top when all variants have the same density."""
         df = pd.DataFrame({
@@ -250,7 +251,7 @@ class TestGetTopCornerCases(unittest.TestCase):
         self.assertIsNotNone(result)
         # Should still select leads even with identical density
         self.assertGreater(len(result), 0)
-    
+
     def test_duplicated_positions(self):
         """Test get_top with duplicated positions."""
         df = pd.DataFrame({
@@ -271,7 +272,7 @@ class TestGetTopCornerCases(unittest.TestCase):
         if len(pos_1m_results) > 0:
             # Should have the highest density
             self.assertEqual(pos_1m_results.iloc[0]["DENSITY"], 10.0)
-    
+
     def test_no_variants_above_threshold(self):
         """Test get_top when no variants pass the threshold."""
         df = pd.DataFrame({
@@ -288,7 +289,7 @@ class TestGetTopCornerCases(unittest.TestCase):
         # Should return None or empty DataFrame when threshold too high
         if result is not None:
             self.assertEqual(len(result), 0)
-    
+
     def test_nan_values(self):
         """Test get_top with NaN values in the metric column."""
         df = pd.DataFrame({
@@ -307,15 +308,15 @@ class TestGetTopCornerCases(unittest.TestCase):
         self.assertGreater(len(result), 0)
         # Should not include NaN values
         self.assertFalse(result["DENSITY"].isna().any())
-    
+
     def test_multiple_chromosomes(self):
         """Test get_top across multiple chromosomes."""
         df = pd.DataFrame({
             "CHR": [1, 1, 2, 2, 3],
             "POS": [1000000, 2000000, 500000, 1500000, 800000],
             "DENSITY": [10.0, 9.0, 11.0, 8.0, 9.5],
-            "SNPID": [f"{chr}:{pos}_A_G" for chr, pos in 
-                      zip([1, 1, 2, 2, 3], [1000000, 2000000, 500000, 1500000, 800000])],
+            "SNPID": [f"{chr}:{pos}_A_G" for chr, pos in
+                      zip([1, 1, 2, 2, 3], [1000000, 2000000, 500000, 1500000, 800000], strict=False)],
             "EA": ["A"] * 5,
             "NEA": ["G"] * 5
         })
@@ -327,7 +328,7 @@ class TestGetTopCornerCases(unittest.TestCase):
         self.assertGreater(len(result), 0)
         unique_chrs = result["CHR"].unique()
         self.assertGreater(len(unique_chrs), 0)
-    
+
     def test_empty_dataframe(self):
         """Test get_top with empty DataFrame."""
         df = pd.DataFrame(columns=["CHR", "POS", "DENSITY", "SNPID", "EA", "NEA"])
@@ -337,7 +338,7 @@ class TestGetTopCornerCases(unittest.TestCase):
         # Should return None or empty DataFrame
         if result is not None:
             self.assertEqual(len(result), 0)
-    
+
     def test_custom_metric_column(self):
         """Test get_top with a custom metric column."""
         df = pd.DataFrame({
@@ -354,7 +355,7 @@ class TestGetTopCornerCases(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertGreater(len(result), 0)
         self.assertIn("CUSTOM_METRIC", result.columns)
-    
+
     def test_small_window_size(self):
         """Test get_top with very small window size."""
         df = pd.DataFrame({
@@ -371,7 +372,7 @@ class TestGetTopCornerCases(unittest.TestCase):
         self.assertIsNotNone(result)
         # With 1kb window, first two should be in same cluster
         self.assertGreater(len(result), 0)
-    
+
     def test_all_variants_high_density(self):
         """Test get_top when all variants have high density."""
         df = pd.DataFrame({
@@ -379,7 +380,7 @@ class TestGetTopCornerCases(unittest.TestCase):
             "POS": [1000000, 1001000, 2000000, 500000, 1500000],
             "DENSITY": [50.0, 45.0, 40.0, 55.0, 48.0],
             "SNPID": [f"{chr}:{pos}_A_G" if chr == 1 else f"{chr}:{pos}_A_G"
-                     for chr, pos in zip([1, 1, 1, 2, 2], [1000000, 1001000, 2000000, 500000, 1500000])],
+                     for chr, pos in zip([1, 1, 1, 2, 2], [1000000, 1001000, 2000000, 500000, 1500000], strict=False)],
             "EA": ["A"] * 5,
             "NEA": ["G"] * 5
         })

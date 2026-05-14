@@ -1,9 +1,10 @@
 import os
+import random
 import sys
 import unittest
-import random
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -11,8 +12,8 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 import gwaslab
 from gwaslab.info.g_Log import Log
@@ -296,7 +297,7 @@ class TestMQQPlotOptions(unittest.TestCase):
         target_chr = self.df["CHR"].iloc[0]
         target_pos = self.df["POS"].iloc[0]
         region = (target_chr, max(0, target_pos - 100000), target_pos + 100000)
-        
+
         fig = self.sumstats.plot_mqq(
             mode="r",
             region=region,
@@ -311,7 +312,7 @@ class TestMQQPlotOptions(unittest.TestCase):
         target_pos = self.df["POS"].iloc[0]
         region = (target_chr, max(0, target_pos - 100000), target_pos + 100000)
         highlight_snp = self.df["SNPID"].iloc[0]
-        
+
         fig = self.sumstats.plot_mqq(
             mode="r",
             region=region,

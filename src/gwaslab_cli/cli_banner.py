@@ -17,7 +17,7 @@ def _package_version() -> str:
         return "?.?.?"
 
 
-def format_cli_mode_banner(prog: str, argv: List[str]) -> List[str]:
+def format_cli_mode_banner(prog: str, argv: list[str]) -> list[str]:
     """Return simple ASCII banner: rules, title, VERSION, COMMAND (one line), rules."""
     bar = "=" * _BAR_LEN
     ver = _package_version()
@@ -35,10 +35,10 @@ def format_cli_mode_banner(prog: str, argv: List[str]) -> List[str]:
 
 def emit_cli_mode_banner(
     prog: str,
-    argv: List[str],
+    argv: list[str],
     *,
     quiet: bool,
-    file: Optional[TextIO] = None,
+    file: TextIO | None = None,
 ) -> None:
     if quiet:
         return

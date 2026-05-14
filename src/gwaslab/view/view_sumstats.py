@@ -1,10 +1,11 @@
-from typing import TYPE_CHECKING, Union, Optional
+from typing import TYPE_CHECKING, Optional, Union
+
 import pandas as pd
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
 
-def _view_sumstats(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], expr: Optional[str] = None) -> pd.DataFrame:
+def _view_sumstats(sumstats_or_dataframe: Union["Sumstats", pd.DataFrame], expr: str | None = None) -> pd.DataFrame:
     """
     View the sumstats dataframe, optionally filtering by an expression.
 
@@ -26,7 +27,7 @@ def _view_sumstats(sumstats_or_dataframe: Union['Sumstats', pd.DataFrame], expr:
         sumstats = sumstats_or_dataframe
     else:
         sumstats = sumstats_or_dataframe.data
-    
+
     if expr:
         return sumstats.query(expr)
     return sumstats

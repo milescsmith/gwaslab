@@ -12,9 +12,11 @@ parameter validation and error handling tests.
 import os
 import sys
 import unittest
+
+import matplotlib
 import numpy as np
 import pandas as pd
-import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -23,8 +25,8 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from gwaslab.viz.viz_plot_ld_link import _plot_ld_link
 from gwaslab.info.g_Log import Log
+from gwaslab.viz.viz_plot_ld_link import _plot_ld_link
 
 
 def make_mock_sumstats_with_ld(n=50, chr=7, start_pos=156938803):
@@ -120,12 +122,12 @@ class TestLdLink(unittest.TestCase):
         self.sumstats = make_mock_sumstats_with_ld(n=self.n_variants)
         self.region = (7, 156938803, 156938803 + self.n_variants * 1000)
         self.ld_matrix = make_mock_ld_matrix(self.n_variants)
-        
+
         # Create a mock axes
         self.fig, self.ax = plt.subplots(figsize=(10, 6))
-        
+
     def tearDown(self):
-        plt.close('all')
+        plt.close("all")
 
     def test_plot_ld_link_with_mock_data(self):
         """
@@ -310,7 +312,7 @@ class TestLdLink(unittest.TestCase):
             build="19",
             verbose=False
         )
-        
+
         # Test that parameters don't cause errors (even if VCF is missing)
         try:
             fig = sumstats.plot_mqq(
@@ -325,7 +327,7 @@ class TestLdLink(unittest.TestCase):
             )
             # Should still create a plot even without VCF
             self.assertIsNotNone(fig)
-        except Exception as e:
+        except Exception:
             # Some errors are expected without VCF, but function should handle gracefully
             pass
 

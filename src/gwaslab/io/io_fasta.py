@@ -6,15 +6,18 @@ Uses pysam FastxFile for fast FASTA reading (3-4x faster than previous implement
 """
 
 import gzip
+from collections.abc import Iterator
+from typing import Dict, Optional, TextIO, Tuple, Union
+
 import numpy as np
 import pandas as pd
-from typing import Iterator, TextIO, Union, Dict, Tuple, Optional
-from gwaslab.info.g_Log import Log
-from gwaslab.bd.bd_common_data import _maketrans
+
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.bd.bd_common_data import _maketrans
+from gwaslab.info.g_Log import Log
 
 # FASTA file suffix definitions
-FASTA_SUFFIXES = ('.fa.gz', '.fasta.gz', '.fa.bgz', '.fasta.bgz', '.fa', '.fasta')
+FASTA_SUFFIXES = (".fa.gz", ".fasta.gz", ".fa.bgz", ".fasta.bgz", ".fa", ".fasta")
 
 try:
     import pysam
@@ -63,7 +66,7 @@ class FastaRecord:
         """
         self.id = id
         self.seq = _Sequence(seq)
-    
+
     def __repr__(self):
         return f"FastaRecord(id='{self.id}', length={len(self.seq._data)})"
 
@@ -75,10 +78,10 @@ class _Sequence:
     def __init__(self, seq: str):
         # Store as bytes for compatibility with translate() operations
         if isinstance(seq, str):
-            self._data = seq.encode('ascii')
+            self._data = seq.encode("ascii")
         else:
             self._data = seq
-    
+
     def __len__(self):
         return len(self._data)
 
@@ -104,7 +107,7 @@ def _open_fasta_handle(path: str) -> TextIO:
         If file extension is not recognized
     """
     path_lower = path.lower()
-    
+
     # BGZF (bgzip) detection - treat as gzip
     # Note: BGZF is a variant of gzip, so gzip can often read it
     if path_lower.endswith((".bgz", ".bgzf")):
@@ -115,15 +118,15 @@ def _open_fasta_handle(path: str) -> TextIO:
             UserWarning
         )
         return gzip.open(path, "rt")
-    
+
     # Standard gzipped FASTA
     elif path_lower.endswith(".gz"):
         return gzip.open(path, "rt")
-    
+
     # Plain FASTA
     elif path_lower.endswith((".fa", ".fasta")):
-        return open(path, "r")
-    
+        return open(path)
+
     else:
         raise ValueError(
             f"Unrecognized FASTA file extension: {path}. "
@@ -131,7 +134,7 @@ def _open_fasta_handle(path: str) -> TextIO:
         )
 
 
-def parse_fasta_simple(handle: TextIO) -> Iterator[Tuple[str, str]]:
+def parse_fasta_simple(handle: TextIO) -> Iterator[tuple[str, str]]:
     """
     Iterate over FASTA records as string tuples (title, sequence).
     
@@ -165,7 +168,7 @@ def parse_fasta_simple(handle: TextIO) -> Iterator[Tuple[str, str]]:
     else:
         # No break encountered - probably an empty file
         return
-    
+
     # Main logic
     # Note: remove trailing whitespace, and any internal spaces
     # (and any embedded \r which are possible in mangled files)
@@ -178,14 +181,14 @@ def parse_fasta_simple(handle: TextIO) -> Iterator[Tuple[str, str]]:
             title = line[1:].rstrip()
             continue
         lines.append(line.rstrip())
-    
+
     # Yield the last record
     if title is not None:
         sequence = "".join(lines).replace(" ", "").replace("\r", "")
         yield title, sequence
 
 
-def parse_fasta(path: str, as_dict: bool = True) -> Union[Dict[str, str], Iterator[Tuple[str, str]]]:
+def parse_fasta(path: str, as_dict: bool = True) -> Union[dict[str, str], Iterator[tuple[str, str]]]:
     """
     Parse a FASTA file and return records.
     
@@ -254,22 +257,21 @@ def parse_fasta(path: str, as_dict: bool = True) -> Union[Dict[str, str], Iterat
                         yield from parse_fasta_simple(handle)
                     finally:
                         handle.close()
-            
+
             return _parse_generator()
+    # Fallback to old implementation
+    elif as_dict:
+        with _open_fasta_handle(path) as handle:
+            return dict(parse_fasta_simple(handle))
     else:
-        # Fallback to old implementation
-        if as_dict:
-            with _open_fasta_handle(path) as handle:
-                return dict(parse_fasta_simple(handle))
-        else:
-            def _parse_generator():
-                handle = _open_fasta_handle(path)
-                try:
-                    yield from parse_fasta_simple(handle)
-                finally:
-                    handle.close()
-            
-            return _parse_generator()
+        def _parse_generator():
+            handle = _open_fasta_handle(path)
+            try:
+                yield from parse_fasta_simple(handle)
+            finally:
+                handle.close()
+
+        return _parse_generator()
 
 
 def load_fasta_auto(path: str, as_seqrecord: bool = True):
@@ -342,7 +344,7 @@ def load_fasta_auto(path: str, as_seqrecord: bool = True):
                         yield title, sequence
             finally:
                 handle.close()
-    
+
     return _load_generator()
 
 
@@ -350,10 +352,10 @@ def load_fasta_filtered(
     path: str,
     chromlist_set: set,
     chroms_in_sumstats_set: set,
-    mapper: Optional[ChromosomeMapper] = None,
+    mapper: ChromosomeMapper | None = None,
     log: Log = Log(),
     verbose: bool = True
-) -> Dict[str, FastaRecord]:
+) -> dict[str, FastaRecord]:
     """
     Load and filter FASTA records in a single pass for better performance.
     
@@ -387,22 +389,22 @@ def load_fasta_filtered(
     if mapper is None:
         mapper = ChromosomeMapper(log=log, verbose=verbose)
     all_records_dict = {}
-    
+
     if PYSAM_AVAILABLE:
         try:
             with pysam.FastxFile(path) as fastx:
                 for entry in fastx:
                     title = entry.name
                     sequence = entry.sequence
-                    
+
                     # Filter during loading - avoid creating FastaRecord if not needed
                     record_chr = title.strip()
-                    
+
                     # Strip chr prefix if present (handles chr1, Chr1, CHR1 -> 1)
                     record_chr_stripped = record_chr
-                    if record_chr_stripped.lower().startswith('chr'):
+                    if record_chr_stripped.lower().startswith("chr"):
                         record_chr_stripped = record_chr_stripped[3:]
-                    
+
                     # Use mapper to convert to numeric format
                     try:
                         if mapper._sumstats_format is None:
@@ -424,7 +426,7 @@ def load_fasta_filtered(
                             i = int(record_chr_stripped)
                         except ValueError:
                             i = record_chr_stripped.upper()
-                    
+
                     # Only create FastaRecord if it passes filters
                     if (i in chromlist_set) and (i in chroms_in_sumstats_set):
                         log.write(record_chr, " ", end="", show_time=False, verbose=verbose)
@@ -437,7 +439,7 @@ def load_fasta_filtered(
                 f"pysam FastxFile failed, falling back to slower implementation: {e}",
                 UserWarning
             )
-    
+
     # Fallback to old implementation
     handle = _open_fasta_handle(path)
     try:
@@ -450,7 +452,7 @@ def load_fasta_filtered(
         else:
             # No records found
             return all_records_dict
-        
+
         # Main parsing and filtering loop
         lines = []
         for line in handle:
@@ -460,12 +462,12 @@ def load_fasta_filtered(
                     sequence = "".join(lines).replace(" ", "").replace("\r", "")
                     # Filter during loading - avoid creating FastaRecord if not needed
                     record_chr = title.strip()
-                    
+
                     # Strip chr prefix if present (handles chr1, Chr1, CHR1 -> 1)
                     record_chr_stripped = record_chr
-                    if record_chr_stripped.lower().startswith('chr'):
+                    if record_chr_stripped.lower().startswith("chr"):
                         record_chr_stripped = record_chr_stripped[3:]
-                    
+
                     # Use mapper to convert to numeric format
                     try:
                         if mapper._sumstats_format is None:
@@ -487,28 +489,28 @@ def load_fasta_filtered(
                             i = int(record_chr_stripped)
                         except ValueError:
                             i = record_chr_stripped.upper()
-                    
+
                     # Only create FastaRecord if it passes filters
                     if (i in chromlist_set) and (i in chroms_in_sumstats_set):
                         log.write(record_chr, " ", end="", show_time=False, verbose=verbose)
                         all_records_dict[i] = FastaRecord(title, sequence)
-                
+
                 # Start new record
                 lines = []
                 title = line[1:].rstrip()
                 continue
             lines.append(line.rstrip())
-        
+
         # Process the last record
         if title is not None:
             sequence = "".join(lines).replace(" ", "").replace("\r", "")
             record_chr = title.strip()
-            
+
             # Strip chr prefix if present (handles chr1, Chr1, CHR1 -> 1)
             record_chr_stripped = record_chr
-            if record_chr_stripped.lower().startswith('chr'):
+            if record_chr_stripped.lower().startswith("chr"):
                 record_chr_stripped = record_chr_stripped[3:]
-            
+
             # Use mapper to convert to numeric format
             try:
                 if mapper._sumstats_format is None:
@@ -530,19 +532,19 @@ def load_fasta_filtered(
                     i = int(record_chr_stripped)
                 except ValueError:
                     i = record_chr_stripped.upper()
-            
+
             if (i in chromlist_set) and (i in chroms_in_sumstats_set):
                 log.write(record_chr, " ", end="", show_time=False, verbose=verbose)
                 all_records_dict[i] = FastaRecord(title, sequence)
-    
+
     finally:
         handle.close()
-    
+
     return all_records_dict
 
 
 def write_fasta(
-    records: Union[Dict[str, str], Iterator[Tuple[str, str]]],
+    records: Union[dict[str, str], Iterator[tuple[str, str]]],
     path: str,
     wrap: int = 60,
     mode: str = "w"
@@ -588,32 +590,32 @@ def write_fasta(
         handle = gzip.open(path, f"{mode}t")
     else:
         handle = open(path, mode)
-    
+
     try:
         # Handle dictionary input
         if isinstance(records, dict):
             records = records.items()
-        
+
         # Write each record
         for title, sequence in records:
             # Clean title (remove newlines)
             title = title.replace("\n", "").replace("\r", "")
-            
+
             # Write title line
             handle.write(f">{title}\n")
-            
+
             # Write sequence with optional wrapping
             if wrap and wrap > 0:
                 for i in range(0, len(sequence), wrap):
                     handle.write(sequence[i:i + wrap] + "\n")
             else:
                 handle.write(sequence + "\n")
-    
+
     finally:
         handle.close()
 
 
-def get_fasta_record(path: str, title: str) -> Optional[str]:
+def get_fasta_record(path: str, title: str) -> str | None:
     """
     Get a specific FASTA record by title.
     
@@ -652,7 +654,7 @@ def get_fasta_record(path: str, title: str) -> Optional[str]:
                 f"pysam FastxFile failed, falling back to slower implementation: {e}",
                 UserWarning
             )
-    
+
     # Fallback to old implementation
     with _open_fasta_handle(path) as handle:
         for record_title, sequence in parse_fasta_simple(handle):
@@ -665,7 +667,7 @@ def load_and_build_fasta_records(
     path: str,
     chromlist_set: set,
     chroms_in_sumstats_set: set,
-    mapper: Optional[ChromosomeMapper] = None,
+    mapper: ChromosomeMapper | None = None,
     pos_as_dict: bool = True,
     log: Log = Log(),
     verbose: bool = True
@@ -704,7 +706,7 @@ def load_and_build_fasta_records(
         - records_len_dict: dict or array of lengths for each chromosome
     """
     log.write("   -Loading and building numpy fasta records:", end="", verbose=verbose)
-    
+
     # Create mapper if not provided (for backward compatibility)
     if mapper is None:
         # Default mapper - will auto-detect format when needed
@@ -712,11 +714,11 @@ def load_and_build_fasta_records(
             log=log,
             verbose=verbose
         )
-    
+
     all_r = []
     records_len = []
     chrom_keys = []  # Track chromosome keys in order
-    
+
     pysam_success = False
     if PYSAM_AVAILABLE:
         try:
@@ -724,16 +726,16 @@ def load_and_build_fasta_records(
                 for entry in fastx:
                     title = entry.name
                     sequence = entry.sequence
-                    
+
                     # Get chromosome name from FASTA title (may be in various formats)
                     # Try to extract chromosome identifier from title
                     record_chr = title.strip()
-                    
+
                     # Strip chr prefix if present (e.g., "chr1" -> "1")
                     record_chr_stripped = record_chr
-                    if record_chr_stripped.lower().startswith('chr'):
+                    if record_chr_stripped.lower().startswith("chr"):
                         record_chr_stripped = record_chr_stripped[3:]
-                    
+
                     # Use mapper to convert to numeric format
                     try:
                         i = mapper.to_numeric(record_chr_stripped)
@@ -745,15 +747,15 @@ def load_and_build_fasta_records(
                                 pass
                     except (KeyError, ValueError, AttributeError):
                         i = record_chr_stripped
-                    
+
                     # Only process if it passes filters
                     if (i in chromlist_set) and (i in chroms_in_sumstats_set):
                         log.write(record_chr, " ", end="", show_time=False, verbose=verbose)
                         # Convert directly to numpy array without creating FastaRecord
                         # Translate bytes using the translation table
-                        r = sequence.encode('ascii').translate(_FASTA_TRANSLATE_TABLE)
+                        r = sequence.encode("ascii").translate(_FASTA_TRANSLATE_TABLE)
                         r_len = len(r)
-                        r = np.array([r], dtype=f'<U{r_len}').view('<u4').astype(np.uint8)
+                        r = np.array([r], dtype=f"<U{r_len}").view("<u4").astype(np.uint8)
                         all_r.append(r)
                         records_len.append(r_len)
                         chrom_keys.append(i)
@@ -765,7 +767,7 @@ def load_and_build_fasta_records(
                 f"pysam FastxFile failed, falling back to slower implementation: {e}",
                 UserWarning
             )
-    
+
     # Use fallback only if pysam was not successful
     if not pysam_success:
         # Fallback to old implementation
@@ -783,7 +785,7 @@ def load_and_build_fasta_records(
                     return np.array([], dtype=np.uint8), {}, {}
                 else:
                     return np.array([], dtype=np.uint8), np.array([], dtype=np.int64), np.array([], dtype=np.int64)
-            
+
             # Main parsing, filtering, and conversion loop
             lines = []
             for line in handle:
@@ -793,12 +795,12 @@ def load_and_build_fasta_records(
                         sequence = "".join(lines).replace(" ", "").replace("\r", "")
                         # Get chromosome name from FASTA title
                         record_chr = title.strip()
-                        
+
                         # Strip chr prefix if present (e.g., "chr1" -> "1")
                         record_chr_stripped = record_chr
-                        if record_chr_stripped.lower().startswith('chr'):
+                        if record_chr_stripped.lower().startswith("chr"):
                             record_chr_stripped = record_chr_stripped[3:]
-                        
+
                         # Use mapper to convert to numeric format
                         try:
                             i = mapper.to_numeric(record_chr_stripped)
@@ -809,35 +811,35 @@ def load_and_build_fasta_records(
                                     pass
                         except (KeyError, ValueError, AttributeError):
                             i = record_chr_stripped
-                        
+
                         # Only process if it passes filters
                         if (i in chromlist_set) and (i in chroms_in_sumstats_set):
                             log.write(record_chr, " ", end="", show_time=False, verbose=verbose)
                             # Convert directly to numpy array without creating FastaRecord
                             # Translate bytes using the translation table
-                            r = sequence.encode('ascii').translate(_FASTA_TRANSLATE_TABLE)
+                            r = sequence.encode("ascii").translate(_FASTA_TRANSLATE_TABLE)
                             r_len = len(r)
-                            r = np.array([r], dtype=f'<U{r_len}').view('<u4').astype(np.uint8)
+                            r = np.array([r], dtype=f"<U{r_len}").view("<u4").astype(np.uint8)
                             all_r.append(r)
                             records_len.append(r_len)
                             chrom_keys.append(i)
-                    
+
                     # Start new record
                     lines = []
                     title = line[1:].rstrip()
                     continue
                 lines.append(line.rstrip())
-            
+
             # Process the last record
             if title is not None:
                 sequence = "".join(lines).replace(" ", "").replace("\r", "")
                 record_chr = title.strip()
-                
+
                 # Strip chr prefix if present (e.g., "chr1" -> "1")
                 record_chr_stripped = record_chr
-                if record_chr_stripped.lower().startswith('chr'):
+                if record_chr_stripped.lower().startswith("chr"):
                     record_chr_stripped = record_chr_stripped[3:]
-                
+
                 # Use mapper to convert to numeric format
                 try:
                     i = mapper.to_numeric(record_chr_stripped)
@@ -848,43 +850,43 @@ def load_and_build_fasta_records(
                             pass
                 except (KeyError, ValueError, AttributeError):
                     i = record_chr_stripped
-                
+
                 if (i in chromlist_set) and (i in chroms_in_sumstats_set):
                     log.write(record_chr, " ", end="", show_time=False, verbose=verbose)
                     # Convert directly to numpy array
-                    r = sequence.encode('ascii').translate(_FASTA_TRANSLATE_TABLE)
+                    r = sequence.encode("ascii").translate(_FASTA_TRANSLATE_TABLE)
                     r_len = len(r)
-                    r = np.array([r], dtype=f'<U{r_len}').view('<u4').astype(np.uint8)
+                    r = np.array([r], dtype=f"<U{r_len}").view("<u4").astype(np.uint8)
                     all_r.append(r)
                     records_len.append(r_len)
                     chrom_keys.append(i)
-        
+
         finally:
             handle.close()
-    
+
     log.write("", show_time=False, verbose=verbose)
-    
+
     if len(all_r) == 0:
         if pos_as_dict:
             return np.array([], dtype=np.uint8), {}, {}
         else:
             return np.array([], dtype=np.uint8), np.array([], dtype=np.int64), np.array([], dtype=np.int64)
-    
+
     # Convert lengths to array and compute starting positions
     records_len = np.array(records_len, dtype=np.int64)
     starting_positions = np.cumsum(records_len) - records_len
-    
+
     if pos_as_dict:
         # Use dict() constructor with zip for better performance
-        starting_positions = dict(zip(chrom_keys, starting_positions))
-        records_len_dict = dict(zip(chrom_keys, records_len))
+        starting_positions = dict(zip(chrom_keys, starting_positions, strict=False))
+        records_len_dict = dict(zip(chrom_keys, records_len, strict=False))
     else:
         records_len_dict = records_len
-    
+
     # Concatenate all arrays
     record = np.concatenate(all_r)
     del all_r  # free memory
-    
+
     return record, starting_positions, records_len_dict
 
 
@@ -930,10 +932,10 @@ def build_fasta_records(fasta_records_dict, pos_as_dict=True, log=Log(), verbose
     for r in fasta_records_dict.values():
         r = r.seq._data.translate(_FASTA_TRANSLATE_TABLE)
         r_len = len(r)
-        r = np.array([r], dtype=f'<U{r_len}').view('<u4').astype(np.uint8)
+        r = np.array([r], dtype=f"<U{r_len}").view("<u4").astype(np.uint8)
         all_r.append(r)
         records_len.append(r_len)
-    
+
     # We've just created a list of numpy arrays, so we can concatenate them to obtain a single numpy array
     # Then we keep track of the starting position of each record in the concatenated array. This will be useful later
     # to index the record array depending on the position of the variant and the chromosome
@@ -941,12 +943,12 @@ def build_fasta_records(fasta_records_dict, pos_as_dict=True, log=Log(), verbose
 
     starting_positions = np.cumsum(records_len) - records_len
 
-    
+
     if pos_as_dict:
         # Use dict() constructor with zip for better performance than dict comprehension
         keys = fasta_records_dict.keys()
-        starting_positions = dict(zip(keys, starting_positions))
-        records_len_dict = dict(zip(keys, records_len))
+        starting_positions = dict(zip(keys, starting_positions, strict=False))
+        records_len_dict = dict(zip(keys, records_len, strict=False))
     else:
         records_len_dict = records_len
     record = np.concatenate(all_r)

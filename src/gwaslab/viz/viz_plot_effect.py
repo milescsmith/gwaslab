@@ -1,23 +1,25 @@
-import pandas as pd
 import matplotlib.pyplot as plt
-from gwaslab.viz.viz_aux_save_figure import save_figure
+import pandas as pd
+import seaborn as sns
+
 from gwaslab.info.g_Log import Log
 from gwaslab.io.io_process_kwargs import _extract_kwargs
-import seaborn as sns
+from gwaslab.viz.viz_aux_save_figure import save_figure
 from gwaslab.viz.viz_aux_style_options import set_plot_style
 
-def _plot_effect(insumstats, 
-                 y=None, 
-                 y_sort=None, 
-                 group=None, 
-                 x="BETA", 
-                 se="SE", 
-                 eaf="EAF", 
-                 snpr2="SNPR2", 
+
+def _plot_effect(insumstats,
+                 y=None,
+                 y_sort=None,
+                 group=None,
+                 x="BETA",
+                 se="SE",
+                 eaf="EAF",
+                 snpr2="SNPR2",
                  ylabel="Variant",
-                 eaf_panel=True, 
-                 snpvar_panel=True, 
-                 rename_dic=None, 
+                 eaf_panel=True,
+                 snpvar_panel=True,
+                 rename_dic=None,
                  err_kwargs=None,
                  font_kwargs=None,
                  save=None,
@@ -151,11 +153,11 @@ def _plot_effect(insumstats,
       drawing.
     """
     # --- 1. Resolve input to a DataFrame and take a working copy ---
-    if hasattr(insumstats, 'data') and not isinstance(insumstats, pd.DataFrame):
+    if hasattr(insumstats, "data") and not isinstance(insumstats, pd.DataFrame):
         insumstats = insumstats.data
     to_plot = insumstats.copy()
     log.write("Starting effect-size plot creation...", verbose=verbose)
-    log.write(" -Input contains {} variants.".format(len(to_plot)), verbose=verbose)
+    log.write(f" -Input contains {len(to_plot)} variants.", verbose=verbose)
 
     # --- 2. Resolve style and per-plot keyword arguments ---
     style = set_plot_style(
@@ -184,7 +186,7 @@ def _plot_effect(insumstats,
     font_family = style["font_family"]
     if sort_kwargs is None:
         sort_kwargs = {}
-    log.write(" -Effect column: {}, SE column: {}.".format(x, se), verbose=verbose)
+    log.write(f" -Effect column: {x}, SE column: {se}.", verbose=verbose)
 
     # --- 3. Forward hue/size/style to seaborn and track legend titles ---
     legend_titles = []
@@ -204,14 +206,14 @@ def _plot_effect(insumstats,
     err_kwargs =       _extract_kwargs("err", err_kwargs, locals())
     scatter_kwargs =   _extract_kwargs("scatter", scatter_kwargs, locals())
     font_kwargs =      _extract_kwargs("font", font_kwargs, locals())
-    
+
     def concat_cols(cols):
         """Join multiple column values into one label string (e.g. 'A-B-C')."""
         return "-".join(map(str, cols))
 
     # --- 4. Cap row count and build one “label per row” for the y-axis ---
     if len(to_plot) > 100:
-        log.warning("Too many variants to plot ({}). Maximum is 100. Skipping.".format(len(to_plot)), verbose=verbose)
+        log.warning(f"Too many variants to plot ({len(to_plot)}). Maximum is 100. Skipping.", verbose=verbose)
         return "Too many variants to plot"
 
     # Build y_name = column name holding the tick label; ensure that column exists.
@@ -219,18 +221,16 @@ def _plot_effect(insumstats,
         y_cols = list(y)
         missing = [c for c in y_cols if c not in to_plot.columns]
         if missing:
-            raise KeyError("y column(s) {} not found in sumstats. Available columns: {}".format(
-                missing, list(to_plot.columns)))
+            raise KeyError(f"y column(s) {missing} not found in sumstats. Available columns: {list(to_plot.columns)}")
         y_name = "-".join(str(c) for c in y_cols)
         to_plot[y_name] = to_plot[y_cols].apply(concat_cols, axis=1)
     else:
         if y is not None and y not in to_plot.columns:
-            raise KeyError("y column '{}' not found in sumstats. Available columns: {}".format(
-                y, list(to_plot.columns)))
+            raise KeyError(f"y column '{y}' not found in sumstats. Available columns: {list(to_plot.columns)}")
         y_name = y
 
     y_label_display = y_name if isinstance(y_name, str) else ",".join(str(c) for c in (y_name or []))
-    log.write(" -Y-axis label column: {}.".format(y_label_display), verbose=verbose)
+    log.write(f" -Y-axis label column: {y_label_display}.", verbose=verbose)
 
     # --- 5. Sort and group: order rows for the forest layout ---
     if y_sort is None:
@@ -239,7 +239,7 @@ def _plot_effect(insumstats,
         group = ["CHR", "POS"] + y_sort
     sort_columns = group + y_sort  # when group is default, this repeats y_sort (harmless)
     to_plot = to_plot.sort_values(by=sort_columns, **sort_kwargs)
-    log.write(" -Grouping by: {}.".format(group), verbose=verbose)
+    log.write(f" -Grouping by: {group}.", verbose=verbose)
 
     # --- 6. Assign y positions: one integer per row, groups stacked with gaps ---
     # to_plot is already sorted (section 5); row order = display order. We assign _VAR_INDEX
@@ -291,7 +291,7 @@ def _plot_effect(insumstats,
         ax1, ax2, ax3 = axes[0], axes[1], axes[2]
 
     # --- 8. Main panel: effect-size scatter, error bars, zero line, y-tick labels ---
-    log.write(" -Plotting effect panel with {} variants...".format(len(to_plot)), verbose=verbose)
+    log.write(f" -Plotting effect panel with {len(to_plot)} variants...", verbose=verbose)
     sns.scatterplot(data=to_plot, x=x, y=y, ax=ax1, zorder=100, **{**args, **scatter_kwargs})
     ax1.errorbar(y=to_plot[y], x=to_plot[x], xerr=to_plot[se], **err_kwargs)
     ax1.axvline(x=0, linestyle="dashed", c="grey")
@@ -299,10 +299,8 @@ def _plot_effect(insumstats,
     y_labels = to_plot[y_name].astype(str).tolist()
     if len(y_ticks) != len(y_labels):
         raise ValueError(
-            "Tick/label length mismatch ({} ticks vs {} labels). "
-            "Ensure y_column(s) {} have one value per row.".format(
-                len(y_ticks), len(y_labels), y_name if isinstance(y_name, str) else list(y_name)
-            )
+            f"Tick/label length mismatch ({len(y_ticks)} ticks vs {len(y_labels)} labels). "
+            f"Ensure y_column(s) {y_name if isinstance(y_name, str) else list(y_name)} have one value per row."
         )
     ax1.set_yticks(y_ticks, labels=y_labels, fontsize=fontsize, family=font_family)
     ax1.set_ylabel(ylabel, fontsize=fontsize, family=font_family)
@@ -327,7 +325,7 @@ def _plot_effect(insumstats,
     if legend_mode == 1 and len(legend_titles) > 0:
         sns.move_legend(
                 ax1, "upper left",
-                bbox_to_anchor=(1, 1), title=None, frameon=False, bbox_transform = axes[-1].transAxes, 
+                bbox_to_anchor=(1, 1), title=None, frameon=False, bbox_transform = axes[-1].transAxes,
                 title_fontproperties={"size":fontsize,"family":font_family},
                 prop={"size": fontsize, "family": font_family}
         )
@@ -354,18 +352,17 @@ def _plot_effect(insumstats,
     #        new_labels.append(str(i).ljust(max_string_len))
     #    print(new_labels)
     #    new_labels_i.append(len(labels))
-#
     #    legend_rows = []
     #    #new_labels_i[index+1] - i
     #    for index, i in enumerate(new_labels_i):
     #        if index<len(new_labels_i)-1:
-    #            legend_row = ax1.legend(labels = new_labels[i:new_labels_i[index+1]],  
+    #            legend_row = ax1.legend(labels = new_labels[i:new_labels_i[index+1]],
     #                                    handles= handles[i:new_labels_i[index+1]],
-    #                                    loc="lower left", 
-    #                                    bbox_to_anchor=(-0.2, 1.02 + 0.05*index), 
-    #                                    ncol=max_col, 
-    #                                    scatterpoints=1, 
-    #                                    title=None, 
+    #                                    loc="lower left",
+    #                                    bbox_to_anchor=(-0.2, 1.02 + 0.05*index),
+    #                                    ncol=max_col,
+    #                                    scatterpoints=1,
+    #                                    title=None,
     #                                    borderpad=0,
     #                                    handletextpad=0.1,
     #                                    handlelength=0.7,
@@ -379,21 +376,21 @@ def _plot_effect(insumstats,
 
 
 
-    ax1.tick_params(axis='x', 
+    ax1.tick_params(axis="x",
                         labelsize=fontsize,
-                        labelfontfamily=font_family) 
-    
+                        labelfontfamily=font_family)
+
     if effect_label is not None:
         ax1.set_xlabel(effect_label, fontsize=fontsize, family=font_family)
-        ax1.tick_params(axis='x', 
+        ax1.tick_params(axis="x",
                         labelsize=fontsize,
                         labelfontfamily=font_family)
     if eaf_label is not None and eaf in to_plot.columns and ax2 is not None:
         ax2.set_xlabel(eaf_label, fontsize=fontsize, family=font_family)
-        ax2.tick_params(axis='x', labelsize=fontsize, labelfontfamily=font_family)
+        ax2.tick_params(axis="x", labelsize=fontsize, labelfontfamily=font_family)
     if snpr2_label is not None and snpr2 in to_plot.columns and ax3 is not None:
         ax3.set_xlabel(snpr2_label, fontsize=fontsize, family=font_family)
-        ax3.tick_params(axis='x', labelsize=fontsize, labelfontfamily=font_family)
+        ax3.tick_params(axis="x", labelsize=fontsize, labelfontfamily=font_family)
     save_figure(fig, save, keyword="forest", save_kwargs=save_kwargs, log=log, verbose=verbose)
     log.write("Finished effect-size plot successfully.", verbose=verbose)
 

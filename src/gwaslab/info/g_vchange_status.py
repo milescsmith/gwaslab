@@ -7,27 +7,28 @@ Status codes are 7-digit integers where:
 
 All functions use integer arithmetic for optimal performance.
 """
-from typing import Union, Tuple, Optional, List
-import pandas as pd
 import re
+from typing import List, Optional, Tuple, Union
+
+import pandas as pd
 
 # Constants
 STATUS_CODE_LENGTH = 7
 STATUS_CATEGORIES = [
-    str(j + i) 
-    for j in [1300000, 1800000, 1900000, 3800000, 3900000, 9700000, 9800000, 9900000] 
+    str(j + i)
+    for j in [1300000, 1800000, 1900000, 3800000, 3900000, 9700000, 9800000, 9900000]
     for i in range(0, 100000)
 ]
 
 # Integer dtype constants for type checking
-INTEGER_DTYPES = ['int64', 'Int64', 'int32', 'Int32']
+INTEGER_DTYPES = ["int64", "Int64", "int32", "Int32"]
 
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
 
-def _normalize_to_integer_series(status: Union[int, pd.Series, List[int]]) -> pd.Series:
+def _normalize_to_integer_series(status: Union[int, pd.Series, list[int]]) -> pd.Series:
     """
     Convert status to integer Series, handling various input types.
     
@@ -44,15 +45,15 @@ def _normalize_to_integer_series(status: Union[int, pd.Series, List[int]]) -> pd
     if isinstance(status, pd.Series):
         if status.dtype in INTEGER_DTYPES:
             return status
-        elif status.dtype.name == 'category':
+        elif status.dtype.name == "category":
             # Convert categorical to string first, then to nullable integer
             # Check if there are NaN values
             status_str = status.astype(str)
-            has_na = status_str.isin(['nan', 'NaN', '<NA>', 'None']).any() or status.isna().any()
+            has_na = status_str.isin(["nan", "NaN", "<NA>", "None"]).any() or status.isna().any()
             if has_na:
-                return status_str.replace(['nan', 'NaN', '<NA>', 'None'], pd.NA).astype('Int64')
+                return status_str.replace(["nan", "NaN", "<NA>", "None"], pd.NA).astype("Int64")
             else:
-                return status_str.astype('Int64')
+                return status_str.astype("Int64")
         else:
             # Check if there are NaN or non-finite values
             has_na = status.isna().any()
@@ -66,28 +67,28 @@ def _normalize_to_integer_series(status: Union[int, pd.Series, List[int]]) -> pd
                 except (TypeError, ValueError):
                     # If check fails, assume we might have non-finite values
                     has_non_finite = True
-            
+
             if has_na or has_non_finite:
                 # Use nullable integer type to preserve NaN values
-                return status.astype('Int64')
+                return status.astype("Int64")
             else:
                 # No NaN values, can use regular int
                 try:
                     return status.astype(int)
                 except (ValueError, TypeError, pd.errors.IntCastingNaNError):
                     # Fallback to nullable integer if conversion fails
-                    return status.astype('Int64')
+                    return status.astype("Int64")
     else:
         # For non-Series input, convert to Series first
         status_series = pd.Series(status)
         has_na = status_series.isna().any()
         if has_na:
-            return status_series.astype('Int64')
+            return status_series.astype("Int64")
         else:
             try:
                 return status_series.astype(int)
             except (ValueError, TypeError, pd.errors.IntCastingNaNError):
-                return status_series.astype('Int64')
+                return status_series.astype("Int64")
 
 
 def ensure_status_int(sumstats: pd.DataFrame, status_col: str = "STATUS") -> pd.DataFrame:
@@ -107,17 +108,17 @@ def ensure_status_int(sumstats: pd.DataFrame, status_col: str = "STATUS") -> pd.
         DataFrame with STATUS column as Int64
     """
     if status_col in sumstats.columns:
-        if sumstats[status_col].dtype.name == 'category':
-            sumstats[status_col] = sumstats[status_col].astype(str).astype('Int64')
-        elif sumstats[status_col].dtype not in ['int64', 'Int64', 'int32', 'Int32']:
-            sumstats[status_col] = sumstats[status_col].astype('Int64')
+        if sumstats[status_col].dtype.name == "category":
+            sumstats[status_col] = sumstats[status_col].astype(str).astype("Int64")
+        elif sumstats[status_col].dtype not in ["int64", "Int64", "int32", "Int32"]:
+            sumstats[status_col] = sumstats[status_col].astype("Int64")
         else:
             # Ensure it's Int64 (nullable integer)
-            sumstats[status_col] = sumstats[status_col].astype('Int64')
+            sumstats[status_col] = sumstats[status_col].astype("Int64")
     return sumstats
 
 
-def _calculate_powers(digit: int) -> Tuple[int, int]:
+def _calculate_powers(digit: int) -> tuple[int, int]:
     """
     Calculate powers of 10 for extracting/replacing digits at position.
     
@@ -156,7 +157,7 @@ def _extract_digit(status_int: Union[int, pd.Series], digit: int) -> Union[int, 
     return (status_int // power_right) % 10
 
 
-def _parse_pattern_for_digit_constraints(pattern: str) -> Optional[List[Tuple[int, List[int]]]]:
+def _parse_pattern_for_digit_constraints(pattern: str) -> list[tuple[int, list[int]]] | None:
     """
     Parse regex pattern to extract digit position constraints.
     
@@ -170,44 +171,44 @@ def _parse_pattern_for_digit_constraints(pattern: str) -> Optional[List[Tuple[in
     tuple or None
         (digit_positions, allowed_digits_list) if parseable, None otherwise
     """
-    pattern_clean = pattern.strip('^$')
-    
+    pattern_clean = pattern.strip("^$")
+
     # Check for literal digits (not in character classes) - if found, fall back to string matching
     # This must be done BEFORE parsing, as literal digits can't be handled by digit-based matching
     # Split by character classes and check the last part for literal digits
-    parts = re.split(r'\[[0-9]+\]', pattern_clean)
+    parts = re.split(r"\[[0-9]+\]", pattern_clean)
     if len(parts) > 1:
         # Check the last part (after the last character class)
         last_part = parts[-1]
         # Remove all wildcards from the last part
-        remaining = re.sub(r'\\\\w', '', last_part)
+        remaining = re.sub(r"\\\\w", "", last_part)
         # If there are any digits remaining, we have literal digits
-        if remaining and re.search(r'[0-9]', remaining):
+        if remaining and re.search(r"[0-9]", remaining):
             # Has literal digits that can't be parsed - return None to force string matching
             return None
-    
-    digit_matches = list(re.finditer(r'\[([0-9]+)\]', pattern_clean))
-    wildcard_parts = re.split(r'\[[0-9]+\]', pattern_clean)
-    
+
+    digit_matches = list(re.finditer(r"\[([0-9]+)\]", pattern_clean))
+    wildcard_parts = re.split(r"\[[0-9]+\]", pattern_clean)
+
     if not digit_matches or len(wildcard_parts) != len(digit_matches) + 1:
         return None
-    
+
     constraints = []
     pos = 0
-    
-    for wildcard, match in zip(wildcard_parts, digit_matches):
+
+    for wildcard, match in zip(wildcard_parts, digit_matches, strict=False):
         # Count wildcard patterns (\w)
-        wildcard_count = len(re.findall(r'\\w', wildcard))
+        wildcard_count = len(re.findall(r"\\w", wildcard))
         pos += wildcard_count
         digit_pos = pos + 1
-        
+
         if digit_pos < 1 or digit_pos > STATUS_CODE_LENGTH:
             return None
-        
+
         allowed_digits = [int(d) for d in match.group(1)]
         constraints.append((digit_pos, allowed_digits))
         pos = digit_pos
-    
+
     return constraints
 
 
@@ -215,7 +216,7 @@ def _parse_pattern_for_digit_constraints(pattern: str) -> Optional[List[Tuple[in
 # Core Status Manipulation Functions
 # ============================================================================
 
-def status_match(status: Union[int, pd.Series], digit: int, to_match: Union[int, List[int]]) -> Union[bool, pd.Series]:
+def status_match(status: Union[int, pd.Series], digit: int, to_match: Union[int, list[int]]) -> Union[bool, pd.Series]:
     """
     Check if a specific digit in status code(s) matches given value(s).
     
@@ -243,7 +244,7 @@ def status_match(status: Union[int, pd.Series], digit: int, to_match: Union[int,
     status_int = _normalize_to_integer_series(status)
     power_left, power_right = _calculate_powers(digit)
     middle = (status_int // power_right) % 10
-    
+
     if len(to_match) == 1:
         result = middle == to_match[0]
         # Ensure NaN values in status result in False (not NaN) in the boolean result
@@ -259,7 +260,7 @@ def status_match(status: Union[int, pd.Series], digit: int, to_match: Union[int,
         return result
 
 
-def vchange_status(status: Union[int, pd.Series], digit: int, before: Union[str, List[str]], after: Union[str, List[str]]) -> Union[int, pd.Series]:
+def vchange_status(status: Union[int, pd.Series], digit: int, before: Union[str, list[str]], after: Union[str, list[str]]) -> Union[int, pd.Series]:
     """
     Change specific digits in status code(s) based on mapping.
     
@@ -289,40 +290,40 @@ def vchange_status(status: Union[int, pd.Series], digit: int, before: Union[str,
     """
     # Normalize inputs
     if isinstance(before, list):
-        before = ''.join(str(b) for b in before)
+        before = "".join(str(b) for b in before)
     if isinstance(after, list):
-        after = ''.join(str(a) for a in after)
-    
+        after = "".join(str(a) for a in after)
+
     before_str = str(before)
     after_str = str(after)
-    
+
     # Early exit if no changes needed
     if before_str == after_str:
         return status if isinstance(status, pd.Series) else pd.Series(status)
-    
+
     # Build sparse mapping dictionary (only non-identity mappings)
     mapping = {}
-    for b_char, a_char in zip(before_str, after_str):
+    for b_char, a_char in zip(before_str, after_str, strict=False):
         b_int, a_int = int(b_char), int(a_char)
         if b_int != a_int:
             mapping[b_int] = a_int
-    
+
     # Early exit if no actual mappings
     if not mapping:
         return status if isinstance(status, pd.Series) else pd.Series(status)
-    
+
     # Convert status to integer Series
     status_int = _normalize_to_integer_series(status)
-    
+
     # Extract components
     power_left, power_right = _calculate_powers(digit)
     prefix = status_int // power_left
     middle = _extract_digit(status_int, digit)
     suffix = status_int % power_right
-    
+
     # Apply mapping
-    middle_replaced = middle.map(mapping).fillna(middle).astype('int64')
-    
+    middle_replaced = middle.map(mapping).fillna(middle).astype("int64")
+
     # Reconstruct status code
     result = prefix * power_left + middle_replaced * power_right + suffix
     return result
@@ -353,16 +354,16 @@ def set_status_digit(status: Union[int, pd.Series], digit: int, value: Union[int
     """
     # Preserve input type (scalar vs Series)
     is_scalar = not isinstance(status, pd.Series)
-    
+
     if is_scalar:
         status_int = int(status)
     else:
         status_int = _normalize_to_integer_series(status)
-    
+
     value = int(value)
-    
+
     power_left, power_right = _calculate_powers(digit)
-    
+
     if is_scalar:
         prefix = status_int // power_left
         suffix = status_int % power_right
@@ -400,16 +401,16 @@ def copy_status(from_status: Union[int, pd.Series], to_status: Union[int, pd.Ser
     """
     from_status_int = _normalize_to_integer_series(from_status)
     to_status_int = _normalize_to_integer_series(to_status)
-    
+
     power_left, power_right = _calculate_powers(digit)
-    
+
     # Extract digit from source
     from_digit = _extract_digit(from_status_int, digit)
-    
+
     # Extract prefix and suffix from target
     to_prefix = to_status_int // power_left
     to_suffix = to_status_int % power_right
-    
+
     # Reconstruct with copied digit
     result = to_prefix * power_left + from_digit * power_right + to_suffix
     return result
@@ -485,7 +486,7 @@ def get_status_suffix(status: Union[int, pd.Series], digit: int) -> Union[int, p
 # Pattern Matching Functions
 # ============================================================================
 
-def match_status(status: Union[int, pd.Series, List[int]], pattern: str, na: bool = False) -> Union[bool, pd.Series]:
+def match_status(status: Union[int, pd.Series, list[int]], pattern: str, na: bool = False) -> Union[bool, pd.Series]:
     """
     Match status codes against a regex pattern using integer arithmetic.
     
@@ -521,14 +522,14 @@ def match_status(status: Union[int, pd.Series, List[int]], pattern: str, na: boo
     # Normalize input to Series
     if not isinstance(status, pd.Series):
         status = pd.Series(status)
-    
+
     # Fast path: if already integer, use directly
     if status.dtype in INTEGER_DTYPES:
         status_int = status
     else:
         # Handle Categorical or other dtypes
         status_str = status.astype(str)
-        
+
         # Try to convert to integer, fall back to string matching if fails
         try:
             status_int = status_str.astype(int)
@@ -537,22 +538,22 @@ def match_status(status: Union[int, pd.Series, List[int]], pattern: str, na: boo
             status_str = status_str.str.zfill(STATUS_CODE_LENGTH)
             pat = f"^{pattern}$"
             return status_str.str.match(pat, na=na)
-    
+
     # Try to parse pattern for digit-based matching (faster)
     constraints = _parse_pattern_for_digit_constraints(pattern)
-    
+
     if constraints:
         # Use integer arithmetic for digit-based matching
         result = pd.Series(True, index=status_int.index, dtype=bool)
-        
+
         for digit_pos, allowed_digits in constraints:
             digit_match = status_match(status_int, digit_pos, allowed_digits)
             result = result & digit_match
-        
+
         if na:
             result = result.fillna(False)
         return result
-    
+
     # Fall back to string matching for complex patterns
     status_str = status_int.astype(str).str.zfill(STATUS_CODE_LENGTH)
     pat = f"^{pattern}$"

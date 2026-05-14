@@ -295,8 +295,8 @@ USAGE RULES AND PRIORITIES
     - Use banned_keys for fine-grained control over nested dict args
 """
 import inspect
-import os
 import json
+import os
 
 
 def _parse_plot_mode(plot_spec):
@@ -347,7 +347,7 @@ class VizParamsManager:
     Organizes and exposes relevant parameters for `viz_plot_*` functions.
     Supports per-plot and per-mode registrations of allowed keys and default values.
     """
-    
+
     def __init__(self):
         self._store = {}  # Object-level presets: {key:mode -> {params}}
         self._registry = {}  # Registry: {key:mode -> {allowed: set, defaults: dict, banned_keys: dict}}
@@ -355,20 +355,20 @@ class VizParamsManager:
         self._arg_map = {}  # Argument definitions: {name -> {plots: set, no_plots: set, default, ctx_defaults}}
         self._arg_desc = {}  # Argument descriptions: {name -> desc}
         self._arg_ctx_desc = {}  # Context-specific descriptions: {name -> {key:mode -> desc}}
-    
+
     def _km(self, key, mode):
         """Get registry key for plot:mode."""
         return key if mode is None else f"{key}:{mode}"
-    
+
     def _get_registry_entry(self, key, mode):
         """Get or create registry entry for plot:mode."""
         km = self._km(key, mode)
         if km not in self._registry:
             self._registry[km] = {"allowed": set(), "defaults": {}, "banned_keys": {}}
         return self._registry[km]
-    
+
     # ========== Core Registration Methods ==========
-    
+
     def register(self, key, allowed=None, defaults=None, mode=None):
         """Register allowed keys and defaults for a plot and optional mode."""
         entry = self._get_registry_entry(key, mode)
@@ -376,7 +376,7 @@ class VizParamsManager:
             entry["allowed"] = set(allowed)
         if defaults is not None:
             entry["defaults"].update(defaults)
-    
+
     def set(self, key, params, mode=None):
         """Set object-level presets for a plot/mode, replacing existing values."""
         km = self._km(key, mode)
@@ -386,7 +386,7 @@ class VizParamsManager:
             self._store[km] = dict(params)
         else:
             raise TypeError("params must be a dict or None")
-    
+
     def update(self, key, params, mode=None):
         """Update object-level presets for a plot/mode."""
         km = self._km(key, mode)
@@ -394,11 +394,11 @@ class VizParamsManager:
             self._store.setdefault(km, {}).update(params)
         elif params is not None:
             raise TypeError("params must be a dict or None")
-    
+
     def get(self, key, mode=None):
         """Get object-level presets for a plot/mode."""
         return dict(self._store.get(self._km(key, mode), {}))
-    
+
     def defaults(self, key, mode=None):
         """Get registered default values for a plot/mode (inherits from plot-level)."""
         base = {}
@@ -410,7 +410,7 @@ class VizParamsManager:
             if mode_key in self._registry:
                 base.update(self._registry[mode_key].get("defaults", {}))
         return base
-    
+
     def allowed(self, key, mode=None):
         """Get the registered allowed key set for a plot/mode."""
         km = self._km(key, mode)
@@ -421,9 +421,9 @@ class VizParamsManager:
             if base_km in self._registry:
                 return self._registry[base_km].get("allowed")
         return None
-    
+
     # ========== Merge and Filter Methods ==========
-    
+
     def merge(self, key, override, mode=None):
         """Merge defaults, object presets, and call-time kwargs.
         
@@ -460,15 +460,15 @@ class VizParamsManager:
                         f"The parameter '{param_key}' is deprecated. "
                         f"Did you mean '{suggested_name}'? Please use '{suggested_name}' instead."
                     )
-        
+
         base = self.defaults(key, mode)
         base.update(self.get(key, mode))
         if override is None:
             return base
-        
+
         merged = dict(base)
         filtered_override = self._apply_no_plots_filter(override, key, mode)
-        
+
         # Remove args that were in override but removed by _apply_no_plots_filter
         # These are banned args without defaults - they should not be in the final result
         for k in list(merged.keys()):
@@ -476,7 +476,7 @@ class VizParamsManager:
                 # This arg was removed by _apply_no_plots_filter (banned with no default)
                 # Remove it from merged to ensure it doesn't pass through
                 merged.pop(k, None)
-        
+
         # Update merged dict with filtered override values
         # Preserve defaults when override value is None (don't override defaults with None)
         for k, v in filtered_override.items():
@@ -485,9 +485,9 @@ class VizParamsManager:
             # If override value is None and no default exists, use None
             if v is not None or k not in merged:
                 merged[k] = v
-        
+
         return merged
-    
+
     def filter(self, func, params, key=None, mode=None, log=None, verbose=True):
         """Filter merged params by whitelist or function signature.
         
@@ -524,11 +524,11 @@ class VizParamsManager:
         """
         # Replace banned args with defaults
         params = self._apply_no_plots_filter(params, key, mode)
-        
+
         # Get defaults to preserve them after filtering
         # This ensures registered defaults are available even if not in params
         plot_defaults = self.defaults(key, mode)
-        
+
         # Helper to check if an arg is banned (no_plots)
         def is_banned_arg(arg_name):
             if not self._arg_map or key is None:
@@ -538,7 +538,7 @@ class VizParamsManager:
                 p_key, m_key = key, mode
                 return _is_banned(p_key, m_key, arg_def.get("no_plots", set()))
             return False
-        
+
         allowed_keys = self.allowed(key, mode)
         if allowed_keys is not None:
             # Whitelist-based filtering: only allowed keys pass through
@@ -552,7 +552,7 @@ class VizParamsManager:
                 if arg_name in allowed_keys and arg_name not in filtered and not is_banned_arg(arg_name):
                     filtered[arg_name] = default_val
             return filtered
-        
+
         # Signature-based filtering: use function signature to determine valid parameters
         filtered = self._filter_by_signature(func, params, key, log, verbose)
         func_signature = inspect.signature(func)
@@ -563,7 +563,7 @@ class VizParamsManager:
             if arg_name in func_param_names and arg_name not in filtered and not is_banned_arg(arg_name):
                 filtered[arg_name] = default_val
         return filtered
-    
+
     def _apply_no_plots_filter(self, params, key, mode):
         """Replace banned arguments with their default values.
         
@@ -572,11 +572,11 @@ class VizParamsManager:
         """
         if not self._arg_map or key is None:
             return params
-        
+
         filtered = dict(params)
         plot_defaults = self.defaults(key, mode)
         p_key, m_key = key, mode
-        
+
         for arg_name in list(filtered.keys()):
             # Check exact match first
             arg_def = self._arg_map.get(arg_name)
@@ -589,10 +589,10 @@ class VizParamsManager:
                 else:
                     filtered.pop(arg_name, None)
                 continue
-            
+
             # Check if arg_name has numeric suffix and base is banned
             if arg_name:
-                base = arg_name.rstrip('0123456789')
+                base = arg_name.rstrip("0123456789")
                 if base != arg_name:  # Has numeric suffix
                     base_def = self._arg_map.get(base)
                     if base_def and _is_banned(p_key, m_key, base_def.get("no_plots", set())):
@@ -603,23 +603,23 @@ class VizParamsManager:
                             filtered[arg_name] = base_def["default"]
                         else:
                             filtered.pop(arg_name, None)
-        
+
         return filtered
-    
+
     def _add_banned_defaults(self, filtered, allowed_keys, key, mode):
         """Add default values for banned args that have defaults."""
         if not self._arg_map:
             return
-        
+
         plot_defaults = self.defaults(key, mode)
         p_key, m_key = key, mode
-        
+
         for arg_name, default_val in plot_defaults.items():
             if arg_name not in allowed_keys and arg_name not in filtered:
                 arg_def = self._arg_map.get(arg_name)
                 if arg_def and _is_banned(p_key, m_key, arg_def.get("no_plots", set())):
                     filtered[arg_name] = default_val
-    
+
     def _filter_by_whitelist(self, params, allowed_keys, key, mode, log, verbose):
         """Filter parameters using a whitelist and remove banned subkeys.
         
@@ -627,60 +627,60 @@ class VizParamsManager:
         Strips all trailing digits (e.g., "highlight10" → "highlight").
         """
         target_name = key or "unknown_plot"
-        
+
         def is_allowed_key(arg_name):
             if arg_name in allowed_keys:
                 return True
             # Check if arg ends with digits and base name is allowed
             if arg_name:
                 # Strip all trailing digits
-                base = arg_name.rstrip('0123456789')
+                base = arg_name.rstrip("0123456789")
                 if base != arg_name and base in allowed_keys:
                     return True
             return False
-        
+
         filtered_params = {k: v for k, v in params.items() if is_allowed_key(k)}
         dropped_keys = [k for k in params.keys() if not is_allowed_key(k)]
-        
+
         if log and dropped_keys:
             log.write(f"Filtered out args for `{target_name}`: {', '.join(dropped_keys)}", verbose=verbose)
-        
+
         # Remove banned nested sub-keys
         entry = self._get_registry_entry(key, mode)
         banned_subkeys_map = entry.get("banned_keys", {})
         removed_subkey_paths = []
-        
+
         for arg_name, banned_list in banned_subkeys_map.items():
             if arg_name in filtered_params and isinstance(filtered_params[arg_name], dict):
                 for subkey in banned_list:
                     if subkey in filtered_params[arg_name]:
                         filtered_params[arg_name].pop(subkey, None)
                         removed_subkey_paths.append(f"{arg_name}.{subkey}")
-        
+
         if log and removed_subkey_paths:
             log.write(f"Filtered out kwargs sub-keys for `{target_name}`: {', '.join(removed_subkey_paths)}", verbose=verbose)
-        
+
         return filtered_params
-    
+
     def _filter_by_signature(self, func, params, key, log, verbose):
         """Filter parameters based on the target function's signature."""
         func_signature = inspect.signature(func)
-        
+
         # If function accepts **kwargs, pass through unchanged
         if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in func_signature.parameters.values()):
             return params
-        
+
         func_param_names = set(func_signature.parameters.keys())
         target_name = key or func.__name__
-        
+
         filtered_params = {k: v for k, v in params.items() if k in func_param_names}
         dropped_keys = [k for k in params.keys() if k not in func_param_names]
-        
+
         if log and dropped_keys:
             log.write(f"Filtered out args for `{target_name}`: {', '.join(dropped_keys)}", verbose=verbose)
-        
+
         return filtered_params
-    
+
     def public(self, key, mode=None):
         """Return exposed parameters (merged and filtered) for a plot/mode."""
         merged = self.merge(key, None, mode)
@@ -688,56 +688,56 @@ class VizParamsManager:
         if allowed is None:
             return merged
         return {k: v for k, v in merged.items() if k in allowed}
-    
+
     # ========== Argument Registration Methods ==========
-    
+
     def register_arg(self, name, plots=None, default=None, no_plots=None):
         """Register a single argument with plots and global default."""
         entry = self._arg_map.setdefault(name, {"plots": set(), "no_plots": set(), "default": None})
-        
+
         if plots:
             for p in plots:
                 parsed = _parse_plot_mode(p)
                 if parsed:
                     entry["plots"].add(parsed)
-        
+
         if no_plots:
             for p in no_plots:
                 parsed = _parse_plot_mode(p)
                 if parsed:
                     entry["no_plots"].add(parsed)
-        
+
         if default is not None:
             entry["default"] = default
-        
+
         self._arg_map[name] = entry
-    
+
     def attach_arg(self, name, key, mode=None):
         """Attach an existing argument to an additional plot/mode."""
         entry = self._arg_map.setdefault(name, {"plots": set(), "default": None})
         entry["plots"].add((key, mode))
-    
+
     def args_for_plot(self, key, mode=None):
         """List argument names associated with a given plot/mode."""
         return {arg for arg, entry in self._arg_map.items() if (key, mode) in entry.get("plots", set())}
-    
+
     # ========== Compilation Method ==========
-    
+
     def compile_from_kwargs(self, merge=True):
         """Compile plot/mode allowed lists and defaults from registered args."""
         # Step 1: Collect known (plot, mode) pairs
         known_pairs = self._collect_known_plot_mode_pairs()
-        
+
         # Step 2: Compile registry from args
         compiled_registry = self._compile_registry_from_args(known_pairs)
-        
+
         # Step 3: Merge into main registry
         self._merge_compiled_registry(compiled_registry, merge)
-    
+
     def _collect_known_plot_mode_pairs(self):
         """Collect all known (plot, mode) pairs from registry and arg_map."""
         known_pairs = set()
-        
+
         # From existing registry
         for registry_key in self._registry.keys():
             if ":" in registry_key:
@@ -745,7 +745,7 @@ class VizParamsManager:
                 known_pairs.add((plot_name, mode_name))
             else:
                 known_pairs.add((registry_key, None))
-        
+
         # From argument map definitions
         for entry in self._arg_map.values():
             for plot_name, mode_name in entry.get("plots", set()):
@@ -753,13 +753,13 @@ class VizParamsManager:
                     known_pairs.add((plot_name, mode_name))
                 elif plot_name != "all":
                     known_pairs.add((plot_name, None))
-        
+
         return known_pairs
-    
+
     def _compile_registry_from_args(self, known_pairs):
         """Compile registry entries from argument definitions."""
         compiled_registry = {}
-        
+
         def add_to_registry(plot_name, mode_name, arg_name, default_value):
             km = self._km(plot_name, mode_name)
             if km not in compiled_registry:
@@ -767,11 +767,11 @@ class VizParamsManager:
             compiled_registry[km]["allowed"].add(arg_name)
             if default_value is not None:
                 compiled_registry[km]["defaults"][arg_name] = default_value
-        
+
         for arg_name, arg_entry in self._arg_map.items():
             global_default = arg_entry.get("default")
             no_plots_set = arg_entry.get("no_plots", set())
-            
+
             for plot_name, mode_name in arg_entry.get("plots", set()):
                 if mode_name == "*":
                     # Wildcard: apply to all known modes for this plot
@@ -781,17 +781,16 @@ class VizParamsManager:
                         targets = [(k, m) for (k, m) in known_pairs if k == plot_name]
                         if (plot_name, None) not in targets:
                             targets.append((plot_name, None))
-                    
+
                     for p, m in targets:
                         if not _is_banned(p, m, no_plots_set):
                             add_to_registry(p, m, arg_name, global_default)
-                else:
-                    # Explicit mapping
-                    if not _is_banned(plot_name, mode_name, no_plots_set):
-                        add_to_registry(plot_name, mode_name, arg_name, global_default)
-        
+                # Explicit mapping
+                elif not _is_banned(plot_name, mode_name, no_plots_set):
+                    add_to_registry(plot_name, mode_name, arg_name, global_default)
+
         return compiled_registry
-    
+
     def _merge_compiled_registry(self, compiled_registry, merge):
         """Merge compiled registry into main registry.
 
@@ -813,27 +812,27 @@ class VizParamsManager:
                     "allowed": set(compiled_data["allowed"]),
                     "defaults": dict(compiled_data["defaults"])
                 }
-    
+
     # ========== Description Methods ==========
-    
+
     def set_arg_desc(self, name, desc):
         """Set human-readable description for an argument."""
         self._arg_desc[name] = str(desc)
-    
+
     def get_arg_desc(self, name):
         """Get description for an argument, or empty string if missing."""
         return self._arg_desc.get(name, "")
-    
+
     def set_arg_desc_for(self, name, key, mode, desc):
         """Set plot/mode-specific description for an argument."""
         km = self._km(key, mode)
         self._arg_ctx_desc.setdefault(name, {})[km] = str(desc)
-    
+
     def get_arg_desc_for(self, name, key, mode):
         """Get plot/mode-specific description for an argument with fallback."""
         km = self._km(key, mode)
         return self._arg_ctx_desc.get(name, {}).get(km) or self.get_arg_desc(name)
-    
+
     def na_kwargs(self):
         """List argument names not attached to any plot/mode."""
         return sorted([n for n, e in self._arg_map.items() if len(e.get("plots", set())) == 0])
@@ -852,15 +851,15 @@ def load_viz_config(pm, path=None, merge=True):
     """
     # Step 1: Load Registry (Base Layer)
     _load_registry_file(pm)
-    
+
     # Step 2: Load Args (Update Layer)
     if path is None:
         path = os.path.join(os.path.dirname(__file__), "viz_aux_params.txt")
-    
-    with open(path, "r", encoding="utf-8") as f:
+
+    with open(path, encoding="utf-8") as f:
         config_data = json.loads(f.read())
     raw_args = config_data.get("args", {})
-    
+
     # Register all args
     for arg_name, arg_entry in raw_args.items():
         pm.register_arg(
@@ -869,30 +868,30 @@ def load_viz_config(pm, path=None, merge=True):
             default=arg_entry.get("default"),
             no_plots=arg_entry.get("no_plots")
         )
-        
+
         # Descriptions
         pm._arg_doc[arg_name] = bool(arg_entry.get("add_to_docstring", False))
         if "desc" in arg_entry:
             pm.set_arg_desc(arg_name, arg_entry["desc"])
-        
+
         # Context descriptions
         for ctx_key, desc_text in arg_entry.get("ctx_desc", {}).items():
             p_name, m_name = _parse_context_key(ctx_key)
             pm.set_arg_desc_for(arg_name, p_name, m_name, desc_text)
-        
+
         # Context defaults
         if "ctx_defaults" in arg_entry:
             pm._arg_map[arg_name]["ctx_defaults"] = arg_entry["ctx_defaults"]
-    
+
     # Step 3: Compile and Update Registry
     pm.compile_from_kwargs(merge=merge)
-    
+
     # Step 4: Apply ctx_defaults
     _apply_ctx_defaults(pm, raw_args)
-    
+
     # Step 5: Apply no_plots (ban args but keep defaults)
     _apply_no_plots(pm)
-    
+
     # Step 6: Apply banned_keys
     _apply_banned_keys(pm, raw_args)
 
@@ -902,12 +901,12 @@ def _load_registry_file(pm):
     registry_file_path = os.path.join(os.path.dirname(__file__), "viz_aux_params_registry.txt")
     if not os.path.exists(registry_file_path):
         return
-    
+
     try:
-        with open(registry_file_path, "r", encoding="utf-8") as rf:
+        with open(registry_file_path, encoding="utf-8") as rf:
             data = json.loads(rf.read())
             registry_source = data.get("registry", {})
-            
+
             # First pass: Load all entries without inheritance
             raw_entries = {}
             for key, entry in registry_source.items():
@@ -915,26 +914,26 @@ def _load_registry_file(pm):
                     plot_name, mode_name = key.split(":", 1)
                 else:
                     plot_name, mode_name = key, None
-                
+
                 raw_entries[key] = {
                     "plot": plot_name,
                     "mode": mode_name,
                     "entry": dict(entry)  # Make a copy
                 }
-            
+
             # Second pass: Resolve inheritance
             resolved_entries = {}
             for key, raw_data in raw_entries.items():
                 resolved = _resolve_inheritance(key, raw_data["entry"], raw_entries, resolved_entries)
                 resolved_entries[key] = resolved
-            
+
             # Third pass: Apply resolved entries to registry
             for key, resolved_entry in resolved_entries.items():
                 raw_data = raw_entries[key]
                 plot_name = raw_data["plot"]
                 mode_name = raw_data["mode"]
                 target = pm._get_registry_entry(plot_name, mode_name)
-                
+
                 if "allowed" in resolved_entry and resolved_entry["allowed"] is not None:
                     target["allowed"] = set(resolved_entry["allowed"])
                 if "defaults" in resolved_entry:
@@ -966,22 +965,22 @@ def _resolve_inheritance(key, entry, raw_entries, resolved_entries, visited=None
     """
     if visited is None:
         visited = set()
-    
+
     if key in resolved_entries:
         return resolved_entries[key]
-    
+
     if key in visited:
         # Cycle detected, return entry without inheritance
         return dict(entry)
-    
+
     visited.add(key)
     resolved = dict(entry)  # Start with a copy
-    
+
     # Handle general inheritance (inherits all)
     if "inherit" in entry:
         parent_key = entry["inherit"]
         if parent_key in raw_entries:
-            parent_entry = _resolve_inheritance(parent_key, raw_entries[parent_key]["entry"], 
+            parent_entry = _resolve_inheritance(parent_key, raw_entries[parent_key]["entry"],
                                                raw_entries, resolved_entries, visited.copy())
             # Inherit allowed
             if "allowed" not in resolved or resolved["allowed"] is None:
@@ -991,14 +990,14 @@ def _resolve_inheritance(key, entry, raw_entries, resolved_entries, visited=None
                 parent_allowed = set(parent_entry.get("allowed", []))
                 child_allowed = set(resolved["allowed"])
                 resolved["allowed"] = list(parent_allowed | child_allowed)
-            
+
             # Inherit defaults
             if "defaults" not in resolved:
                 resolved["defaults"] = {}
             parent_defaults = parent_entry.get("defaults", {})
             # Merge defaults (child overrides parent)
             resolved["defaults"] = {**parent_defaults, **resolved["defaults"]}
-            
+
             # Inherit banned_keys
             if "banned_keys" not in resolved:
                 resolved["banned_keys"] = {}
@@ -1012,10 +1011,10 @@ def _resolve_inheritance(key, entry, raw_entries, resolved_entries, visited=None
                 else:
                     merged_banned[banned_key] = banned_list
             resolved["banned_keys"] = merged_banned
-        
+
         # Remove inherit directive from resolved entry
         resolved.pop("inherit", None)
-    
+
     # Handle specific inheritance directives
     if "allowed_inherit" in entry:
         parent_key = entry["allowed_inherit"]
@@ -1029,7 +1028,7 @@ def _resolve_inheritance(key, entry, raw_entries, resolved_entries, visited=None
                 # Merge: combine parent and child
                 resolved["allowed"] = list(set(parent_allowed) | set(resolved["allowed"]))
         resolved.pop("allowed_inherit", None)
-    
+
     if "banned_keys_inherit" in entry:
         parent_key = entry["banned_keys_inherit"]
         if parent_key in raw_entries:
@@ -1047,7 +1046,7 @@ def _resolve_inheritance(key, entry, raw_entries, resolved_entries, visited=None
                     merged_banned[banned_key] = banned_list
             resolved["banned_keys"] = merged_banned
         resolved.pop("banned_keys_inherit", None)
-    
+
     if "defaults_inherit" in entry:
         parent_key = entry["defaults_inherit"]
         if parent_key in raw_entries:
@@ -1059,7 +1058,7 @@ def _resolve_inheritance(key, entry, raw_entries, resolved_entries, visited=None
             # Merge defaults (child overrides parent)
             resolved["defaults"] = {**parent_defaults, **resolved["defaults"]}
         resolved.pop("defaults_inherit", None)
-    
+
     visited.remove(key)
     resolved_entries[key] = resolved
     return resolved
@@ -1070,11 +1069,11 @@ def _apply_ctx_defaults(pm, raw_args):
     for arg_name, arg_entry in raw_args.items():
         if "ctx_defaults" not in arg_entry:
             continue
-        
+
         for ctx_key, ctx_value in arg_entry["ctx_defaults"].items():
             ctx_plot, ctx_mode = _parse_context_key(ctx_key)
             entry = pm._registry.get(pm._km(ctx_plot, ctx_mode))
-            
+
             if entry and entry.get("allowed") and arg_name in entry["allowed"]:
                 entry["defaults"][arg_name] = ctx_value
 
@@ -1085,16 +1084,16 @@ def _apply_no_plots(pm):
         p_key, m_key = _parse_context_key(registry_key) if ":" in registry_key else (registry_key, None)
         entry = pm._registry[registry_key]
         current_allowed = entry.get("allowed", set())
-        
+
         if not current_allowed:
             continue
-        
+
         args_to_remove = set()
         for arg_name in current_allowed:
             arg_def = pm._arg_map.get(arg_name)
             if arg_def and _is_banned(p_key, m_key, arg_def.get("no_plots", set())):
                 args_to_remove.add(arg_name)
-        
+
         if args_to_remove:
             entry["allowed"] -= args_to_remove
             # Ensure defaults exist for banned args
@@ -1115,7 +1114,7 @@ def _apply_banned_keys(pm, raw_args):
             known_pairs.add((p, m))
         else:
             known_pairs.add((k, None))
-    
+
     for arg_name, arg_entry in raw_args.items():
         # Get target contexts for this arg
         normalized_plots = pm._arg_map.get(arg_name, {}).get("plots", set())
@@ -1128,7 +1127,7 @@ def _apply_banned_keys(pm, raw_args):
                     target_contexts.extend([(k, m) for (k, m) in known_pairs if k == p_name])
             else:
                 target_contexts.append((p_name, m_name))
-        
+
         # Apply global banned_keys
         global_banned = arg_entry.get("banned_keys", [])
         if global_banned:
@@ -1136,7 +1135,7 @@ def _apply_banned_keys(pm, raw_args):
                 entry = pm._get_registry_entry(p_name, m_name)
                 entry.setdefault("banned_keys", {}).setdefault(arg_name, [])
                 entry["banned_keys"][arg_name] = list(set(entry["banned_keys"][arg_name]) | set(global_banned))
-        
+
         # Apply context-specific banned_keys
         ctx_banned_map = arg_entry.get("ctx_banned_keys", {})
         if isinstance(ctx_banned_map, dict):

@@ -7,11 +7,10 @@ import sys
 from types import SimpleNamespace
 from typing import Optional
 
-
 SUPPORTED_OPERATIONS = ("merge", "miami")
 
 
-def _find_operation_token(argv: list[str]) -> Optional[tuple[str, int]]:
+def _find_operation_token(argv: list[str]) -> tuple[str, int] | None:
     """Find operation token position in argv."""
     for idx, tok in enumerate(argv):
         if tok in SUPPORTED_OPERATIONS:
@@ -83,7 +82,7 @@ def parse_pair_args(argv: list[str]) -> tuple[SimpleNamespace, str]:
     return SimpleNamespace(**merged), op
 
 
-def run_pair(argv: Optional[list[str]] = None) -> None:
+def run_pair(argv: list[str] | None = None) -> None:
     """Run pair workflow with operation-specific behavior."""
     if argv is None:
         argv = sys.argv[1:]

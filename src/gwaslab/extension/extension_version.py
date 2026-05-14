@@ -1,15 +1,18 @@
-from typing import Tuple, Dict, Any, Optional
-from gwaslab.info.g_Log import Log
+import os
 import shutil
 import subprocess
-import os
+from typing import Any, Dict, Optional, Tuple
+
 import numpy as np
 
+from gwaslab.info.g_Log import Log
+
+
 def _check_tool_availability(
-    tools: Tuple[str, ...] = ("tabix","bcftools"),
+    tools: tuple[str, ...] = ("tabix","bcftools"),
     log: Log = Log(),
     verbose: bool = True
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     results = {}
     for tool in tools:
         path = shutil.which(tool)
@@ -28,8 +31,8 @@ def _check_tool_availability(
     return results
 
 def _checking_plink_version(
-    plink: Optional[str] = None,
-    plink2: Optional[str] = None,
+    plink: str | None = None,
+    plink2: str | None = None,
     log: Log = Log(),
     verbose: bool = True
 ) -> Log:

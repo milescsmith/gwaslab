@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+
 import numpy as np
 import pandas as pd
 
@@ -9,8 +10,8 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-from gwaslab.util.util_in_meta import meta_analyze_multi
 from gwaslab.info.g_Log import Log
+from gwaslab.util.util_in_meta import meta_analyze_multi
 
 
 class TestMetaAnalyzeMulti(unittest.TestCase):
@@ -40,32 +41,32 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=2,
             random_effects=False
         )
-        
+
         # Check result is Sumstats object
         self.assertIsNotNone(result)
         self.assertIsNotNone(result.data)
-        
+
         # Check expected columns
         expected_cols = ["SNPID", "CHR", "POS", "EA", "NEA", "BETA", "SE", "P", "N", "EAF", "Z", "Q", "DOF", "DIRECTION"]
         for col in expected_cols:
             self.assertIn(col, result.data.columns, f"Column {col} not found")
-        
+
         # Check that variants present in both studies have DOF=1 (2 studies - 1 = 1)
         # DOF is initialized to -1, then +1 for each study with data
         # For 2 studies: DOF = -1 + 1 + 1 = 1
         variants_both = result.data[
-            (result.data["SNPID"] == "1:100:A:G") | 
-            (result.data["SNPID"] == "1:200:G:C") | 
+            (result.data["SNPID"] == "1:100:A:G") |
+            (result.data["SNPID"] == "1:200:G:C") |
             (result.data["SNPID"] == "2:300:T:C")
         ]
         if len(variants_both) > 0:
-            self.assertTrue(all(variants_both["DOF"] == 1), 
+            self.assertTrue(all(variants_both["DOF"] == 1),
                          f"Variants in both studies should have DOF=1 (2 studies - 1), got {variants_both['DOF'].values}")
-        
+
         # Check that variants only in study 1 have DOF=0 (1 study - 1 = 0)
         variants_one = result.data[result.data["SNPID"] == "1:500:A:T"]
         if len(variants_one) > 0:
-            self.assertEqual(variants_one["DOF"].iloc[0], 0, 
+            self.assertEqual(variants_one["DOF"].iloc[0], 0,
                             f"Variant only in study 1 should have DOF=0 (1 study - 1), got {variants_one['DOF'].iloc[0]}")
 
     def test_na_handling(self):
@@ -75,13 +76,13 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=2,
             random_effects=False
         )
-        
+
         # Variants with NA in study 2 should only use study 1 data
         variant_na = result.data[result.data["SNPID"] == "2:400:C:T"]
         if len(variant_na) > 0:
             # DOF should be 0 (1 study - 1 = 0, since study 2 has NA so not counted)
             dof_value = variant_na["DOF"].iloc[0]
-            self.assertEqual(dof_value, 0, 
+            self.assertEqual(dof_value, 0,
                             f"Variant with NA in study 2 should have DOF=0 (1 study - 1), got {dof_value}")
             self.assertEqual(variant_na["N"].iloc[0], 1000, "N should only come from study 1")
             # BETA and SE should match study 1 (within floating point precision)
@@ -94,13 +95,13 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
         # Study 1: BETA=0.1, SE=0.05, weight = 1/(0.05^2) = 400
         # Study 2: BETA=0.12, SE=0.06, weight = 1/(0.06^2) = 277.78
         # Weighted mean = (0.1*400 + 0.12*277.78) / (400 + 277.78) ≈ 0.108
-        
+
         result = meta_analyze_multi(
             self.sumstats_multi.copy(),
             nstudy=2,
             random_effects=False
         )
-        
+
         variant = result.data[result.data["SNPID"] == "1:100:A:G"]
         if len(variant) > 0:
             # Check that BETA is reasonable (weighted average)
@@ -131,13 +132,13 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
                 "EAF_2": [0.33],
             })
         ], ignore_index=True)
-        
+
         result = meta_analyze_multi(
             sumstats_with_dup,
             nstudy=2,
             random_effects=False
         )
-        
+
         # Should only have one row for 1:100:A:G
         variant_count = (result.data["SNPID"] == "1:100:A:G").sum()
         self.assertEqual(variant_count, 1, "Duplicate variants should be removed")
@@ -149,24 +150,24 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=2,
             random_effects=True
         )
-        
+
         # Check random effects columns exist
         self.assertIn("BETA_RANDOM", result.data.columns)
         self.assertIn("SE_RANDOM", result.data.columns)
         self.assertIn("Z_RANDOM", result.data.columns)
         self.assertIn("P_RANDOM", result.data.columns)
-        
+
         # Random effects SE should be >= fixed effects SE
         variants_both = result.data[
-            (result.data["SNPID"] == "1:100:A:G") | 
-            (result.data["SNPID"] == "1:200:G:C") | 
+            (result.data["SNPID"] == "1:100:A:G") |
+            (result.data["SNPID"] == "1:200:G:C") |
             (result.data["SNPID"] == "2:300:T:C")
         ]
         if len(variants_both) > 0:
             # Random effects typically have larger SE due to between-study variance
             for idx, row in variants_both.iterrows():
                 if pd.notna(row["SE_RANDOM"]):
-                    self.assertGreaterEqual(row["SE_RANDOM"], row["SE"], 
+                    self.assertGreaterEqual(row["SE_RANDOM"], row["SE"],
                                           "Random effects SE should be >= fixed effects SE")
 
     def test_single_study(self):
@@ -176,13 +177,13 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=1,
             random_effects=False
         )
-        
+
         # All variants should have DOF=0 (1 study - 1 = 0)
         # DOF is initialized to -1, then +1 for study 1 = 0
         dof_values = result.data["DOF"].values
-        self.assertTrue(all(dof_values == 0), 
+        self.assertTrue(all(dof_values == 0),
                         f"Single study should have DOF=0 (1 study - 1), got {dof_values}")
-        
+
         # BETA and SE should match study 1 values
         variant = result.data[result.data["SNPID"] == "1:100:A:G"]
         if len(variant) > 0:
@@ -206,13 +207,13 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             "N_2": [np.nan],
             "EAF_2": [np.nan],
         })
-        
+
         result = meta_analyze_multi(
             sumstats_all_na,
             nstudy=2,
             random_effects=False
         )
-        
+
         variant = result.data[result.data["SNPID"] == "1:100:A:G"]
         if len(variant) > 0:
             # DOF should be 0 (1 study - 1 = 0, since study 2 has all NA so not counted)
@@ -227,16 +228,16 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=2,
             random_effects=False
         )
-        
+
         # Check heterogeneity columns
         self.assertIn("Q", result.data.columns)
         self.assertIn("P_HET", result.data.columns)
         self.assertIn("I2", result.data.columns)
-        
+
         # Variants in both studies should have Q, P_HET, I2
         variants_both = result.data[
-            (result.data["SNPID"] == "1:100:A:G") | 
-            (result.data["SNPID"] == "1:200:G:C") | 
+            (result.data["SNPID"] == "1:100:A:G") |
+            (result.data["SNPID"] == "1:200:G:C") |
             (result.data["SNPID"] == "2:300:T:C")
         ]
         if len(variants_both) > 0:
@@ -244,7 +245,7 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             self.assertTrue(all(pd.notna(variants_both["P_HET"])), "P_HET should be calculated")
             self.assertTrue(all(pd.notna(variants_both["I2"])), "I2 should be calculated")
             # I2 should be between 0 and 1 (or 0 and 100 if percentage)
-            self.assertTrue(all((variants_both["I2"] >= 0) & (variants_both["I2"] <= 1)), 
+            self.assertTrue(all((variants_both["I2"] >= 0) & (variants_both["I2"] <= 1)),
                           "I2 should be between 0 and 1")
 
     def test_direction_column(self):
@@ -254,13 +255,13 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=2,
             random_effects=False
         )
-        
+
         self.assertIn("DIRECTION", result.data.columns)
-        
+
         # Check that direction is set for variants
         variant_pos = result.data[result.data["SNPID"] == "1:100:A:G"]
         variant_neg = result.data[result.data["SNPID"] == "1:200:G:C"]
-        
+
         if len(variant_pos) > 0:
             self.assertIn("+", variant_pos["DIRECTION"].iloc[0], "Positive BETA should have +")
         if len(variant_neg) > 0:
@@ -273,12 +274,12 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=2,
             random_effects=False
         )
-        
+
         # For variant 1:100:A:G
         # Study 1: N=1000, EAF=0.3 -> EA_N = 300, NEA_N = 700
         # Study 2: N=2000, EAF=0.32 -> EA_N = 640, NEA_N = 1360
         # Total: EA_N = 940, NEA_N = 2060, EAF = 940/(940+2060) = 0.3133
-        
+
         variant = result.data[result.data["SNPID"] == "1:100:A:G"]
         if len(variant) > 0:
             eaf = variant["EAF"].iloc[0]
@@ -295,11 +296,11 @@ class TestMetaAnalyzeMulti(unittest.TestCase):
             nstudy=2,
             random_effects=True
         )
-        
+
         # If _W2_SUM was wrong, tau^2 calculation would be wrong
         # Check that random effects results are reasonable
         variants_both = result.data[
-            (result.data["SNPID"] == "1:100:A:G") | 
+            (result.data["SNPID"] == "1:100:A:G") |
             (result.data["SNPID"] == "1:200:G:C")
         ]
         if len(variants_both) > 0:

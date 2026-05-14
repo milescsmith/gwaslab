@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 # (CHR label in sumstats, 1-based POS, NEA/ref, EA/alt, EAF, rsID, CHROM in VCF)
-XY_VARIANTS: List[Tuple[str, int, str, str, float, str, str]] = [
+XY_VARIANTS: list[tuple[str, int, str, str, float, str, str]] = [
     ("X", 100, "A", "G", 0.3, "rs900100", "chrX"),
     ("X", 101, "C", "T", 0.2, "rs900101", "chrX"),
     ("Y", 200, "G", "A", 0.25, "rs900200", "chrY"),
@@ -37,7 +37,7 @@ class XYReferencePaths:
         return self.vcf_gz + ".tbi"
 
 
-def _build_fasta_sequences() -> Tuple[str, str]:
+def _build_fasta_sequences() -> tuple[str, str]:
     xseq = ["N"] * LEN_CHR_X
     yseq = ["N"] * LEN_CHR_Y
     for chrom, pos, nea, _ea, _eaf, _rs, vcf_chrom in XY_VARIANTS:

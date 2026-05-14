@@ -7,21 +7,21 @@ lightweight until actual commands require loading ``gwaslab``.
 
 from __future__ import annotations
 
-import sys
-import os
 import json
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 
 
-def _resolve_path_keyword(gl, keyword: str) -> Optional[str]:
+def _resolve_path_keyword(gl, keyword: str) -> str | None:
     """Resolve a path keyword from built-in paths or downloaded records."""
     if keyword in gl.options.paths:
         return gl.options.paths[keyword]
     return gl.get_path(keyword, verbose=False)
 
 
-def load_sumstats(path: str, fmt: str, nrows: Optional[int] = None, build: str = "19"):
+def load_sumstats(path: str, fmt: str, nrows: int | None = None, build: str = "19"):
     """Load summary statistics from file.
 
     Parameters
@@ -53,6 +53,7 @@ def load_sumstats(path: str, fmt: str, nrows: Optional[int] = None, build: str =
 def run_config(args) -> None:
     """Handle the ``config`` subcommand."""
     import json
+
     import gwaslab as gl
 
     if args.json:
@@ -77,7 +78,7 @@ def run_config_show(args) -> None:
             print(f"Config file not found: {path}", file=sys.stderr)
             sys.exit(1)
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 payload = json.load(f)
             print(json.dumps(payload, indent=2))
             return
@@ -104,6 +105,7 @@ def run_path(args) -> None:
 def run_fb_list(args) -> None:
     """Handle the ``formatbook list`` subcommand."""
     import json
+
     import gwaslab as gl
 
     rows = gl.list_formats_with_descriptions(silent=True)
@@ -125,6 +127,7 @@ def run_fb_list(args) -> None:
 def run_fb_show(args) -> None:
     """Handle the ``formatbook show`` subcommand."""
     import json
+
     import gwaslab as gl
 
     mapping = gl.check_format(args.format)
@@ -171,6 +174,7 @@ def run_download_ref(args) -> None:
 def run_list_ref(args) -> None:
     """List reference keywords: remote catalog (--available) and/or local registry (--downloaded)."""
     import json
+
     import gwaslab as gl
 
     show_a = args.available

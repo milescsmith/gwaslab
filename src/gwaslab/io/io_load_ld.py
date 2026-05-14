@@ -1,25 +1,27 @@
-from typing import TYPE_CHECKING, Optional, List, Dict, Any, Union, Tuple
-import scipy.sparse as sparse
-import numpy as np
-import pandas as pd
-import subprocess
+import gc
 import os
 import re
-import gc
+import subprocess
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+from scipy import sparse
+
 from gwaslab.info.g_Log import Log
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
 from gwaslab.extension import _checking_plink_version
 from gwaslab.hm.hm_casting import _merge_mold_with_sumstats_by_chrpos
-from gwaslab.util.util_in_get_sig import _get_sig
 from gwaslab.io.io_plink import _process_plink_input_files
-from gwaslab.util.util_in_filter_value import _exclude_hla
-from gwaslab.util.util_ex_calculate_ldmatrix import _extract_variants_in_locus
-from gwaslab.util.util_ex_calculate_ldmatrix import _export_snplist_and_locus_sumstats
-from gwaslab.util.util_ex_calculate_ldmatrix import _extract_variants_in_locus
-from gwaslab.viz.viz_plot_regional2 import _get_lead_id
 from gwaslab.qc.qc_decorator import with_logging
+from gwaslab.util.util_ex_calculate_ldmatrix import _export_snplist_and_locus_sumstats, _extract_variants_in_locus
+from gwaslab.util.util_in_filter_value import _exclude_hla
+from gwaslab.util.util_in_get_sig import _get_sig
+from gwaslab.viz.viz_plot_regional2 import _get_lead_id
+
+
 @with_logging(
         start_to_msg="calculate LD matrix",
         finished_msg="calculating LD matrix",
@@ -27,26 +29,26 @@ from gwaslab.qc.qc_decorator import with_logging
         start_function="calculate_ld_matrix"
 )
 def _to_finemapping_using_ld(
-    sumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
-    study: Optional[str] = None,
-    ld_map_path: Optional[str] = None,
-    ld_path: Optional[str] = None,
+    sumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
+    study: str | None = None,
+    ld_map_path: str | None = None,
+    ld_path: str | None = None,
     ld_fmt: str = "npz",
     ld_if_square: bool = False,
     ld_if_add_T: bool = False,
-    ld_map_rename_dic: Optional[Union[Dict[str, str], List[str]]] = None,
-    ld_map_kwargs: Optional[Dict[str, Any]] = None,
-    loci: Optional[List[str]] = None,
+    ld_map_rename_dic: Union[dict[str, str], list[str]] | None = None,
+    ld_map_kwargs: dict[str, Any] | None = None,
+    loci: list[str] | None = None,
     out: str = "./",
     windowsizekb: int = 1000,
     threads: int = 1,
     mode: str = "r",
     exclude_hla: bool = False,
-    getlead_kwargs: Optional[Dict[str, Any]] = None,
-    memory: Optional[int] = None,
+    getlead_kwargs: dict[str, Any] | None = None,
+    memory: int | None = None,
     overwrite: bool = False,
     log: Log = Log(),
-    suffixes: Optional[List[str]] = None,
+    suffixes: list[str] | None = None,
     verbose: bool = True,
     **kwargs: Any
 ) -> pd.DataFrame:
@@ -63,52 +65,52 @@ def _to_finemapping_using_ld(
         getlead_kwargs={"windowsizekb":1000}
     if ld_map_kwargs is None:
         ld_map_kwargs={}
-    
+
     if loci is None:
         log.write(" -Loci were not provided. All significant loci will be automatically extracted...",verbose=verbose)
         sig_df = _get_sig(sumstats,variant_id="SNPID",chrom="CHR",pos="POS",p="P"+suffixes[0],**getlead_kwargs)
     else:
         sig_df = sumstats.loc[sumstats["SNPID"].isin(loci),:]
-    log.write(" -Number of loci: {}...".format(len(sig_df)),verbose=verbose)
+    log.write(f" -Number of loci: {len(sig_df)}...",verbose=verbose)
     # Drop duplicate!!!!
     log.write(" -Dropping duplicated SNPIDs...",verbose=verbose)
     sumstats = sumstats.drop_duplicates(subset=["SNPID"]).copy()
 
     # init Filelist DataFrame
     output_file_list = pd.DataFrame(columns=["SNPID","SNPID_LIST","LD_R_MATRIX","LOCUS_SUMSTATS"])
-    
+
     plink_log=""
 
     if exclude_hla==True:
         sig_df = _exclude_hla(sig_df, log=log, verbose=verbose)
-    
+
     sig_df = sig_df.reset_index()
-    
-    ## for each lead variant 
+
+    ## for each lead variant
     for index, row in sig_df.iterrows():
         # extract snplist in each locus
         gc.collect()
-        log.write(" -Locus #{}---------------------------------------------------------------".format(index+1))
+        log.write(f" -Locus #{index+1}---------------------------------------------------------------")
         log.write(" -Processing locus with lead variant {} at CHR {} POS {} ...".format(row["SNPID"],row["CHR"],row["POS"]))
         locus_sumstats = _extract_variants_in_locus(sumstats, windowsizekb, locus = (row["CHR"],row["POS"]))
-        
+
         ld_map = _load_ld_map(ld_map_path, ld_map_rename_dic = ld_map_rename_dic, **ld_map_kwargs )
 
         ## check available snps with reference file
-        matched_sumstats = _merge_ld_map_with_sumstats(row=row, 
-                                                    locus_sumstats=locus_sumstats, 
+        matched_sumstats = _merge_ld_map_with_sumstats(row=row,
+                                                    locus_sumstats=locus_sumstats,
                                                     ld_map=ld_map,
                                                     log=log,suffixes=suffixes)
         if len(matched_sumstats)==0:
             log.write(" -No matching LD information... Skipping...")
             continue
-        
+
         #########################################################################################################
         # create matched snp list
-        matched_snp_list_path, matched_sumstats_path=_export_snplist_and_locus_sumstats(matched_sumstats=matched_sumstats, 
-                                                                                       out=out, 
-                                                                                       study=study, 
-                                                                                       row=row, 
+        matched_snp_list_path, matched_sumstats_path=_export_snplist_and_locus_sumstats(matched_sumstats=matched_sumstats,
+                                                                                       out=out,
+                                                                                       study=study,
+                                                                                       row=row,
                                                                                        windowsizekb=windowsizekb,
                                                                                        log=log,
                                                                                        suffixes=suffixes)
@@ -116,7 +118,7 @@ def _to_finemapping_using_ld(
 
         ## Calculate ld matrix using PLINK
         r_matrix = _load_ld_matrix(ld_path, fmt=ld_fmt, if_square=ld_if_square, if_add_T=ld_if_add_T, log=log, verbose=verbose)
-        
+
         matched_ld_matrix_path = _extract_variants(matched_sumstats, r_matrix, out, study, row, windowsizekb, log=log, verbose=verbose)
 
         # print file list
@@ -127,13 +129,13 @@ def _to_finemapping_using_ld(
         row_dict["LOCUS_SUMSTATS"] = matched_sumstats_path
         file_row = pd.Series(row_dict).to_frame().T
         output_file_list = pd.concat([output_file_list, file_row],ignore_index=True)
-    
+
     if len(output_file_list)>0:
         output_file_list["STUDY"] = study
         nloci = len(output_file_list)
         output_file_list_path =  "{}/{}_{}loci_{}kb.filelist".format(out.rstrip("/"), study,nloci, windowsizekb)
         output_file_list.to_csv(output_file_list_path,index=None,sep="\t")
-        log.write(" -File list is saved to: {}".format(output_file_list_path),verbose=verbose)
+        log.write(f" -File list is saved to: {output_file_list_path}",verbose=verbose)
         log.write(" -Finished LD matrix calculation.",verbose=verbose)
     else:
         output_file_list_path=None
@@ -148,8 +150,8 @@ def process_ld(
     sumstats: pd.DataFrame,
     ld_path: str,
     ld_map_path: str,
-    region: Tuple[int, int, int],
-    region_ref: List[Optional[str]],
+    region: tuple[int, int, int],
+    region_ref: list[str | None],
     log: Log,
     verbose: bool,
     pos: str,
@@ -159,8 +161,8 @@ def process_ld(
     ld_fmt: str = "npz",
     ld_if_square: bool = False,
     ld_if_add_T: bool = False,
-    ld_map_rename_dic: Optional[Union[Dict[str, str], List[str]]] = None,
-    ld_map_kwargs: Optional[Dict[str, Any]] = None
+    ld_map_rename_dic: Union[dict[str, str], list[str]] | None = None,
+    ld_map_kwargs: dict[str, Any] | None = None
 ) -> pd.DataFrame:
     log.write("Start to load reference genotype...", verbose=verbose)
     log.write(" -reference ld matrix path : "+ ld_path, verbose=verbose)
@@ -169,43 +171,43 @@ def process_ld(
 
 
     log.write(" -Retrieving index...", verbose=verbose)
-    
-    # match sumstats pos and ref pos: 
+
+    # match sumstats pos and ref pos:
     # get ref index for its first appearance of sumstats pos
      #######################################################################################
     if ld_map_kwargs is None:
         ld_map_kwargs={}
 
-    ld_map = _load_ld_map(ld_map_path, 
-                          ld_map_rename_dic = ld_map_rename_dic, 
+    ld_map = _load_ld_map(ld_map_path,
+                          ld_map_rename_dic = ld_map_rename_dic,
                           **ld_map_kwargs )
-    
-    log.write(" -Ref variants: {}".format( len(ld_map) ), verbose=verbose)
+
+    log.write(f" -Ref variants: {len(ld_map)}", verbose=verbose)
 
     ## check available snps with reference file
     sumstats = _merge_ld_map_with_sumstats_for_regional(
-                                           locus_sumstats=sumstats, 
+                                           locus_sumstats=sumstats,
                                            ld_map=ld_map,
                                            log=log,
                                            suffixes=None,verbose=verbose)
     sumstats["REFINDEX"] = sumstats["_INDEX_BIM"]
 
     #############################################################################################
-    
-    r_matrix = _load_ld_matrix(ld_path, 
-                               fmt=ld_fmt, 
-                               if_square=ld_if_square, 
-                               if_add_T=ld_if_add_T, 
-                               log=log, 
+
+    r_matrix = _load_ld_matrix(ld_path,
+                               fmt=ld_fmt,
+                               if_square=ld_if_square,
+                               if_add_T=ld_if_add_T,
+                               log=log,
                                verbose=verbose)
 
     #for loop to add LD information
     #############################################################################################
     for ref_n, region_ref_single in enumerate(region_ref):
 
-        rsq = "RSQ_{}".format(ref_n)
-        ld_single = "LD_{}".format(ref_n)
-        lead = "LEAD_{}".format(ref_n)
+        rsq = f"RSQ_{ref_n}"
+        ld_single = f"LD_{ref_n}"
+        lead = f"LEAD_{ref_n}"
         sumstats[lead]= 0
 
         # get lead variant id and pos
@@ -215,19 +217,19 @@ def process_ld(
         else:
             # figure out lead variant
             lead_id = _get_lead_id(sumstats, region_ref_single, log, verbose)
-        
+
         lead_series = None
         if lead_id is None:
-            
+
             matched_snpid = re.match("(chr)?[0-9]+:[0-9]+:[ATCG]+:[ATCG]+",region_ref_single,  re.IGNORECASE)
-            
+
             if matched_snpid is None:
                 sumstats[rsq] = None
                 sumstats[rsq] = sumstats[rsq].astype("float")
-                sumstats[ld_single] = 0    
-                continue    
+                sumstats[ld_single] = 0
+                continue
             else:
-                
+
                 lead_snpid = matched_snpid.group(0).split(":")[1:]
                 lead_snpid[0]= int(lead_snpid[0])
                 lead_series = pd.Series(lead_snpid)
@@ -238,21 +240,20 @@ def process_ld(
             is_matched = ~sumstats["REFINDEX"].isna()
 
             ref_index = sumstats.loc[is_matched,"REFINDEX"].astype("Int64")
-            
+
             sumstats.loc[is_matched, rsq] = r_matrix[int(lead_snp_ref_index), list(ref_index.values)]
 
         else:
             log.write(" -Lead SNP not found in reference...", verbose=verbose)
             sumstats[rsq]=None
-            # 
             try:
                 sumstats.loc[lead_id,rsq]=1
             except KeyError:
                 pass
-        
+
         sumstats[rsq] = sumstats[rsq].astype("float")
         sumstats[ld_single] = 0
-        
+
         for index,ld_threshold in enumerate(region_ld_threshold):
             # No data,LD = 0
             # 0, 0.2  LD = 1
@@ -267,12 +268,12 @@ def process_ld(
                 sumstats.loc[to_change_color,ld_single] = 1
             to_change_color = sumstats[rsq]>ld_threshold
             sumstats.loc[to_change_color,ld_single] = index+2
-        
+
         if lead_series is None:
             sumstats.loc[lead_id,ld_single] = len(region_ld_threshold)+2
             sumstats.loc[lead_id,lead] = 1
 
-    ####################################################################################################    
+    ####################################################################################################
     final_shape_col = "SHAPE"
     final_ld_col = "LD"
     final_rsq_col = "RSQ"
@@ -283,24 +284,24 @@ def process_ld(
 
     if len(region_ref)==1:
         if lead_id is not None:
-            sumstats.loc[lead_id, final_shape_col] +=1 
+            sumstats.loc[lead_id, final_shape_col] +=1
 
     # Update SHAPE for variants with LD
     for i in range(len(region_ref)):
-        ld_single = "LD_{}".format(i)
-        current_rsq = "RSQ_{}".format(i)
+        ld_single = f"LD_{i}"
+        current_rsq = f"RSQ_{i}"
         a_ngt_b = sumstats[final_rsq_col] < sumstats[current_rsq]
         #set levels with interval=100
         sumstats.loc[a_ngt_b, final_ld_col] = 100 * (i+1) + sumstats.loc[a_ngt_b, ld_single]
         sumstats.loc[a_ngt_b, final_rsq_col] = sumstats.loc[a_ngt_b, current_rsq]
         sumstats.loc[a_ngt_b, final_shape_col] = i + 1
-    
+
     sumstats = sumstats.dropna(subset=[pos,nea,ea])
 
     # Set SHAPE=0 for variants with missing LD (no valid RSQ data)
     missing_ld_mask = (sumstats[final_rsq_col] == 0.0) & (sumstats[final_shape_col] == 1)
     sumstats.loc[missing_ld_mask, final_shape_col] = 0
-    
+
     ####################################################################################################
     log.write("Finished loading reference genotype successfully!", verbose=verbose)
     return sumstats
@@ -346,14 +347,14 @@ def _load_ld_matrix(
     log: Log = Log(),
     verbose: bool = True
 ) -> np.ndarray:
-    
+
     if fmt == "npz":
         log.write("   -Loading LD matrix from npz file...",verbose=verbose)
         r_matrix = sparse.load_npz(path).toarray()
     if fmt == "txt":
         log.write("   -Loading LD matrix from text file...",verbose=verbose)
         r_matrix = np.loadtxt(path, delimiter="\t")
-        log.write("   -LD matrix shape : {}".format(r_matrix.shape), verbose=verbose)
+        log.write(f"   -LD matrix shape : {r_matrix.shape}", verbose=verbose)
 
     if if_add_T==True:
         log.write("   -Transforming LD matrix by adding its transpose...",verbose=verbose)
@@ -366,7 +367,7 @@ def _load_ld_matrix(
 ####################################################################################################
 # LD Map Format Specification
 ####################################################################################################
-"""
+r"""
 LD Map Format in GWASLab
 ========================
 
@@ -468,10 +469,10 @@ def _load_ld_map(
     pos: str = "position",
     ref: str = "allele1",
     alt: str = "allele2",
-    ld_map_rename_dic: Optional[Union[Dict[str, str], List[str]]] = None,
+    ld_map_rename_dic: Union[dict[str, str], list[str]] | None = None,
     **ld_map_kwargs: Any
 ) -> pd.DataFrame:
-    """
+    r"""
     Load LD map file (variant annotation file for LD matrix).
     
     The LD map provides variant information (CHR, POS, EA, NEA) that corresponds to the LD matrix.
@@ -512,38 +513,38 @@ def _load_ld_map(
     - Variant order in the LD map must match the order in the LD matrix.
     - See module docstring above for detailed format specification.
     """
-    
+
     if ld_map_rename_dic is not None:
         if type(ld_map_rename_dic) is dict:
-            ld_map_rename_dic_to_use={ld_map_rename_dic["EA"]:'EA_bim', 
-                                        ld_map_rename_dic["NEA"]:'NEA_bim', 
-                                        ld_map_rename_dic["POS"]:'POS', 
-                                        ld_map_rename_dic["CHR"]:'CHR',
-                                        ld_map_rename_dic["SNPID"]:'SNPID_bim'
+            ld_map_rename_dic_to_use={ld_map_rename_dic["EA"]:"EA_bim",
+                                        ld_map_rename_dic["NEA"]:"NEA_bim",
+                                        ld_map_rename_dic["POS"]:"POS",
+                                        ld_map_rename_dic["CHR"]:"CHR",
+                                        ld_map_rename_dic["SNPID"]:"SNPID_bim"
                                         }
             ld_map_kwargs["usecols"]=list(ld_map_rename_dic.values())
         else:
-            ld_map_rename_dic_to_use={ld_map_rename_dic[4]:'EA_bim', 
-                                        ld_map_rename_dic[3]:'NEA_bim', 
-                                        ld_map_rename_dic[2]:'POS', 
-                                        ld_map_rename_dic[1]:'CHR',
-                                        ld_map_rename_dic[0]:'SNPID_bim'
+            ld_map_rename_dic_to_use={ld_map_rename_dic[4]:"EA_bim",
+                                        ld_map_rename_dic[3]:"NEA_bim",
+                                        ld_map_rename_dic[2]:"POS",
+                                        ld_map_rename_dic[1]:"CHR",
+                                        ld_map_rename_dic[0]:"SNPID_bim"
                                         }
             ld_map_kwargs["usecols"]=ld_map_rename_dic
     else:
-        ld_map_rename_dic_to_use={alt:'EA_bim', 
-                                  ref:'NEA_bim', 
-                                  pos:'POS', 
-                                  chrom:'CHR',
+        ld_map_rename_dic_to_use={alt:"EA_bim",
+                                  ref:"NEA_bim",
+                                  pos:"POS",
+                                  chrom:"CHR",
                                   snpid:"SNPID_bim"
                                     }
         ld_map_kwargs["usecols"]=[chrom, pos, ref, alt, snpid]
     #rsid    chromosome      position        allele1 allele2
     if "sep" not in ld_map_kwargs:
-        ld_map_kwargs["sep"] = "\s+"
-    
+        ld_map_kwargs["sep"] = r"\s+"
+
     ld_map = pd.read_csv(path,**ld_map_kwargs)
-    ld_map = ld_map.rename(columns=ld_map_rename_dic_to_use, errors='ignore')
+    ld_map = ld_map.rename(columns=ld_map_rename_dic_to_use, errors="ignore")
     # "SNPID",0:"CHR_bim",3:"POS_bim",4:"EA_bim",5:"NEA_bim"
     return ld_map
 
@@ -557,21 +558,21 @@ def _extract_variants(
     log: Log,
     verbose: bool
 ) -> str:
-    
-    avaiable_index = merged_sumstats["_INDEX_BIM"].values 
 
-    flipped = merged_sumstats["_FLIPPED"].values 
+    avaiable_index = merged_sumstats["_INDEX_BIM"].values
+
+    flipped = merged_sumstats["_FLIPPED"].values
 
     reduced_r_matrix = r_matrix[np.ix_(avaiable_index, avaiable_index)]
-    
-    log.write(" -Flipping LD matrix for {} variants...".format(sum(flipped)),verbose=verbose)
+
+    log.write(f" -Flipping LD matrix for {sum(flipped)} variants...",verbose=verbose)
     reduced_r_matrix[flipped,:] = -1 * reduced_r_matrix[flipped,:]
     reduced_r_matrix[:,flipped] = -1 * reduced_r_matrix[:,flipped]
 
     snplist_path =   "{}/{}_{}_{}.snplist.raw".format(out.rstrip("/"),study,row["SNPID"],windowsizekb)
     output_prefix =  "{}/{}_{}_{}".format(out.rstrip("/"),study,row["SNPID"],windowsizekb)
-    output_path = "{}.ld.gz".format(output_prefix)
-    
+    output_path = f"{output_prefix}.ld.gz"
+
     pd.DataFrame(reduced_r_matrix).to_csv(output_path,sep="\t",index=None,header=None)
     #reduced_r_matrix.to_csv("{}.ld.gz".format(output_prefix),se="\t")
     return output_path
@@ -581,44 +582,44 @@ def _merge_ld_map_with_sumstats(
     locus_sumstats: pd.DataFrame,
     ld_map: pd.DataFrame,
     log: Log = Log(),
-    suffixes: Optional[List[str]] = None
+    suffixes: list[str] | None = None
 ) -> pd.DataFrame:
-    '''
+    """
     align sumstats with bim
-    '''
+    """
 
     index1= "_INDEX_SUMSTATS"
     index2= "_INDEX_BIM"
     locus_sumstats[index1] = locus_sumstats.index
     ld_map[index2] =  ld_map.index
     locus_sumstats["_FLIPPED"] = False
-    
+
     if suffixes is None:
             suffixes=[""]
-    
+
     log.write("   -Variants in locus ({}): {}".format(row["SNPID"],len(locus_sumstats)))
     # convert category to string
     locus_sumstats["EA"] = locus_sumstats["EA"].astype("string")
     locus_sumstats["NEA"] = locus_sumstats["NEA"].astype("string")
-    
+
     # matching by SNPID
     # preserve bim keys (use intersection of keys from both frames, similar to a SQL inner join; preserve the order of the left keys.)
     combined_df = pd.merge(ld_map, locus_sumstats, on=["CHR","POS"],how="inner")
     # match allele
-    perfect_match =  ((combined_df["EA"] == combined_df["EA_bim"]) & (combined_df["NEA"] == combined_df["NEA_bim"]) ) 
-    log.write("   -Variants with perfect matched alleles:{}".format(sum(perfect_match)))
+    perfect_match =  ((combined_df["EA"] == combined_df["EA_bim"]) & (combined_df["NEA"] == combined_df["NEA_bim"]) )
+    log.write(f"   -Variants with perfect matched alleles:{sum(perfect_match)}")
 
     # fliipped allele
     #ea_mis_match = combined_df["EA"] != combined_df["EA_bim"]
     flipped_match = ((combined_df["EA"] == combined_df["NEA_bim"])& (combined_df["NEA"] == combined_df["EA_bim"]))
-    log.write("   -Variants with flipped alleles:{}".format(sum(flipped_match)))
-    
+    log.write(f"   -Variants with flipped alleles:{sum(flipped_match)}")
+
     allele_match = perfect_match | flipped_match
-    log.write("   -Total Variants matched:{}".format(sum(allele_match)))
+    log.write(f"   -Total Variants matched:{sum(allele_match)}")
 
     if row["SNPID"] not in combined_df.loc[allele_match,"SNPID"].values:
         log.warning("Lead variant was not available in reference!")
-    
+
     # adjust statistics
     output_columns=["SNPID","CHR","POS","EA","NEA","_INDEX_BIM","_FLIPPED"]
     for suffix in suffixes:
@@ -644,12 +645,12 @@ def _merge_ld_map_with_sumstats_for_regional(
     locus_sumstats: pd.DataFrame,
     ld_map: pd.DataFrame,
     log: Log = Log(),
-    suffixes: Optional[List[str]] = None,
+    suffixes: list[str] | None = None,
     verbose: bool = True
 ) -> pd.DataFrame:
-    '''
+    """
     align sumstats with bim
-    '''
+    """
 
     index1= "_INDEX_SUMSTATS"
     index2= "_INDEX_BIM"
@@ -658,29 +659,29 @@ def _merge_ld_map_with_sumstats_for_regional(
 
     if suffixes is None:
             suffixes=[""]
-    
+
     # convert category to string
     locus_sumstats["EA"] = locus_sumstats["EA"].astype("string")
     locus_sumstats["NEA"] = locus_sumstats["NEA"].astype("string")
-    
+
     # matching by SNPID
     # preserve bim keys (use intersection of keys from both frames, similar to a SQL inner join; preserve the order of the left keys.)
     combined_df = pd.merge(locus_sumstats, ld_map, on=["CHR","POS"],how="left")
     combined_df[["EA_bim","NEA_bim"]] = combined_df[["EA_bim","NEA_bim"]].fillna("N")
     # match allele
-    perfect_match =  ((combined_df["EA"] == combined_df["EA_bim"]) & (combined_df["NEA"] == combined_df["NEA_bim"]) ) 
+    perfect_match =  ((combined_df["EA"] == combined_df["EA_bim"]) & (combined_df["NEA"] == combined_df["NEA_bim"]) )
 
     # fliipped allele
     #ea_mis_match = combined_df["EA"] != combined_df["EA_bim"]
     flipped_match = ((combined_df["EA"] == combined_df["NEA_bim"])& (combined_df["NEA"] == combined_df["EA_bim"]))
-    
-    not_matched = combined_df[index2].isna() 
 
-    allele_match = perfect_match | flipped_match 
+    not_matched = combined_df[index2].isna()
 
-    log.write("   -Total Variants matched:{}".format( sum(allele_match) ),verbose=verbose)
-    log.write("   -Total Variants not in reference:{}".format(sum(not_matched)),verbose=verbose)
-    
+    allele_match = perfect_match | flipped_match
+
+    log.write(f"   -Total Variants matched:{sum(allele_match)}",verbose=verbose)
+    log.write(f"   -Total Variants not in reference:{sum(not_matched)}",verbose=verbose)
+
     return combined_df.loc[allele_match | not_matched,:]
 
 ############################################################################################################################################################################################################################################################

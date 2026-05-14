@@ -1,43 +1,45 @@
-from typing import Optional, Tuple, List
-import subprocess
-import os
 import gc
-import pandas as pd
+import os
+import subprocess
+from typing import List, Optional, Tuple
+
 import numpy as np
+import pandas as pd
+
+from gwaslab.extension import _check_susie_version, _checking_r_version
 from gwaslab.info.g_Log import Log
-from gwaslab.extension import _checking_r_version
-from gwaslab.extension import _check_susie_version
 from gwaslab.viz.viz_plot_stackedregional import _sort_kwargs
 
+
 def _run_mesusie(
-    filepath: Optional[str],
+    filepath: str | None,
     r: str = "Rscript",
-    types: Optional[Tuple[str, str]] = None,
-    ns: Optional[List[int]] = None,
+    types: tuple[str, str] | None = None,
+    ns: list[int] | None = None,
     fillldna: bool = True,
     delete: bool = False,
     coloc_kwargs: str = "",
     susie_kwargs: str = "",
-    ncols: Optional[List[int]] = None,
+    ncols: list[int] | None = None,
     d1_kwargs: str = "",
     d2_kwargs: str = "",
     log: Log = Log(),
     verbose: bool = True
 ) -> str:
-    
+
     log.write(" Start to run mesusie from command line:", verbose=verbose)
     pass
 
     if ns is None:
         if ncols is not None:
             ns = ncols
-    log.write(" -Ns: {} and {}".format(ns[0],ns[1]), verbose=verbose)
+    log.write(f" -Ns: {ns[0]} and {ns[1]}", verbose=verbose)
 
     if filepath is None:
         log.write(" -File path is None.", verbose=verbose)
         log.write("Finished finemapping using MESuSie.", verbose=verbose)
         return pd.DataFrame()
-        
+
     filelist = pd.read_csv(filepath,sep="\t")
     r_log=""
     # write R script
@@ -45,15 +47,15 @@ def _run_mesusie(
 
     log = _checking_r_version(r, log)
     #log = _check_susie_version(r,log)
-    r_script_init='''
+    r_script_init="""
 library(MESuSiE)
 ld_list <- list()
 summ_stat_list <- list()
-    '''
+    """
     r_scripts_for_loading =[r_script_init]
 
-    
-    for index, row in filelist.iterrows(): 
+
+    for index, row in filelist.iterrows():
         gc.collect()
         if index==0:
             study0 = row["STUDY"]
@@ -64,13 +66,13 @@ summ_stat_list <- list()
         locus=row["LOCUS"]
 
         log.write(" -Running for: {} - {}".format(row["SNPID"],row["STUDY"] ), verbose=verbose)
-        log.write("  -Locus sumstats:{}".format(sumstats), verbose=verbose)
-        log.write("  -LD r matrix:{}".format(ld_r_matrix), verbose=verbose)
+        log.write(f"  -Locus sumstats:{sumstats}", verbose=verbose)
+        log.write(f"  -LD r matrix:{ld_r_matrix}", verbose=verbose)
 
-        rscript='''
+        rscript=f"""
 sum{index} <-  read.csv("{sumstats}",sep="\\t")
 sum{index}$Z <- sum{index}$Beta/sum{index}$Se
-sum{index}$N <- {n}
+sum{index}$N <- {ns[index]}
 ld{index} <- read.csv("{ld_r_matrix}",sep="\\t",header=FALSE)
 ld{index}[is.na(ld{index})]  <- 0
 names(ld{index}) <- sum{index}$SNP
@@ -81,24 +83,16 @@ png(filename="./diagnostic_{group}_{locus}_{index}.png")
 diagnostic <- kriging_rss(summ_stat_list${study}$Z, ld_list${study})
 diagnostic$plot
 dev.off()
-        '''.format(
-             index = index,
-             study = study,
-             group=group,
-             locus = locus,
-             n = ns[index],
-             sumstats = sumstats,
-             ld_r_matrix = ld_r_matrix
-        )
+        """
         r_scripts_for_loading.append(rscript)
-    
+
     rscript_loading = "".join(r_scripts_for_loading)
-    
 
-    rscript_computing='''
-MESuSiE_res<-meSuSie_core(ld_list, summ_stat_list, L=10)'''
 
-    rscript_output = '''
+    rscript_computing="""
+MESuSiE_res<-meSuSie_core(ld_list, summ_stat_list, L=10)"""
+
+    rscript_output = f"""
 saveRDS(MESuSiE_res, file = "{group}_{locus}.rds")
 pips <- cbind(summ_stat_list${study0}$SNP, summ_stat_list${study0}$CHR, summ_stat_list${study0}$POS, MESuSiE_res$pip_config)
 colnames(pips)[1] <-"SNPID"
@@ -123,23 +117,23 @@ for (p in MESuSiE_res$cs$cs) {{
   write(summ_stat_list${study0}$SNP[p],"{group}_{locus}.cscs_snpid", append=TRUE, sep="\t", ncolumns=10000000)
 }}
 
-    '''.format(group=group,locus=locus,study0=study0)
-    
-    rscript_plotting='''
+    """
+
+    rscript_plotting=f"""
 png(filename="./{group}_{locus}_stacked_regions.png")
 MESuSiE_Plot(MESuSiE_res, ld_list ,summ_stat_list)
 dev.off()
-'''.format(group=group,locus=locus)
-    
+"""
+
     rscript = rscript_loading + rscript_computing + rscript_output + rscript_plotting
 
-    log.write("  -MESuSie script: {}".format(rscript_computing), verbose=verbose)
-    
+    log.write(f"  -MESuSie script: {rscript_computing}", verbose=verbose)
+
     with open("_{}_{}_gwaslab_mesusie_temp.R".format(group,row["SNPID"]),"w") as file:
             file.write(rscript)
 
     script_run_r = "{} _{}_{}_gwaslab_mesusie_temp.R".format(r, group,row["SNPID"])
-    
+
     try:
         output = subprocess.check_output(script_run_r, stderr=subprocess.STDOUT, shell=True,text=True)
         #plink_process = subprocess.Popen("exec "+script_run_r, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,text=True)
@@ -148,11 +142,11 @@ dev.off()
         #plink_process.kill()
         log.write(" Running MESuSie from command line...", verbose=verbose)
         r_log+= output + "\n"
-        
+
         #os.remove("_{}_{}_gwaslab_coloc_susie_temp.R".format(study,row["SNPID"]))
-        
+
     except subprocess.CalledProcessError as e:
         log.write(e.output)
         #os.remove("_{}_{}_gwaslab_coloc_susie_temp.R".format(study,row["SNPID"]))
     log.write("Finished cross ancestry finemapping using MESuSie.", verbose=verbose)
-    return "./{}_@.pipcs".format(group)
+    return f"./{group}_@.pipcs"

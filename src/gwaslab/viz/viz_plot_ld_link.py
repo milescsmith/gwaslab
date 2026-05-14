@@ -1,14 +1,14 @@
-from typing import TYPE_CHECKING, Optional, Union, Tuple, Any
+from typing import TYPE_CHECKING, Any, Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
+
 from gwaslab.info.g_Log import Log
-from gwaslab.viz.viz_plot_ld_block import (
-    _prepare_ld_data_from_vcf,
-    _prepare_ld_matrix
-)
+from gwaslab.viz.viz_plot_ld_block import _prepare_ld_data_from_vcf, _prepare_ld_matrix
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+
     from gwaslab.g_Sumstats import Sumstats
 
 
@@ -43,7 +43,7 @@ def _plot_ld_link(
         [no_data_color, 0<thr[0], thr[0]<thr[1], ..., thr[-1]<1.0, lead_color]
     """
     log.write("Adding LD link plot...", verbose=verbose)
-    
+
     # Use region_ld_colors if provided, otherwise extract from palette, otherwise use default
     if region_ld_colors is not None and isinstance(region_ld_colors, list):
         region_ld_colors_for_link = region_ld_colors
@@ -59,16 +59,16 @@ def _plot_ld_link(
             region_ld_colors_for_link = ["#E4E4E4", "#020080", "#86CEF9", "#24FF02", "#FDA400", "#FF0000", "#FF0000"]
     else:
         region_ld_colors_for_link = ["#E4E4E4", "#020080", "#86CEF9", "#24FF02", "#FDA400", "#FF0000", "#FF0000"]
-    
+
     # Ensure we have enough colors (at least len(region_ld_threshold) + 3)
     min_colors_needed = len(region_ld_threshold) + 3
     if len(region_ld_colors_for_link) < min_colors_needed:
         # Pad with last color if needed
         region_ld_colors_for_link = region_ld_colors_for_link + [region_ld_colors_for_link[-1]] * (min_colors_needed - len(region_ld_colors_for_link))
-    
+
     # Use the processed colors
     region_ld_colors = region_ld_colors_for_link
-    
+
     # Extract LD matrix from VCF
     ld_matrix, matched_sumstats, region_sumstats, use_i_coord, all_i_pos = _prepare_ld_data_from_vcf(
         vcf_path=vcf_path,
@@ -82,7 +82,7 @@ def _plot_ld_link(
         log=log,
         verbose=verbose
     )
-    
+
     # Prepare full LD matrix
     full_ld_matrix, all_positions = _prepare_ld_matrix(
         ld_matrix=ld_matrix,
@@ -92,10 +92,10 @@ def _plot_ld_link(
         log=log,
         verbose=verbose
     )
-    
+
     # Use i coordinates and scaled_P for line coordinates
     region_sumstats_sorted = region_sumstats.sort_values(pos_col)
-    
+
     # Get x coordinates (i if available, otherwise positions)
     if use_i_coord and all_i_pos is not None:
         if "i" in region_sumstats_sorted.columns:
@@ -104,26 +104,26 @@ def _plot_ld_link(
             x_pos = all_positions
     else:
         x_pos = all_positions
-    
+
     # Get y coordinates (scaled_P)
     if "scaled_P" in region_sumstats_sorted.columns:
         y_pos = region_sumstats_sorted["scaled_P"].values.astype(float)
     else:
         log.warning("scaled_P column not found. Cannot draw lines connecting variant positions.")
         return
-    
+
     ld = full_ld_matrix
     ld = np.asarray(ld)
     x_pos = np.asarray(x_pos)
     y_pos = np.asarray(y_pos)
-    
+
     if ld.shape[0] != ld.shape[1]:
         raise ValueError(f"LD matrix must be square, got shape {ld.shape}")
     if len(x_pos) != ld.shape[0]:
         raise ValueError(f"Position array length ({len(x_pos)}) must match LD matrix size ({ld.shape[0]})")
     if len(y_pos) != ld.shape[0]:
         raise ValueError(f"scaled_P array length ({len(y_pos)}) must match LD matrix size ({ld.shape[0]})")
-    
+
     # Get significance information if sig_level is provided
     sig_mask = None
     if sig_level is not None:
@@ -140,13 +140,13 @@ def _plot_ld_link(
         else:
             log.warning("Significance threshold specified but no P or scaled_P column found. Ignoring sig_level.")
             sig_mask = None
-    
+
     n = len(x_pos)
     pos_range = x_pos[-1] - x_pos[0] if n > 1 else 1
-    
+
     # Minimum threshold: use the first threshold as minimum (typically 0.2)
     min_thr = region_ld_threshold[0] if len(region_ld_threshold) > 0 else 0.0
-    
+
     # Function to get color index based on LD value
     # Matches the logic in process_vcf:
     # LD = 0 or NaN: index 0
@@ -175,7 +175,7 @@ def _plot_ld_link(
                 return idx + 2
         # LD <= first threshold, so it belongs to category 1
         return 1
-    
+
     # Plot lines for pairs with LD >= minimum threshold
     line_count = 0
     for i in range(n):
@@ -188,13 +188,13 @@ def _plot_ld_link(
                         continue
                 x1, x2 = x_pos[i], x_pos[j]
                 y1, y2 = y_pos[i], y_pos[j]
-                
+
                 # Use fixed line width
                 lw = link_linewidth
-                
+
                 # Alpha based on LD value
                 alpha = min(ld[i, j] * link_alpha_scale, 1.0)
-                
+
                 # Get color based on LD category
                 color_idx = get_ld_color_index(ld[i, j])
                 if color_idx < len(region_ld_colors):
@@ -202,11 +202,11 @@ def _plot_ld_link(
                 else:
                     # Fallback to last color if index out of range
                     line_color = region_ld_colors[-1]
-                
+
                 # Draw straight line connecting the two variant positions
                 ax.plot([x1, x2], [y1, y2], color=line_color, alpha=alpha, linewidth=lw, zorder=1)
                 line_count += 1
-    
+
     if sig_level is not None:
         log.write(f"Plotted {line_count} lines with LD >= {min_thr} and at least one variant with P <= {sig_level}", verbose=verbose)
     else:

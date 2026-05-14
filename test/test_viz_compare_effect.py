@@ -7,10 +7,11 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-import pandas as pd
 import numpy as np
-from gwaslab.viz.viz_plot_compare_effect import compare_effect
+import pandas as pd
+
 from gwaslab.g_Sumstats import Sumstats
+from gwaslab.viz.viz_plot_compare_effect import compare_effect
 
 
 def make_sumstats_beta(n=120, seed=1357):

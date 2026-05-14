@@ -1,8 +1,9 @@
 import os
 import sys
 import unittest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "src")
@@ -14,7 +15,7 @@ import gwaslab as gl
 
 class TestSumstatsMultiKeepAllVariants(unittest.TestCase):
     """Test that SumstatsMulti uses the same merging logic as SumstatsPair"""
-    
+
     def setUp(self):
         """Set up test data with overlapping and non-overlapping variants"""
         # Study 1: variants at positions 100, 200, 300
@@ -33,7 +34,7 @@ class TestSumstatsMultiKeepAllVariants(unittest.TestCase):
             }),
             verbose=False
         )
-        
+
         # Study 2: variants at positions 100, 200, 400 (overlaps at 100, 200; unique at 400)
         self.sumstats2 = gl.Sumstats(
             pd.DataFrame({
@@ -50,7 +51,7 @@ class TestSumstatsMultiKeepAllVariants(unittest.TestCase):
             }),
             verbose=False
         )
-        
+
         # Study 3: variant at position 500 (unique)
         self.sumstats3 = gl.Sumstats(
             pd.DataFrame({
@@ -75,12 +76,12 @@ class TestSumstatsMultiKeepAllVariants(unittest.TestCase):
             keep_all_variants=False,
             verbose=False
         )
-        
+
         # Should only have variants present in both studies (100, 200)
         result_positions = set(multi.data["POS"].values)
-        self.assertEqual(result_positions, {100, 200}, 
+        self.assertEqual(result_positions, {100, 200},
                         "Should only have overlapping variants when keep_all_variants=False")
-        self.assertEqual(len(multi.data), 2, 
+        self.assertEqual(len(multi.data), 2,
                         "Should have 2 variants (both present in both studies)")
 
     def test_keep_all_variants_true(self):
@@ -90,12 +91,12 @@ class TestSumstatsMultiKeepAllVariants(unittest.TestCase):
             keep_all_variants=True,
             verbose=False
         )
-        
+
         # Should have all variants from both studies (100, 200, 300, 400)
         result_positions = set(multi.data["POS"].values)
-        self.assertEqual(result_positions, {100, 200, 300, 400}, 
+        self.assertEqual(result_positions, {100, 200, 300, 400},
                         "Should have all variants when keep_all_variants=True")
-        self.assertEqual(len(multi.data), 4, 
+        self.assertEqual(len(multi.data), 4,
                         "Should have 4 variants (2 overlapping + 1 from study1 + 1 from study2)")
 
     def test_default_keep_all_variants(self):
@@ -104,12 +105,12 @@ class TestSumstatsMultiKeepAllVariants(unittest.TestCase):
             [self.sumstats1, self.sumstats2],
             verbose=False
         )
-        
+
         # Should have all variants from both studies (100, 200, 300, 400) by default
         result_positions = set(multi.data["POS"].values)
-        self.assertEqual(result_positions, {100, 200, 300, 400}, 
+        self.assertEqual(result_positions, {100, 200, 300, 400},
                         "Should have all variants by default (keep_all_variants=True)")
-        self.assertEqual(len(multi.data), 4, 
+        self.assertEqual(len(multi.data), 4,
                         "Should have 4 variants (2 overlapping + 1 from study1 + 1 from study2)")
 
     def test_three_studies_keep_all_variants(self):
@@ -119,35 +120,35 @@ class TestSumstatsMultiKeepAllVariants(unittest.TestCase):
             keep_all_variants=True,
             verbose=False
         )
-        
+
         # Should have all unique variants: 100, 200, 300, 400, 500
         result_positions = set(multi.data["POS"].values)
-        self.assertEqual(result_positions, {100, 200, 300, 400, 500}, 
+        self.assertEqual(result_positions, {100, 200, 300, 400, 500},
                         "Should have all variants from all three studies")
-        self.assertEqual(len(multi.data), 5, 
+        self.assertEqual(len(multi.data), 5,
                         "Should have 5 variants total")
 
     def test_consistency_with_pair(self):
         """Test that SumstatsMulti and SumstatsPair produce consistent results"""
         # Create pair
         pair = gl.SumstatsPair(
-            self.sumstats1, 
-            self.sumstats2, 
+            self.sumstats1,
+            self.sumstats2,
             keep_all_variants=False,
             verbose=False
         )
-        
+
         # Create multi
         multi = gl.SumstatsMulti(
             [self.sumstats1, self.sumstats2],
             keep_all_variants=False,
             verbose=False
         )
-        
+
         # Both should have same number of variants
         self.assertEqual(len(pair.data), len(multi.data),
                         "SumstatsPair and SumstatsMulti should have same number of variants")
-        
+
         # Both should have same positions
         pair_positions = set(pair.data["POS"].values)
         multi_positions = set(multi.data["POS"].values)

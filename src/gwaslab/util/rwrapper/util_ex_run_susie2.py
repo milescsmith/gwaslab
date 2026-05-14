@@ -1,15 +1,16 @@
-from typing import TYPE_CHECKING, Optional, Union, Dict, Tuple
-import os
 import gc
-import pandas as pd
+import os
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
+
 import numpy as np
+import pandas as pd
+
+from gwaslab.extension import _check_susie_version, _checking_r_version
 from gwaslab.info.g_Log import Log
-from gwaslab.extension import _checking_r_version
-from gwaslab.extension import _check_susie_version
 from gwaslab.qc.qc_decorator import with_logging
-from gwaslab.util.rwrapper.util_ex_r_runner import RScriptRunner, RExecutionResult
 from gwaslab.util.general.util_ex_result_manager import ResultManager
 from gwaslab.util.general.util_path_manager import _path
+from gwaslab.util.rwrapper.util_ex_r_runner import RExecutionResult, RScriptRunner
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
@@ -19,10 +20,10 @@ def _prepare_paths(
     row: pd.Series,
     sumstats: str,
     study: str,
-    output_dir: Optional[str],
+    output_dir: str | None,
     log: Log,
     verbose: bool
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """
     Prepare all file paths needed for SuSieR execution.
     
@@ -42,7 +43,7 @@ def _prepare_paths(
     working_dir = output_dir if output_dir is not None else (
         os.path.dirname(sumstats) if os.path.dirname(sumstats) else "./"
     )
-    
+
     # Generate output prefix (with or without base_name from sumstats)
     base_name = os.path.basename(sumstats).replace(".sumstats.gz", "").replace(".sumstats", "")
     if base_name:
@@ -63,7 +64,7 @@ def _prepare_paths(
             log=log,
             verbose=False
         )
-    
+
     # Generate full paths for output files
     pipcs_file_full = _path(
         out=output_prefix,
@@ -77,11 +78,11 @@ def _prepare_paths(
         log=log,
         verbose=False
     )
-    
+
     # Get basenames for R script (files written relative to working_dir)
     pipcs_basename = os.path.basename(pipcs_file_full)
     diagnostic_basename = os.path.basename(diagnostic_file_full)
-    
+
     return {
         "output_prefix": output_prefix,
         "pipcs_file": pipcs_file_full,
@@ -97,7 +98,7 @@ def _build_r_script(
     ld_r_matrix: str,
     row: pd.Series,
     mode: str,
-    n: Optional[Union[int, str]],
+    n: Union[int, str] | None,
     max_iter: int,
     min_abs_corr: float,
     refine: str,
@@ -106,7 +107,7 @@ def _build_r_script(
     fillldna: bool,
     pipcs_basename: str,
     diagnostic_basename: str
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Build R script content for SuSieR execution.
     
@@ -135,7 +136,7 @@ def _build_r_script(
     else:
         input_params = "bhat = sumstats$BETA,shat = sumstats$SE"
         kriging_input = "sumstats$BETA/sumstats$SE"
-    
+
     # Build susie_rss call string for logging
     susie_rss_call = "susie_rss({}, n = {}, R = R, max_iter = {}, min_abs_corr={}, refine = {}, L = {}{})".format(
         input_params,
@@ -146,9 +147,9 @@ def _build_r_script(
         L,
         susie_kwargs
     )
-    
+
     # Build full R script
-    rscript = '''
+    rscript = """
 library(susieR)
 
 sumstats <- read.csv("{}", sep="\t")
@@ -173,7 +174,7 @@ png(filename="{}")
 diagnostic <- kriging_rss({}, R, n=n)
 diagnostic$plot
 dev.off()
-    '''.format(
+    """.format(
         sumstats,
         ld_r_matrix,
         "R[is.na(R)] <- 0" if fillldna else "",
@@ -190,7 +191,7 @@ dev.off()
         diagnostic_basename,
         kriging_input
     )
-    
+
     return rscript, susie_rss_call
 
 
@@ -198,12 +199,12 @@ def _process_susie_result(
     result: RExecutionResult,
     result_manager: ResultManager,
     row: pd.Series,
-    paths: Dict[str, str],
+    paths: dict[str, str],
     delete: bool,
     show_diagnostic: bool,
     log: Log,
     verbose: bool
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame | None:
     """
     Process successful SuSieR execution result.
     
@@ -222,29 +223,29 @@ def _process_susie_result(
     """
     if not result.success:
         return None
-    
+
     pipcs_file = paths["pipcs_file"]
-    
+
     # Read and process output file
     if pipcs_file not in result.output_files:
-        log.warning("  -Expected output file not found: {}".format(pipcs_file), verbose=verbose)
+        log.warning(f"  -Expected output file not found: {pipcs_file}", verbose=verbose)
         return None
-    
+
     pipcs_path = result.output_files[pipcs_file]
     pip_cs = pd.read_csv(pipcs_path)
     pip_cs["LOCUS"] = row["SNPID"]
     pip_cs["STUDY"] = row["STUDY"]
-    
+
     # Show preview of results
     result_manager.preview_dataframe(pipcs_file, result=result, n_rows=3)
-    
+
     # Handle file deletion
     if delete:
         os.remove(pipcs_file)
-        log.write("  -Removed output file: {}".format(pipcs_file))
+        log.write(f"  -Removed output file: {pipcs_file}")
     else:
-        log.write("  -SuSieR result summary to: {}".format(pipcs_file))
-    
+        log.write(f"  -SuSieR result summary to: {pipcs_file}")
+
     # Display diagnostic image if requested
     if show_diagnostic:
         result_manager.show_image(
@@ -252,7 +253,7 @@ def _process_susie_result(
             result=result,
             title=f"SuSieR Diagnostic Plot - {row['SNPID']} ({row['STUDY']})"
         )
-    
+
     return pip_cs
 
 
@@ -285,7 +286,7 @@ def _create_execution_log(
     """
     r_log_file = _path(
         study=study,
-        snpid=row['SNPID'],
+        snpid=row["SNPID"],
         analysis="susie",
         result_type="log",
         directory=working_dir,
@@ -294,11 +295,11 @@ def _create_execution_log(
         log=log,
         verbose=verbose
     )
-    
+
     try:
         metadata = {
             "Study": study,
-            "SNPID": row['SNPID'],
+            "SNPID": row["SNPID"],
             "Output prefix": output_prefix
         }
         result_manager.create_r_log(
@@ -312,7 +313,7 @@ def _create_execution_log(
             verbose=verbose
         )
     except Exception as e:
-        log.warning("  -Could not save R log to file: {}".format(str(e)), verbose=verbose)
+        log.warning(f"  -Could not save R log to file: {e!s}", verbose=verbose)
 
 
 @with_logging(
@@ -322,22 +323,22 @@ def _create_execution_log(
     start_function=".run_susie_rss()"
 )
 def _run_susie_rss(
-    gls: 'Sumstats',
-    filepath: Optional[str],
+    gls: "Sumstats",
+    filepath: str | None,
     r: str = "Rscript",
     mode: str = "bs",
-    out: Optional[str] = None,
+    out: str | None = None,
     max_iter: int = 100,
     min_abs_corr: float = 0.5,
     refine: str = "FALSE",
     L: int = 10,
     fillldna: bool = True,
-    n: Optional[Union[int, str]] = None,
+    n: Union[int, str] | None = None,
     delete: bool = False,
     susie_kwargs: str = "",
     log: Log = Log(),
     verbose: bool = True,
-    timeout: Optional[float] = None,
+    timeout: float | None = None,
     show_diagnostic: bool = True
 ) -> pd.DataFrame:
     """
@@ -370,16 +371,16 @@ def _run_susie_rss(
         log.write(" -File path is None.")
         log.write("Finished finemapping using SuSieR.")
         return pd.DataFrame()
-    
+
     gls.offload()
-    
+
     filelist = pd.read_csv(filepath, sep="\t")
     locus_pip_cs = pd.DataFrame()
-    
+
     # Check R and SuSieR versions
     log = _checking_r_version(r, log)
     log = _check_susie_version(r, log)
-    
+
     # Initialize runners and managers
     runner = RScriptRunner(
         r=r,
@@ -389,23 +390,23 @@ def _run_susie_rss(
         cleanup=True
     )
     result_manager = ResultManager(log=log)
-    
+
     # Process each locus
     for index, row in filelist.iterrows():
         gc.collect()
-        
+
         study = row["STUDY"]
         ld_r_matrix = row["LD_R_MATRIX"]
         sumstats = row["LOCUS_SUMSTATS"]
-        
+
         # Prepare paths
         paths = _prepare_paths(row, sumstats, study, out, log, verbose)
-        
+
         log.write(" -Running for: {} - {}".format(row["SNPID"], row["STUDY"]))
-        log.write("  -Locus sumstats:{}".format(sumstats))
-        log.write("  -LD r matrix:{}".format(ld_r_matrix))
+        log.write(f"  -Locus sumstats:{sumstats}")
+        log.write(f"  -LD r matrix:{ld_r_matrix}")
         log.write("  -output_prefix:{}".format(paths["output_prefix"]))
-        
+
         # Build R script
         rscript, susie_rss_call = _build_r_script(
             sumstats=sumstats,
@@ -422,9 +423,9 @@ def _run_susie_rss(
             pipcs_basename=paths["pipcs_basename"],
             diagnostic_basename=paths["diagnostic_basename"]
         )
-        
-        log.write("  -SuSieR script: {}".format(susie_rss_call))
-        
+
+        log.write(f"  -SuSieR script: {susie_rss_call}")
+
         # Execute R script
         log.write("  -Running SuSieR from command line...")
         result = runner.execute(
@@ -436,18 +437,18 @@ def _run_susie_rss(
             verbose=False,
             working_dir=paths["working_dir"]
         )
-        
+
         # Trace result
         result_manager.trace(
             result=result,
-            identifier=row['SNPID'],
+            identifier=row["SNPID"],
             parameters={
                 "study": study,
                 "locus": row["SNPID"],
                 "output_prefix": paths["output_prefix"]
             }
         )
-        
+
         # Create execution log
         _create_execution_log(
             result_manager=result_manager,
@@ -461,7 +462,7 @@ def _run_susie_rss(
             log=log,
             verbose=verbose
         )
-        
+
         # Process results
         pip_cs = _process_susie_result(
             result=result,
@@ -473,13 +474,13 @@ def _run_susie_rss(
             log=log,
             verbose=verbose
         )
-        
+
         if pip_cs is not None:
             locus_pip_cs = pd.concat([locus_pip_cs, pip_cs], ignore_index=True)
-    
+
     # Finalize results
     gls.reload()
-    
+
     if not locus_pip_cs.empty:
         locus_pip_cs = locus_pip_cs.rename(columns={
             "variable": "N_SNP",
@@ -492,7 +493,7 @@ def _run_susie_rss(
             on="SNPID",
             how="left"
         )
-    
+
     return locus_pip_cs
 
 

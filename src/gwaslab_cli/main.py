@@ -17,7 +17,7 @@ def _print_version() -> None:
         print("gwaslab (version unavailable)")
 
 
-def main(argv: Optional[list[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     """Entry point for the lightweight GWASLab launcher."""
     if argv is None:
         argv = sys.argv[1:]

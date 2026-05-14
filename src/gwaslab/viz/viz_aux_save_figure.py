@@ -1,8 +1,11 @@
-import matplotlib.pyplot as plt
-from gwaslab.info.g_Log import Log
-import time
-import os
 import functools
+import os
+import time
+
+import matplotlib.pyplot as plt
+
+from gwaslab.info.g_Log import Log
+
 
 def save_figure(fig, save, keyword, save_kwargs=None, log = Log(), verbose=True):
     """
@@ -28,58 +31,58 @@ def save_figure(fig, save, keyword, save_kwargs=None, log = Log(), verbose=True)
     # Set verbose to False when save is None
     if save is None:
         verbose = False
-    
+
     log.write("Start to save figure..." ,verbose=verbose)
     if save_kwargs is None:
         save_kwargs = {}
-    
+
     if not save:
         log.write(" -Skip saving figure!" ,verbose=verbose)
         log.write("Finished saving figure..." ,verbose=verbose)
         return
-    
+
     # Determine file path
     if save is True:
         file_path = get_default_path(keyword)
     else:
         file_path = str(save)
-    
+
     # Get file extension for format-specific handling
     _, ext = os.path.splitext(file_path)
-    ext = ext.lower().lstrip('.')
-    
+    ext = ext.lower().lstrip(".")
+
     # Vector formats (PDF, SVG, EPS) don't use bbox_inches="tight" by default
     # unless explicitly specified in save_kwargs
-    vector_formats = {'pdf', 'svg', 'eps'}
+    vector_formats = {"pdf", "svg", "eps"}
     is_vector_format = ext in vector_formats
-    
+
     # Prepare save arguments
     save_params = save_kwargs.copy()
-    
+
     # For non-vector formats, use bbox_inches="tight" unless overridden
-    if not is_vector_format and 'bbox_inches' not in save_params:
-        save_params['bbox_inches'] = 'tight'
-    
+    if not is_vector_format and "bbox_inches" not in save_params:
+        save_params["bbox_inches"] = "tight"
+
     # Check if file exists
     file_exists = os.path.exists(file_path)
-    
+
     try:
         # Save the figure
         fig.savefig(file_path, **save_params)
-        
+
         # Log success message
         if file_exists:
-            overwrite_msg = f" (overwrite)" if ext else ""
+            overwrite_msg = " (overwrite)" if ext else ""
             format_msg = f" ({ext})" if ext else ""
             log.write(f" -Saved to {file_path} successfully!{format_msg}{overwrite_msg}" ,verbose=verbose)
         else:
             format_msg = f" ({ext})" if ext else ""
             log.write(f" -Saved to {file_path} successfully!{format_msg}" ,verbose=verbose)
-            
+
     except Exception as e:
-        log.warning(f"Failed to save figure to {file_path}: {str(e)}")
+        log.warning(f"Failed to save figure to {file_path}: {e!s}")
         raise
-    
+
     log.write("Finished saving figure..." ,verbose=verbose)
 
 def get_default_path(keyword, fmt="png"):
@@ -98,7 +101,7 @@ def get_default_path(keyword, fmt="png"):
     str
         Generated file path with timestamp and counter
     """
-    path_dictionary = { 
+    path_dictionary = {
         "m": "manhattan",
         "qq": "qq",
         "mqq": "mqq",
@@ -123,18 +126,18 @@ def get_default_path(keyword, fmt="png"):
         "plot_associations": "associations",
         "gwaslab": "gwaslab"
     }
-    
+
     prefix = path_dictionary.get(keyword, "gwaslab")
-    timestamp = time.strftime('%Y%m%d')
+    timestamp = time.strftime("%Y%m%d")
     count = 1
-    
+
     # Find first available filename (up to 10000 attempts)
     for _ in range(10000):
         file_path = f"./gwaslab_{prefix}_{timestamp}_{count}.{fmt}"
         if not os.path.exists(file_path):
             return file_path
         count += 1
-    
+
     # Fallback if all attempts fail
     return f"./gwaslab_{prefix}_{timestamp}_{count}.{fmt}"
 
@@ -161,6 +164,6 @@ def safefig(func):
             return func(*args, **kwargs)
         except Exception as e:
             # Close all figures to prevent empty figure output on error
-            plt.close('all')
+            plt.close("all")
             raise e
     return wrapper

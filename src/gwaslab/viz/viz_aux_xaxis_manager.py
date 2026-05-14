@@ -5,9 +5,11 @@ This module provides the XAxisManager class for aligning x-axes in terms of
 data range (xlim) and tick positions/labels without using matplotlib's sharex.
 """
 
-import numpy as np
+from typing import Any, List, Optional, Tuple, Union
+
 import matplotlib.pyplot as plt
-from typing import List, Optional, Tuple, Union, Any
+import numpy as np
+
 from gwaslab.info.g_Log import Log
 
 # Try to import for inset axes detection
@@ -88,25 +90,25 @@ class XAxisManager:
     >>> xm.register_align(axes[:2])  # Only align first 2 axes
     >>> xm.align()
     """
-    
+
     def __init__(
         self,
-        all_axes: List[plt.Axes],
-        xlim: Optional[Tuple[float, float]] = None,
-        xticks: Optional[np.ndarray] = None,
-        xticklabels: Optional[List[str]] = None,
-        region: Optional[Tuple[int, int, int]] = None,
-        region_step: Optional[int] = None,
+        all_axes: list[plt.Axes],
+        xlim: tuple[float, float] | None = None,
+        xticks: np.ndarray | None = None,
+        xticklabels: list[str] | None = None,
+        region: tuple[int, int, int] | None = None,
+        region_step: int | None = None,
         track_start_i: float = 0.0,
-        gene_track_start_i: Optional[float] = None,
-        xlabel: Optional[str] = None,
-        fontsize: Optional[float] = None,
-        font_family: Optional[str] = None,
-        fig: Optional[plt.Figure] = None,
+        gene_track_start_i: float | None = None,
+        xlabel: str | None = None,
+        fontsize: float | None = None,
+        font_family: str | None = None,
+        fig: plt.Figure | None = None,
         adjust_spacing: bool = True,
         min_hspace: float = 0.05,
         verbose: bool = True,
-        log: Optional[Log] = None
+        log: Log | None = None
     ):
         # All axes in the figure (for spacing adjustment)
         # all_axes[0] is top panel, all_axes[-1] is bottom panel
@@ -122,7 +124,7 @@ class XAxisManager:
         self.xlabel = xlabel
         self.fontsize = fontsize
         self.font_family = font_family
-        
+
         # Figure and spacing parameters
         self.fig = fig
         if self.fig is None and len(self.all_axes) > 0:
@@ -131,12 +133,12 @@ class XAxisManager:
         self.min_hspace = min_hspace
         self.verbose = verbose
         self.log = log if log is not None else Log()
-        
+
         # Axes to align (x-tick and label alignment only)
         # Spacing is applied to all_axes, but x-tick/label alignment is only for axes_to_align
-        self.axes_to_align: List[plt.Axes] = []
-    
-    def register_align(self, ax: Union[List[plt.Axes], plt.Axes]) -> None:
+        self.axes_to_align: list[plt.Axes] = []
+
+    def register_align(self, ax: Union[list[plt.Axes], plt.Axes]) -> None:
         """
         Register axis(es) for x-tick and label alignment.
         
@@ -150,12 +152,12 @@ class XAxisManager:
         """
         if isinstance(ax, plt.Axes):
             ax = [ax]
-        
+
         for a in ax:
             if a not in self.axes_to_align:
                 self.axes_to_align.append(a)
-    
-    def register_align_many(self, axes: Union[List[plt.Axes], plt.Axes]) -> None:
+
+    def register_align_many(self, axes: Union[list[plt.Axes], plt.Axes]) -> None:
         """
         Register multiple axes for x-tick and label alignment.
         
@@ -167,67 +169,67 @@ class XAxisManager:
             Axes to register for x-tick/label alignment.
         """
         self.register_align(axes)
-    
-    def _calculate_xlim(self) -> Tuple[float, float]:
+
+    def _calculate_xlim(self) -> tuple[float, float]:
         """Calculate xlim from region or use provided xlim."""
         if self.xlim is not None:
             return self.xlim
-        
+
         if self.region is None:
             raise ValueError(
                 "Either xlim or region must be provided to calculate x-axis limits."
             )
-        
+
         # Calculate xlim based on region
         # For most panels, use track_start_i offset
         xmin = self.track_start_i + self.region[1]
         xmax = self.track_start_i + self.region[2]
-        
+
         return (xmin, xmax)
-    
+
     def _calculate_xticks(self) -> np.ndarray:
         """Calculate tick positions from region or use provided xticks."""
         if self.xticks is not None:
             return np.asarray(self.xticks)
-        
+
         if self.region is None or self.region_step is None:
             # If no region/region_step, return empty array (let matplotlib auto-generate)
             return np.array([])
-        
+
         # Calculate ticks based on region
         xmin, xmax = self._calculate_xlim()
         ticks = np.linspace(xmin, xmax, num=self.region_step)
-        
+
         return ticks
-    
-    def _calculate_xticklabels(self) -> Optional[List[str]]:
+
+    def _calculate_xticklabels(self) -> list[str] | None:
         """Calculate tick labels from region or use provided labels."""
         if self.xticklabels is not None:
             return self.xticklabels
-        
+
         if self.region is None or self.region_step is None:
             return None
-        
+
         # Generate tick labels in MB format (similar to track and regional plots)
         # Calculate positions in base pairs
         tick_positions_bp = np.linspace(self.region[1], self.region[2], num=self.region_step).astype(int)
         # Format as MB with 3 decimal places
-        tick_labels = [f'{pos/1000000:.3f}' for pos in tick_positions_bp]
-        
+        tick_labels = [f"{pos/1000000:.3f}" for pos in tick_positions_bp]
+
         return tick_labels
-    
-    def _calculate_xlabel(self) -> Optional[str]:
+
+    def _calculate_xlabel(self) -> str | None:
         """Calculate xlabel from region or use provided label."""
         if self.xlabel is not None:
             return self.xlabel
-        
+
         if self.region is None:
             return None
-        
+
         # Generate xlabel in format "Chromosome X (MB)" (similar to track plots)
         xlabel = f"Chromosome {self.region[0]} (MB)"
         return xlabel
-    
+
     def _get_tick_position(self, ax: plt.Axes) -> str:
         """
         Determine if x-axis ticks are on top or bottom.
@@ -247,27 +249,27 @@ class XAxisManager:
             # Check if labeltop is True (labels on top)
             # Access tick_params through the axis
             tick_params = ax.xaxis._major_tick_kw
-            if tick_params.get('labeltop', False):
-                return 'top'
+            if tick_params.get("labeltop", False):
+                return "top"
         except:
             pass
-        
+
         # Check using get_ticks_position (returns 'top', 'bottom', 'both', or 'default')
         try:
             tick_position = ax.xaxis.get_ticks_position()
-            if tick_position == 'top':
-                return 'top'
-            elif tick_position == 'both':
+            if tick_position == "top":
+                return "top"
+            elif tick_position == "both":
                 # If both, check which labels are actually visible
                 # Check if labeltop is True
                 try:
-                    if ax.xaxis._major_tick_kw.get('labeltop', False):
-                        return 'top'
+                    if ax.xaxis._major_tick_kw.get("labeltop", False):
+                        return "top"
                 except:
                     pass
         except:
             pass
-        
+
         # Check if any visible tick labels are positioned above the axis
         try:
             tick_labels = ax.get_xticklabels()
@@ -279,16 +281,16 @@ class XAxisManager:
                         label_pos = label.get_position()
                         # If label y position is above axis center, it's on top
                         if label_pos[1] > axis_center:
-                            return 'top'
+                            return "top"
                     except:
                         pass
         except:
             pass
-        
+
         # Default to bottom
-        return 'bottom'
-    
-    def _calculate_required_space_for_labels(self, ax: plt.Axes, direction: str = 'below') -> float:
+        return "bottom"
+
+    def _calculate_required_space_for_labels(self, ax: plt.Axes, direction: str = "below") -> float:
         """
         Calculate the space required for tick labels and xlabel.
         
@@ -312,24 +314,24 @@ class XAxisManager:
         """
         if self.fig is None:
             self.fig = ax.figure
-        
+
         fig_height = self.fig.get_figheight()
         pos = ax.get_position()
         required_space = 0.0
-        
+
         # Determine actual tick position
         tick_position = self._get_tick_position(ax)
-        
+
         # Get tick labels and check if they're actually visible and have text
         tick_labels = ax.get_xticklabels()
         has_visible_labels = False
-        
+
         # Check if there are any visible labels with text
         for label in tick_labels:
             if label.get_visible() and label.get_text().strip():
                 has_visible_labels = True
                 break
-        
+
         if has_visible_labels:
             # Get rotation angle (default is 45 degrees for our use case)
             rotation = 45  # Default rotation
@@ -339,14 +341,14 @@ class XAxisManager:
                     rotation = tick_labels[0].get_rotation()
                 except:
                     rotation = 45
-            
+
             # Try to get actual bounding boxes if renderer is available
             renderer = self.fig.canvas.get_renderer()
             if renderer is not None:
-                if direction == 'below' or (direction == 'auto' and tick_position == 'bottom'):
+                if direction == "below" or (direction == "auto" and tick_position == "bottom"):
                     # Check space below axis
                     max_bottom = pos.y0  # Start with axis bottom
-                    
+
                     for label in tick_labels:
                         if label.get_visible() and label.get_text().strip():
                             # Get bounding box in figure coordinates
@@ -355,14 +357,14 @@ class XAxisManager:
                             # Check if this label extends below the axis
                             if bbox_fig.y0 < pos.y0:
                                 max_bottom = min(max_bottom, bbox_fig.y0)
-                    
+
                     # Calculate required space: distance from axis bottom to lowest label
                     if max_bottom < pos.y0:
                         required_space = (pos.y0 - max_bottom) * 1.3 + 0.01  # Add padding
                 else:
                     # Check space above axis
                     min_top = pos.y1  # Start with axis top
-                    
+
                     for label in tick_labels:
                         if label.get_visible() and label.get_text().strip():
                             # Get bounding box in figure coordinates
@@ -371,7 +373,7 @@ class XAxisManager:
                             # Check if this label extends above the axis
                             if bbox_fig.y1 > pos.y1:
                                 min_top = max(min_top, bbox_fig.y1)
-                    
+
                     # Calculate required space: distance from axis top to highest label
                     if min_top > pos.y1:
                         required_space = (min_top - pos.y1) * 1.3 + 0.01  # Add padding
@@ -385,22 +387,22 @@ class XAxisManager:
                         label_fontsize = tick_labels[0].get_fontsize()
                     except:
                         label_fontsize = 10  # Default
-                
+
                 # Calculate vertical extent based on rotation
                 # For rotated labels, the vertical extent depends on the rotation angle
                 label_height_points = label_fontsize * 1.2
                 label_height_fig = (label_height_points / 72.0) / fig_height
-                
+
                 # Convert rotation to radians
                 rotation_rad = np.deg2rad(rotation)
                 # Vertical extent = label_height * sin(rotation) for labels rotated
                 # For 45 degrees: sin(45) ≈ 0.707
                 vertical_extent = label_height_fig * abs(np.sin(rotation_rad))
-                
+
                 # Add padding
                 padding = 0.02
                 required_space = vertical_extent * 1.3 + padding
-        
+
         # Add space for xlabel if present
         xlabel = ax.get_xlabel()
         if xlabel and xlabel.strip():
@@ -411,8 +413,8 @@ class XAxisManager:
                 xlabel_on_top = xlabel_position > (pos.y0 + pos.y1) / 2
             except:
                 # Default based on tick position
-                xlabel_on_top = (tick_position == 'top')
-            
+                xlabel_on_top = (tick_position == "top")
+
             # Get xlabel fontsize
             if self.fontsize is not None:
                 xlabel_fontsize = self.fontsize
@@ -423,22 +425,22 @@ class XAxisManager:
                     xlabel_fontsize = xlabel_obj.get_fontsize()
                 except:
                     xlabel_fontsize = 10
-            
+
             # Calculate xlabel height
             xlabel_height_points = xlabel_fontsize * 1.2
             xlabel_height_fig = (xlabel_height_points / 72.0) / fig_height
-            
+
             # Add padding between tick labels and xlabel
             xlabel_padding = 0.01
-            
+
             # Add xlabel space in the correct direction
-            if (direction == 'below' or (direction == 'auto' and tick_position == 'bottom')) and not xlabel_on_top:
+            if (direction == "below" or (direction == "auto" and tick_position == "bottom")) and not xlabel_on_top:
                 required_space += xlabel_height_fig + xlabel_padding
-            elif (direction == 'above' or (direction == 'auto' and tick_position == 'top')) and xlabel_on_top:
+            elif (direction == "above" or (direction == "auto" and tick_position == "top")) and xlabel_on_top:
                 required_space += xlabel_height_fig + xlabel_padding
-        
+
         return required_space
-    
+
     def _has_labels(self, ax: plt.Axes) -> bool:
         """
         Check if an axis has visible tick labels or xlabel.
@@ -458,15 +460,15 @@ class XAxisManager:
         for label in tick_labels:
             if label.get_visible() and label.get_text().strip():
                 return True
-        
+
         # Check for xlabel
         xlabel = ax.get_xlabel()
         if xlabel and xlabel.strip():
             return True
-        
+
         return False
-    
-    def _separate_overlapping_axes(self, axes_for_spacing: List[plt.Axes], compact_spacing: float) -> None:
+
+    def _separate_overlapping_axes(self, axes_for_spacing: list[plt.Axes], compact_spacing: float) -> None:
         """
         Separate overlapping adjacent axes by moving them apart.
         
@@ -485,14 +487,14 @@ class XAxisManager:
                 bottom_ax = axes_for_spacing[i + 1]
                 pos_top = top_ax.get_position()
                 pos_bottom = bottom_ax.get_position()
-                
+
                 gap = pos_top.y1 - pos_bottom.y0
-                
+
                 if gap < compact_spacing:
                     has_overlaps = True
                     target_bottom_y0 = max(0.0, pos_top.y1 - compact_spacing - pos_bottom.height)
                     movement = target_bottom_y0 - pos_bottom.y0
-                    
+
                     # Move bottom axis and all axes below it down
                     for j in range(i + 1, len(axes_for_spacing)):
                         ax_to_move = axes_for_spacing[j]
@@ -500,11 +502,11 @@ class XAxisManager:
                         new_y0 = max(0.0, min(1.0 - pos.height, pos.y0 + movement))
                         ax_to_move.set_position([pos.x0, new_y0, pos.width, pos.height])
                     break
-            
+
             if not has_overlaps:
                 break
-    
-    def _calculate_required_gap(self, top_ax: plt.Axes, bottom_ax: plt.Axes, 
+
+    def _calculate_required_gap(self, top_ax: plt.Axes, bottom_ax: plt.Axes,
                                  axes_with_labels_set: set, compact_spacing: float) -> float:
         """
         Calculate the required gap between two axes based on their tick positions.
@@ -527,19 +529,19 @@ class XAxisManager:
         """
         required_gap_below_top = compact_spacing
         required_gap_above_bottom = compact_spacing
-        
+
         # Check top axis: if it has ticks on bottom, need space below it
         if top_ax in axes_with_labels_set and self._has_labels(top_ax):
-            if self._get_tick_position(top_ax) == 'bottom':
-                required_gap_below_top = self._calculate_required_space_for_labels(top_ax, direction='below')
-        
+            if self._get_tick_position(top_ax) == "bottom":
+                required_gap_below_top = self._calculate_required_space_for_labels(top_ax, direction="below")
+
         # Check bottom axis: if it has ticks on top, need space above it
         if bottom_ax in axes_with_labels_set and self._has_labels(bottom_ax):
-            if self._get_tick_position(bottom_ax) == 'top':
-                required_gap_above_bottom = self._calculate_required_space_for_labels(bottom_ax, direction='above')
-        
+            if self._get_tick_position(bottom_ax) == "top":
+                required_gap_above_bottom = self._calculate_required_space_for_labels(bottom_ax, direction="above")
+
         return max(required_gap_below_top, required_gap_above_bottom, compact_spacing)
-    
+
     def _adjust_figure_spacing(self) -> None:
         """
         Adjust vertical spacing by moving axes positions (moving approach).
@@ -554,106 +556,106 @@ class XAxisManager:
         """
         if not self.adjust_spacing:
             return
-        
+
         if self.fig is None:
             if len(self.all_axes) > 0:
                 self.fig = self.all_axes[0].figure
             else:
                 return
-        
+
         self.log.write("Adjusting vertical spacing using moving approach...", verbose=self.verbose)
-        
+
         # Use all_axes for spacing (preserve original order from top to bottom)
         axes_for_spacing = list(self.all_axes)
-        
+
         if len(axes_for_spacing) <= 1:
             return
-        
+
         # Create a set of axes that have labels (for spacing calculations)
         axes_with_labels_set = set(self.axes_to_align) if self.axes_to_align else set()
         compact_spacing = 0.01  # Minimal spacing when no labels
-        
+
         # Step 1: Separate overlapping adjacent axes
         self._separate_overlapping_axes(axes_for_spacing, compact_spacing)
-        
+
         # Step 2: Store original positions (after separation)
         original_positions = []
         for ax in axes_for_spacing:
             pos = ax.get_position()
             original_positions.append({
-                'y0': max(0.0, min(1.0, pos.y0)),
-                'y1': max(0.0, min(1.0, pos.y1)),
-                'height': max(0.0, min(1.0, pos.height)),
-                'x0': pos.x0,
-                'x1': pos.x1,
-                'width': pos.width
+                "y0": max(0.0, min(1.0, pos.y0)),
+                "y1": max(0.0, min(1.0, pos.y1)),
+                "height": max(0.0, min(1.0, pos.height)),
+                "x0": pos.x0,
+                "x1": pos.x1,
+                "width": pos.width
             })
-        
+
         num_gaps = len(axes_for_spacing) - 1
         if num_gaps <= 0:
             return
-        
+
         # Step 3: Calculate target positions from top to bottom
         # In matplotlib: y=1.0 is TOP, y=0.0 is BOTTOM
         # We stack from TOP (y=1.0) downward (toward y=0.0)
         fig_height = 1.0
-        target_y0 = [fig_height - original_positions[0]['height']]  # Top axis at top of figure
-        
+        target_y0 = [fig_height - original_positions[0]["height"]]  # Top axis at top of figure
+
         for gap_num in range(num_gaps):
             top_ax_idx = gap_num
             bottom_ax_idx = gap_num + 1
-            
+
             top_y0_target = target_y0[top_ax_idx]
-            top_y1_target = top_y0_target + original_positions[top_ax_idx]['height']
-            
+            top_y1_target = top_y0_target + original_positions[top_ax_idx]["height"]
+
             # Calculate required gap based on tick positions
             top_ax = axes_for_spacing[top_ax_idx]
             bottom_ax = axes_for_spacing[bottom_ax_idx]
             required_gap = self._calculate_required_gap(top_ax, bottom_ax, axes_with_labels_set, compact_spacing)
-            
+
             # Calculate target position for bottom axis (below top axis)
-            target_bottom_y0 = top_y0_target - required_gap - original_positions[bottom_ax_idx]['height']
-            
+            target_bottom_y0 = top_y0_target - required_gap - original_positions[bottom_ax_idx]["height"]
+
             # Clamp to valid range
-            bottom_ax_height = original_positions[bottom_ax_idx]['height']
+            bottom_ax_height = original_positions[bottom_ax_idx]["height"]
             max_allowed_y0 = top_y0_target - compact_spacing - bottom_ax_height
-            
+
             if target_bottom_y0 < 0.0:
                 target_bottom_y0 = max(0.0, max_allowed_y0)
             elif target_bottom_y0 > max_allowed_y0:
                 target_bottom_y0 = max_allowed_y0
-            
+
             target_y0.append(target_bottom_y0)
-        
+
         # Verify target_y0 has correct length
         if len(target_y0) != len(axes_for_spacing):
             while len(target_y0) < len(axes_for_spacing):
-                target_y0.append(original_positions[len(target_y0)]['y0'])
+                target_y0.append(original_positions[len(target_y0)]["y0"])
             target_y0 = target_y0[:len(axes_for_spacing)]
-        
+
         # Step 4: Calculate and apply movements simultaneously
         fig_height = 1.0
         for i, ax in enumerate(axes_for_spacing):
-            movement = target_y0[i] - original_positions[i]['y0']
+            movement = target_y0[i] - original_positions[i]["y0"]
             original_pos = original_positions[i]
             pos = ax.get_position()
-            
-            new_y0 = original_pos['y0'] + movement
-            new_y1 = new_y0 + original_pos['height']
-            
+
+            new_y0 = original_pos["y0"] + movement
+            new_y1 = new_y0 + original_pos["height"]
+
             # Clamp to valid range (0-1)
             if new_y1 > fig_height:
-                new_y0 = max(0.0, fig_height - original_pos['height'])
+                new_y0 = max(0.0, fig_height - original_pos["height"])
             elif new_y0 < 0.0:
                 new_y0 = 0.0
-            
+
             # Update position if changed
             if abs(new_y0 - pos.y0) > 0.001:
                 ax.set_position([pos.x0, new_y0, pos.width, pos.height])
-            
-        
+
+
         self.log.write("Finished adjusting vertical spacing.", verbose=self.verbose)
-    
+
     def align(self) -> None:
         """
         Apply x-tick and label alignment to registered axes, and spacing to all axes.
@@ -672,14 +674,14 @@ class XAxisManager:
         except ValueError as e:
             self.log.warning(f"Could not calculate axis parameters: {e}", verbose=self.verbose)
             return
-        
+
         # Step 2: Apply x-tick and label alignment to registered axes only
         if len(self.axes_to_align) > 0:
             self.log.write(
                 f"Aligning {len(self.axes_to_align)} axes: xlim={xlim}, num_ticks={len(xticks) if len(xticks) > 0 else 'auto'}",
                 verbose=self.verbose
             )
-            
+
             # Apply alignment to each registered axis
             # Since all axes will have the same ticks/labels after alignment,
             # show tick labels only on the bottom-most axis to avoid redundancy
@@ -694,17 +696,17 @@ class XAxisManager:
                     if pos.y0 < bottom_y0:  # Lower y0 means it's closer to bottom
                         bottom_y0 = pos.y0
                         bottom_axis_in_align = ax
-            
+
             for i, ax in enumerate(self.axes_to_align):
                 is_bottom_axis = (ax == bottom_axis_in_align)
-                
+
                 # Set xlim
                 ax.set_xlim(xlim)
-                
+
                 # Set ticks
                 if len(xticks) > 0:
                     ax.set_xticks(xticks)
-                    
+
                     # Set tick labels only on bottom axis
                     if is_bottom_axis:
                         # Bottom axis: show tick labels
@@ -714,30 +716,30 @@ class XAxisManager:
                             # Update tick label properties if font settings provided
                             tick_kwargs = {}
                             if self.fontsize is not None:
-                                tick_kwargs['fontsize'] = self.fontsize
+                                tick_kwargs["fontsize"] = self.fontsize
                             if self.font_family is not None:
-                                tick_kwargs['family'] = self.font_family
+                                tick_kwargs["family"] = self.font_family
                             if tick_kwargs:
-                                ax.tick_params(axis='x', **tick_kwargs)
+                                ax.tick_params(axis="x", **tick_kwargs)
                     else:
                         # Upper axes: show ticks but hide labels (since next axis has same ticks/labels)
                         ax.set_xticklabels([])
-                
+
                 # Set xlabel only on bottom axis
                 if is_bottom_axis and xlabel is not None:
                     label_kwargs = {}
                     if self.fontsize is not None:
-                        label_kwargs['fontsize'] = self.fontsize
+                        label_kwargs["fontsize"] = self.fontsize
                     if self.font_family is not None:
-                        label_kwargs['family'] = self.font_family
+                        label_kwargs["family"] = self.font_family
                     ax.set_xlabel(xlabel, **label_kwargs)
                 elif not is_bottom_axis:
                     # Upper axes: remove xlabel (bottom axis will show it)
                     ax.set_xlabel("")
-        
+
         # Step 3: Adjust vertical spacing for ALL axes in all_axes
         # Uses self.axes_to_align internally to determine which axes have labels
         self._adjust_figure_spacing()
-        
+
         if len(self.axes_to_align) > 0:
             self.log.write(f"Successfully aligned {len(self.axes_to_align)} axes.", verbose=self.verbose)

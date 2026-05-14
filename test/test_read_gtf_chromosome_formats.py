@@ -9,12 +9,12 @@ Tests cover:
 - Mixed formats in same file
 """
 
-import os
-import sys
 import gzip
-import unittest
-import tempfile
+import os
 import shutil
+import sys
+import tempfile
+import unittest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "src")
@@ -55,7 +55,7 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             Path to created file
         """
         gtf_path = os.path.join(self.tmpdir, filename)
-        
+
         lines = []
         for rec in records:
             line = "\t".join([
@@ -70,16 +70,16 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
                 str(rec.get("attribute", 'gene_id "GENE1"; gene_name "TestGene";')),
             ])
             lines.append(line)
-        
+
         content = "\n".join(lines)
-        
+
         if gzipped:
             with gzip.open(gtf_path, "wt") as f:
                 f.write(content)
         else:
             with open(gtf_path, "w") as f:
                 f.write(content)
-        
+
         return gtf_path
 
     # ========================================================================
@@ -93,9 +93,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "1", "start": 3000, "end": 4000, "attribute": 'gene_id "GENE2";'},
         ]
         gtf_path = self._create_gtf_file("test_num1.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 2)
         self.assertTrue(all(df["seqname"] == "1"))
 
@@ -105,9 +105,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "22", "start": 1000, "end": 2000, "attribute": 'gene_id "GENE1";'},
         ]
         gtf_path = self._create_gtf_file("test_num22.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "22")
 
@@ -119,9 +119,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "25", "start": 5000, "end": 6000, "attribute": 'gene_id "GENEMT";'},
         ]
         gtf_path = self._create_gtf_file("test_num_sex.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 3)
         # After conversion: 23->X, 24->Y, 25->MT
         seqnames = df["seqname"].tolist()
@@ -139,9 +139,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "X", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEX";'},
         ]
         gtf_path = self._create_gtf_file("test_strX.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "X")
 
@@ -151,9 +151,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "Y", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEY";'},
         ]
         gtf_path = self._create_gtf_file("test_strY.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "Y")
 
@@ -163,9 +163,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "MT", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEMT";'},
         ]
         gtf_path = self._create_gtf_file("test_strMT.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "MT")
 
@@ -180,9 +180,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "chr1", "start": 3000, "end": 4000, "attribute": 'gene_id "GENE2";'},
         ]
         gtf_path = self._create_gtf_file("test_chr1.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 2)
         # After normalization, should be "1"
         self.assertTrue(all(df["seqname"] == "1"))
@@ -193,9 +193,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "chrX", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEX";'},
         ]
         gtf_path = self._create_gtf_file("test_chrX.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "X")
 
@@ -205,9 +205,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "chrY", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEY";'},
         ]
         gtf_path = self._create_gtf_file("test_chrY.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "Y")
 
@@ -217,9 +217,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "chrMT", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEMT";'},
         ]
         gtf_path = self._create_gtf_file("test_chrMT.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "MT")
 
@@ -233,9 +233,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "Chr1", "start": 1000, "end": 2000, "attribute": 'gene_id "GENE1";'},
         ]
         gtf_path = self._create_gtf_file("test_Chr1.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         # After normalization, should be "1"
         self.assertEqual(df["seqname"].iloc[0], "1")
@@ -246,9 +246,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "CHR1", "start": 1000, "end": 2000, "attribute": 'gene_id "GENE1";'},
         ]
         gtf_path = self._create_gtf_file("test_CHR1.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         # After normalization, should be "1"
         self.assertEqual(df["seqname"].iloc[0], "1")
@@ -259,9 +259,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "ChrX", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEX";'},
         ]
         gtf_path = self._create_gtf_file("test_ChrX.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "X")
 
@@ -271,9 +271,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "CHRX", "start": 1000, "end": 2000, "attribute": 'gene_id "GENEX";'},
         ]
         gtf_path = self._create_gtf_file("test_CHRX.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "X")
 
@@ -291,9 +291,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "MT", "start": 9000, "end": 10000, "attribute": 'gene_id "GENEMT";'},
         ]
         gtf_path = self._create_gtf_file("test_mixed_num_str.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 5)
         seqnames = df["seqname"].tolist()
         self.assertIn("1", seqnames)
@@ -312,9 +312,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "chrMT", "start": 9000, "end": 10000, "attribute": 'gene_id "GENEMT";'},
         ]
         gtf_path = self._create_gtf_file("test_mixed_chr.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 5)
         seqnames = df["seqname"].tolist()
         # After normalization, chr prefix should be removed
@@ -336,9 +336,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "2", "start": 5000, "end": 6000, "attribute": 'gene_id "GENE2";'},
         ]
         gtf_path = self._create_gtf_file("test_filter_num.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path, chrom="1")
-        
+
         self.assertEqual(len(df), 2)
         self.assertTrue(all(df["seqname"] == "1"))
 
@@ -350,11 +350,11 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "chr2", "start": 5000, "end": 6000, "attribute": 'gene_id "GENE2";'},
         ]
         gtf_path = self._create_gtf_file("test_filter_chr.gtf.gz", records)
-        
+
         # Filter using "chr1" or "1" should both work
         df1 = read_gtf(gtf_path, chrom="chr1")
         df2 = read_gtf(gtf_path, chrom="1")
-        
+
         self.assertEqual(len(df1), 2)
         self.assertEqual(len(df2), 2)
 
@@ -365,12 +365,12 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "chr1", "start": 3000, "end": 4000, "attribute": 'gene_id "GENE1";'},
         ]
         gtf_path = self._create_gtf_file("test_filter_X.gtf.gz", records)
-        
+
         # Filter using "X", "chrX", or "23" should all work
         df_X = read_gtf(gtf_path, chrom="X")
         df_chrX = read_gtf(gtf_path, chrom="chrX")
         df_23 = read_gtf(gtf_path, chrom="23")
-        
+
         self.assertEqual(len(df_X), 1)
         self.assertEqual(len(df_chrX), 1)
         self.assertEqual(len(df_23), 1)
@@ -387,9 +387,9 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
         with gzip.open(gtf_path, "wt") as f:
             f.write("#!genome-build GRCh38\n")
             f.write("#!genome-version GRCh38\n")
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 0)
 
     def test_uncompressed_gtf(self):
@@ -398,22 +398,22 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
             {"seqname": "1", "start": 1000, "end": 2000, "attribute": 'gene_id "GENE1";'},
         ]
         gtf_path = self._create_gtf_file("test_uncompressed.gtf", records, gzipped=False)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["seqname"].iloc[0], "1")
 
     def test_usecols_with_seqname(self):
         """Test using usecols to select specific columns including seqname."""
         records = [
-            {"seqname": "chr1", "feature": "gene", "start": 1000, "end": 2000, 
+            {"seqname": "chr1", "feature": "gene", "start": 1000, "end": 2000,
              "attribute": 'gene_id "GENE1"; gene_name "TestGene";'},
         ]
         gtf_path = self._create_gtf_file("test_usecols.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path, usecols=["seqname", "start", "end", "gene_id"])
-        
+
         self.assertIn("seqname", df.columns)
         self.assertIn("start", df.columns)
         self.assertIn("end", df.columns)
@@ -423,17 +423,17 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
     def test_feature_filter(self):
         """Test filtering by feature type."""
         records = [
-            {"seqname": "chr1", "feature": "gene", "start": 1000, "end": 5000, 
+            {"seqname": "chr1", "feature": "gene", "start": 1000, "end": 5000,
              "attribute": 'gene_id "GENE1";'},
-            {"seqname": "chr1", "feature": "transcript", "start": 1000, "end": 5000, 
+            {"seqname": "chr1", "feature": "transcript", "start": 1000, "end": 5000,
              "attribute": 'gene_id "GENE1"; transcript_id "TX1";'},
-            {"seqname": "chr1", "feature": "exon", "start": 1000, "end": 2000, 
+            {"seqname": "chr1", "feature": "exon", "start": 1000, "end": 2000,
              "attribute": 'gene_id "GENE1"; transcript_id "TX1"; exon_id "EX1";'},
         ]
         gtf_path = self._create_gtf_file("test_feature_filter.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path, features={"gene"})
-        
+
         self.assertEqual(len(df), 1)
         self.assertEqual(df["feature"].iloc[0], "gene")
         self.assertEqual(df["seqname"].iloc[0], "1")
@@ -444,20 +444,20 @@ class TestReadGTFChromosomeFormats(unittest.TestCase):
         # Autosomes 1-22
         for i in range(1, 23):
             records.append({
-                "seqname": str(i), 
-                "start": i * 1000, 
-                "end": i * 1000 + 1000, 
+                "seqname": str(i),
+                "start": i * 1000,
+                "end": i * 1000 + 1000,
                 "attribute": f'gene_id "GENE{i}";'
             })
         # Sex chromosomes and mitochondrial
         records.append({"seqname": "X", "start": 23000, "end": 24000, "attribute": 'gene_id "GENEX";'})
         records.append({"seqname": "Y", "start": 24000, "end": 25000, "attribute": 'gene_id "GENEY";'})
         records.append({"seqname": "MT", "start": 1, "end": 1000, "attribute": 'gene_id "GENEMT";'})
-        
+
         gtf_path = self._create_gtf_file("test_all_chroms.gtf.gz", records)
-        
+
         df = read_gtf(gtf_path)
-        
+
         self.assertEqual(len(df), 25)
         seqnames = set(df["seqname"].tolist())
         # Check autosomes

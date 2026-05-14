@@ -5,10 +5,12 @@ This module provides functions to generate comprehensive QC reports
 including basic QC, lead variant extraction, and visualization.
 """
 
-from typing import TYPE_CHECKING, Optional, Dict, Any, List
 import os
-import pandas as pd
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+import pandas as pd
+
 from gwaslab.info.g_Log import Log
 from gwaslab.util.util_in_filter_value import _get_region_start_and_end
 
@@ -25,14 +27,14 @@ except ImportError:
 
 
 def generate_qc_report(
-    sumstats: 'Sumstats',
+    sumstats: "Sumstats",
     output_path: str = "gwas_qc_report.html",
-    basic_check_kwargs: Optional[Dict[str, Any]] = None,
-    harmonize_kwargs: Optional[Dict[str, Any]] = None,
-    get_lead_kwargs: Optional[Dict[str, Any]] = None,
-    mqq_plot_kwargs: Optional[Dict[str, Any]] = None,
-    regional_plot_kwargs: Optional[Dict[str, Any]] = None,
-    output_kwargs: Optional[Dict[str, Any]] = None,
+    basic_check_kwargs: dict[str, Any] | None = None,
+    harmonize_kwargs: dict[str, Any] | None = None,
+    get_lead_kwargs: dict[str, Any] | None = None,
+    mqq_plot_kwargs: dict[str, Any] | None = None,
+    regional_plot_kwargs: dict[str, Any] | None = None,
+    output_kwargs: dict[str, Any] | None = None,
     report_title: str = "GWAS Quality Control Report",
     verbose: bool = True
 ) -> str:
@@ -113,7 +115,7 @@ def generate_qc_report(
     ... )
     """
     log = Log()
-    
+
     if basic_check_kwargs is None:
         basic_check_kwargs = {}
     if harmonize_kwargs is None:
@@ -128,24 +130,24 @@ def generate_qc_report(
         regional_plot_kwargs = {}
     if output_kwargs is None:
         output_kwargs = None  # Keep as None to indicate no output
-    
+
     # Create output directory if needed
     output_path_obj = Path(output_path)
     output_dir = output_path_obj.parent
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create a directory for plot images
     plots_dir = output_dir / f"{output_path_obj.stem}_plots"
     plots_dir.mkdir(exist_ok=True)
-    
+
     log.write("=" * 80, verbose=verbose)
     log.write(f"Generating QC Report: {report_title}", verbose=verbose)
     log.write("=" * 80, verbose=verbose)
-    
+
     # Track processing steps for report
     processing_steps = []
     output_files = []
-    
+
     # Step 1: Basic QC
     step_num = 1
     total_steps = 4 + (1 if harmonize_kwargs is not None else 0) + (1 if output_kwargs is not None else 0)
@@ -154,7 +156,7 @@ def generate_qc_report(
     log.write("Basic QC completed.", verbose=verbose)
     processing_steps.append("Basic QC")
     step_num += 1
-    
+
     # Step 2: Harmonization (optional)
     harmonization_performed = False
     if harmonize_kwargs is not None:
@@ -167,29 +169,29 @@ def generate_qc_report(
         processing_steps.append("Harmonization")
         harmonization_performed = True
         step_num += 1
-    
+
     # Step 3: Get lead variants
     log.write(f"\n[Step {step_num}/{total_steps}] Extracting lead variants...", verbose=verbose)
     lead_variants = sumstats.get_lead(**get_lead_kwargs)
-    
+
     if lead_variants is None or len(lead_variants) == 0:
         log.write("WARNING: No lead variants found. Report will contain only MQQ plot.", verbose=verbose)
         lead_variants = pd.DataFrame()
     else:
         log.write(f"Found {len(lead_variants)} lead variant(s).", verbose=verbose)
-    
+
     # Step 4: Create MQQ plot
     step_num += 1
     log.write(f"\n[Step {step_num}/{total_steps}] Creating MQQ plot...", verbose=verbose)
     mqq_plot_path = plots_dir / "mqq_plot.png"
-    
+
     # Set default save path for MQQ plot
     mqq_kwargs = mqq_plot_kwargs.copy()
     if "save" not in mqq_kwargs:
         mqq_kwargs["save"] = str(mqq_plot_path)
     if "save_kwargs" not in mqq_kwargs:
         mqq_kwargs["save_kwargs"] = {"dpi": 300, "bbox_inches": "tight", "facecolor": "white"}
-    
+
     # Create MQQ plot
     try:
         sumstats.plot_mqq(**mqq_kwargs)
@@ -202,23 +204,23 @@ def generate_qc_report(
     except Exception as e:
         log.write(f"WARNING: Failed to create MQQ plot: {e}", verbose=verbose)
         mqq_plot_path = None
-    
+
     # Step 5: Create regional plots for each lead variant
     step_num += 1
     log.write(f"\n[Step {step_num}/{total_steps}] Creating regional plots for lead variants...", verbose=verbose)
     regional_plots = []
-    regional_plot_errors: List[Dict[str, Any]] = []
-    
+    regional_plot_errors: list[dict[str, Any]] = []
+
     if len(lead_variants) > 0:
         # Get default window size for regional plots
         windowsizekb = get_lead_kwargs.get("windowsizekb", 500)
-        
+
         for idx, row in lead_variants.iterrows():
             try:
                 # Get chromosome and position
                 chrom = row.get("CHR", None)
                 pos = row.get("POS", None)
-                
+
                 if chrom is None or pd.isna(chrom) or pos is None or pd.isna(pos):
                     message = f"WARNING: Skipping lead variant {idx} - missing CHR or POS"
                     log.write(message, verbose=verbose)
@@ -232,7 +234,7 @@ def generate_qc_report(
                         }
                     )
                     continue
-                
+
                 # Get region coordinates
                 region = _get_region_start_and_end(
                     chrom=chrom,
@@ -241,10 +243,10 @@ def generate_qc_report(
                     verbose=False,
                     log=log
                 )
-                
+
                 # Create regional plot
                 region_plot_path = plots_dir / f"regional_plot_chr{chrom}_{pos}.png"
-                
+
                 # Prepare regional plot kwargs
                 reg_kwargs = regional_plot_kwargs.copy()
                 reg_kwargs["mode"] = "r"
@@ -253,10 +255,10 @@ def generate_qc_report(
                     reg_kwargs["save"] = str(region_plot_path)
                 if "save_kwargs" not in reg_kwargs:
                     reg_kwargs["save_kwargs"] = {"dpi": 300, "bbox_inches": "tight", "facecolor": "white"}
-                
+
                 # Create regional plot
                 sumstats.plot_mqq(**reg_kwargs)
-                
+
                 # Verify file was created
                 if not region_plot_path.exists():
                     message = f"WARNING: Regional plot file not found at {region_plot_path}"
@@ -271,7 +273,7 @@ def generate_qc_report(
                         }
                     )
                     continue
-                
+
                 # Store plot info
                 variant_id = row.get("SNPID", f"chr{chrom}:{pos}")
                 regional_plots.append({
@@ -285,9 +287,9 @@ def generate_qc_report(
                     "plot_path": region_plot_path,
                     "region": region
                 })
-                
+
                 log.write(f"Created regional plot for {variant_id} (chr{chrom}:{pos})", verbose=verbose)
-                
+
             except Exception as e:
                 message = f"WARNING: Failed to create regional plot for variant {idx}: {e}"
                 log.write(message, verbose=verbose)
@@ -301,7 +303,7 @@ def generate_qc_report(
                     }
                 )
                 continue
-    
+
     log.write(f"\nCreated {len(regional_plots)} regional plot(s).", verbose=verbose)
     if len(regional_plot_errors) > 0:
         regional_error_path = output_dir / f"{output_path_obj.stem}_regional_plot_errors.tsv"
@@ -310,12 +312,12 @@ def generate_qc_report(
             f"Regional plot error report saved to: {regional_error_path} ({len(regional_plot_errors)} error(s))",
             verbose=verbose,
         )
-    
+
     # Step 6: Generate summary
     log.write("\nGenerating summary statistics...", verbose=verbose)
     summary_dict = sumstats.summary()
     log.write("Summary generated.", verbose=verbose)
-    
+
     # Step 7: Output sumstats (optional)
     if output_kwargs is not None:
         step_num += 1
@@ -330,16 +332,16 @@ def generate_qc_report(
             log.write(f"Sumstats saved to: {output_path_sumstats}", verbose=verbose)
             processing_steps.append("Output")
             output_files.append(output_path_sumstats)
-    
+
     # Determine output format from file extension
     output_format = output_path_obj.suffix.lower()
-    
+
     # Generate HTML report (always generate HTML first, then convert if needed)
     log.write("\nGenerating HTML report...", verbose=verbose)
-    
+
     # Get log text
-    log_text = sumstats.log.log_text if hasattr(sumstats, 'log') and hasattr(sumstats.log, 'log_text') else ""
-    
+    log_text = sumstats.log.log_text if hasattr(sumstats, "log") and hasattr(sumstats.log, "log_text") else ""
+
     html_content = _generate_html_report(
         sumstats=sumstats,
         lead_variants=lead_variants,
@@ -355,17 +357,17 @@ def generate_qc_report(
         summary_dict=summary_dict,
         log_text=log_text
     )
-    
+
     # Save HTML report (always save HTML as intermediate)
-    html_path = output_path_obj.with_suffix('.html')
-    with open(html_path, 'w', encoding='utf-8') as f:
+    html_path = output_path_obj.with_suffix(".html")
+    with open(html_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    
+
     # Convert to PDF if requested
-    if output_format == '.pdf':
+    if output_format == ".pdf":
         pdf_path = output_path_obj
         log.write("\nConverting HTML to PDF...", verbose=verbose)
-        
+
         if HAS_WEASYPRINT:
             try:
                 # Convert HTML to PDF using weasyprint
@@ -398,18 +400,18 @@ def generate_qc_report(
 
 
 def _generate_html_report(
-    sumstats: 'Sumstats',
+    sumstats: "Sumstats",
     lead_variants: pd.DataFrame,
-    mqq_plot_path: Optional[Path],
-    regional_plots: Dict[str, Path],
+    mqq_plot_path: Path | None,
+    regional_plots: dict[str, Path],
     report_title: str,
     output_dir: Path,
     plots_dir: Path,
     use_absolute_paths: bool = False,
-    processing_steps: Optional[List[str]] = None,
+    processing_steps: list[str] | None = None,
     harmonization_performed: bool = False,
-    output_files: Optional[List[str]] = None,
-    summary_dict: Optional[Dict[str, Any]] = None,
+    output_files: list[str] | None = None,
+    summary_dict: dict[str, Any] | None = None,
     log_text: str = ""
 ) -> str:
     """
@@ -450,7 +452,7 @@ def _generate_html_report(
     if output_files is None:
         output_files = []
     html_parts = []
-    
+
     # HTML header
     html_parts.append("""<!DOCTYPE html>
 <html lang="en">
@@ -641,19 +643,19 @@ def _generate_html_report(
             </ul>
         </div>
     """)
-    
+
     # Summary section
     html_parts.append("""
         <div class="section">
             <h2 id="summary">Summary</h2>
             <div class="summary">
     """)
-    
+
     # Add basic statistics
-    if hasattr(sumstats, 'data') and sumstats.data is not None:
+    if hasattr(sumstats, "data") and sumstats.data is not None:
         n_variants = len(sumstats.data)
         html_parts.append(f'<div class="summary-item"><strong>Total Variants:</strong> {n_variants:,}</div>')
-    
+
     if lead_variants is not None and len(lead_variants) > 0:
         html_parts.append(f'<div class="summary-item"><strong>Lead Variants:</strong> {len(lead_variants)}</div>')
         if "P" in lead_variants.columns:
@@ -661,24 +663,24 @@ def _generate_html_report(
             html_parts.append(f'<div class="summary-item"><strong>Minimum P-value:</strong> {min_p:.2e}</div>')
     else:
         html_parts.append('<div class="summary-item"><strong>Lead Variants:</strong> 0</div>')
-    
+
     # Add processing steps
     if processing_steps:
         html_parts.append(f'<div class="summary-item"><strong>Processing Steps:</strong> {", ".join(processing_steps)}</div>')
-    
+
     # Add harmonization info
     if harmonization_performed:
         html_parts.append('<div class="summary-item"><strong>Harmonization:</strong> Performed</div>')
-    
+
     # Add output files
     if output_files:
         html_parts.append(f'<div class="summary-item"><strong>Output Files:</strong> {", ".join(output_files)}</div>')
-    
+
     html_parts.append("""
             </div>
         </div>
     """)
-    
+
     # MQQ Plot section
     if mqq_plot_path and mqq_plot_path.exists():
         html_parts.append("""
@@ -686,16 +688,16 @@ def _generate_html_report(
             <h2 id="manhattan-qq-plot">Manhattan-QQ Plot</h2>
             <div class="plot-container">
         """)
-        
+
         # Use relative path for images (weasyprint can resolve relative paths via base_url)
         img_path = os.path.relpath(mqq_plot_path, output_dir)
         html_parts.append(f'<img src="{img_path}" alt="MQQ Plot">')
-        
+
         html_parts.append("""
             </div>
         </div>
         """)
-    
+
     # Lead Variants Table
     if lead_variants is not None and len(lead_variants) > 0:
         html_parts.append("""
@@ -703,20 +705,20 @@ def _generate_html_report(
             <h2 id="lead-variants">Lead Variants</h2>
             <table>
         """)
-        
+
         # Table header
         columns_to_show = ["SNPID", "CHR", "POS", "EA", "NEA", "P", "MLOG10P", "BETA", "SE"]
         available_columns = [col for col in columns_to_show if col in lead_variants.columns]
-        
+
         if not available_columns:
             # Fallback to all columns
             available_columns = lead_variants.columns.tolist()[:10]  # Limit to first 10 columns
-        
+
         html_parts.append("<thead><tr>")
         for col in available_columns:
             html_parts.append(f"<th>{col}</th>")
         html_parts.append("</tr></thead><tbody>")
-        
+
         # Table rows
         for idx, row in lead_variants.iterrows():
             html_parts.append("<tr>")
@@ -735,52 +737,52 @@ def _generate_html_report(
                     value = str(value)
                 html_parts.append(f"<td>{value}</td>")
             html_parts.append("</tr>")
-        
+
         html_parts.append("</tbody></table></div>")
-    
+
     # Regional Plots section
     if regional_plots:
         html_parts.append("""
         <div class="section">
             <h2 id="regional-plots">Regional Plots</h2>
         """)
-        
+
         for i, plot_info in enumerate(regional_plots, 1):
             html_parts.append(f"""
             <div class="variant-info">
                 <h3>Locus {i}: {plot_info['variant_id']}</h3>
                 <p><strong>Location:</strong> chr{plot_info['chrom']}:{plot_info['pos']:,}</p>
             """)
-            
-            if plot_info.get('p') is not None:
+
+            if plot_info.get("p") is not None:
                 html_parts.append(f"<p><strong>P-value:</strong> {plot_info['p']:.2e}</p>")
-            if plot_info.get('mlog10p') is not None:
+            if plot_info.get("mlog10p") is not None:
                 html_parts.append(f"<p><strong>-log10(P):</strong> {plot_info['mlog10p']:.4f}</p>")
-            if plot_info.get('beta') is not None:
+            if plot_info.get("beta") is not None:
                 html_parts.append(f"<p><strong>BETA:</strong> {plot_info['beta']:.4f}</p>")
-            if plot_info.get('se') is not None:
+            if plot_info.get("se") is not None:
                 html_parts.append(f"<p><strong>SE:</strong> {plot_info['se']:.4f}</p>")
-            
-            if plot_info['plot_path'].exists():
+
+            if plot_info["plot_path"].exists():
                 # Use relative path for images (weasyprint can resolve relative paths via base_url)
-                img_path = os.path.relpath(plot_info['plot_path'], output_dir)
+                img_path = os.path.relpath(plot_info["plot_path"], output_dir)
                 html_parts.append(f"""
                 <div class="plot-container">
                     <img src="{img_path}" alt="Regional Plot for {plot_info['variant_id']}">
                 </div>
                 """)
-            
+
             html_parts.append("</div>")
-        
+
         html_parts.append("</div>")
-    
+
     # Summary Statistics section
     if summary_dict:
         html_parts.append("""
         <div class="section">
             <h2 id="summary-statistics">Summary Statistics</h2>
         """)
-        
+
         # Overview
         if "overview" in summary_dict or "META" in summary_dict:
             overview = summary_dict.get("overview", summary_dict.get("META", {}))
@@ -794,7 +796,7 @@ def _generate_html_report(
             for key, value in overview.items():
                 html_parts.append(f"<tr><td><strong>{key}</strong></td><td>{value}</td></tr>")
             html_parts.append("</tbody></table></div>")
-        
+
         # Chromosomes
         if "chromosomes" in summary_dict or "CHR" in summary_dict:
             chr_info = summary_dict.get("chromosomes", summary_dict.get("CHR", {}))
@@ -809,7 +811,7 @@ def _generate_html_report(
                 if key.startswith("chr") or key == "Chromosomes_numbers":
                     html_parts.append(f"<tr><td><strong>{key}</strong></td><td>{value}</td></tr>")
             html_parts.append("</tbody></table></div>")
-        
+
         # Missing values
         if "missing_values" in summary_dict or "MISSING" in summary_dict:
             missing_info = summary_dict.get("missing_values", summary_dict.get("MISSING", {}))
@@ -826,7 +828,7 @@ def _generate_html_report(
                         col_name = key.replace("Missing_", "")
                         html_parts.append(f"<tr><td><strong>{col_name}</strong></td><td>{value:,}</td></tr>")
                 html_parts.append("</tbody></table></div>")
-        
+
         # MAF distribution
         if "MAF" in summary_dict:
             maf_info = summary_dict["MAF"]
@@ -840,7 +842,7 @@ def _generate_html_report(
             for key, value in maf_info.items():
                 html_parts.append(f"<tr><td><strong>{key}</strong></td><td>{value:,}</td></tr>")
             html_parts.append("</tbody></table></div>")
-        
+
         # P-value statistics
         if "p_values" in summary_dict or "P" in summary_dict:
             p_info = summary_dict.get("p_values", summary_dict.get("P", {}))
@@ -860,7 +862,7 @@ def _generate_html_report(
                 else:
                     html_parts.append(f"<tr><td><strong>{key}</strong></td><td>{value}</td></tr>")
             html_parts.append("</tbody></table></div>")
-        
+
         # Variant status
         if "variant_status" in summary_dict:
             status_info = summary_dict["variant_status"]
@@ -877,7 +879,7 @@ def _generate_html_report(
                     count = value.get("count", 0)
                     html_parts.append(f"<tr><td><strong>{key}</strong></td><td>{desc}</td><td>{count:,}</td></tr>")
             html_parts.append("</tbody></table></div>")
-        
+
         # Variants metadata
         if "variants" in summary_dict:
             variants_info = summary_dict["variants"]
@@ -897,7 +899,7 @@ def _generate_html_report(
                 else:
                     html_parts.append(f"<tr><td><strong>{key}</strong></td><td>{value:,}</td></tr>")
             html_parts.append("</tbody></table></div>")
-        
+
         # Samples metadata
         if "samples" in summary_dict:
             samples_info = summary_dict["samples"]
@@ -914,9 +916,9 @@ def _generate_html_report(
                 else:
                     html_parts.append(f"<tr><td><strong>{key}</strong></td><td>{value:,}</td></tr>")
             html_parts.append("</tbody></table></div>")
-        
+
         html_parts.append("</div>")
-    
+
     # Log section
     if log_text:
         html_parts.append("""
@@ -942,13 +944,13 @@ def _generate_html_report(
             </div>
         </div>
     """)
-    
+
     # Footer
     html_parts.append("""
     </div>
 </body>
 </html>
     """)
-    
+
     return "\n".join(html_parts)
 

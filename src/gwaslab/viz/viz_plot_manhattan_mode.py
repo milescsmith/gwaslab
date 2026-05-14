@@ -41,9 +41,9 @@ def draw_manhattan_panel(
         log.write(" -Creating background plot...", verbose=verbose)
         sns.scatterplot(
             data=sumstats,
-            x='i',
-            y='scaled_P',
-            hue='chr_hue',
+            x="i",
+            y="scaled_P",
+            hue="chr_hue",
             palette=palette,
             legend=legend,
             style=style,
@@ -58,11 +58,11 @@ def draw_manhattan_panel(
 
         if pd.api.types.is_list_like(highlight[0]) and highlight_chrpos is False:
             for i, highlight_set in enumerate(highlight):
-                log.write(" -Highlighting set {} target loci...".format(i + 1), verbose=verbose)
+                log.write(f" -Highlighting set {i + 1} target loci...", verbose=verbose)
                 sns.scatterplot(
                     data=sumstats.loc[sumstats["HUE"] == i],
-                    x='i',
-                    y='scaled_P',
+                    x="i",
+                    y="scaled_P",
                     hue="HUE",
                     palette={i: highlight_color[i % len(highlight_color)]},
                     legend=legend,
@@ -85,8 +85,8 @@ def draw_manhattan_panel(
                 highlight_color_single = highlight_color
             sns.scatterplot(
                 data=sumstats.loc[sumstats["HUE"] == 0],
-                x='i',
-                y='scaled_P',
+                x="i",
+                y="scaled_P",
                 hue="HUE",
                 palette={0: highlight_color_single},
                 legend=legend,
@@ -103,70 +103,69 @@ def draw_manhattan_panel(
                 highlight_i = sumstats.loc[sumstats[snpid].isin(highlight), "i"].values
             else:
                 highlight_i = []
+    elif density_color is True:
+        hue = "DENSITY_hue"
+        s = "DENSITY"
+        density_plot_data = sumstats.sort_values("DENSITY")
+        density_plot_data["DENSITY_hue"] = density_plot_data["DENSITY"].astype("float")
+        if density_range is None:
+            density_range = (density_plot_data["DENSITY"].min(), density_plot_data["DENSITY"].max())
+        if type(density_trange) is list:
+            density_trange = tuple(density_trange)
+        if type(density_range) is list:
+            density_range = tuple(density_range)
+        sns.scatterplot(
+            data=density_plot_data.loc[density_plot_data["DENSITY"] <= density_threshold, :],
+            x="i",
+            y="scaled_P",
+            hue=hue,
+            palette=density_tpalette,
+            legend=legend,
+            style=style,
+            size=s,
+            sizes=(marker_size[0] + 1, marker_size[0] + 1),
+            linewidth=linewidth,
+            hue_norm=density_trange,
+            zorder=2,
+            ax=ax1,
+            edgecolor=edgecolor,
+            **scatter_kwargs,
+        )
+        sns.scatterplot(
+            data=density_plot_data.loc[density_plot_data["DENSITY"] > density_threshold, :],
+            x="i",
+            y="scaled_P",
+            hue=hue,
+            palette=density_palette,
+            legend=legend,
+            style=style,
+            size=s,
+            sizes=marker_size,
+            hue_norm=density_range,
+            linewidth=linewidth,
+            zorder=2,
+            ax=ax1,
+            edgecolor=edgecolor,
+            **scatter_kwargs,
+        )
     else:
-        if density_color is True:
-            hue = "DENSITY_hue"
-            s = "DENSITY"
-            density_plot_data = sumstats.sort_values("DENSITY")
-            density_plot_data["DENSITY_hue"] = density_plot_data["DENSITY"].astype("float")
-            if density_range is None:
-                density_range = (density_plot_data["DENSITY"].min(), density_plot_data["DENSITY"].max())
-            if type(density_trange) is list:
-                density_trange = tuple(density_trange)
-            if type(density_range) is list:
-                density_range = tuple(density_range)
-            sns.scatterplot(
-                data=density_plot_data.loc[density_plot_data["DENSITY"] <= density_threshold, :],
-                x='i',
-                y='scaled_P',
-                hue=hue,
-                palette=density_tpalette,
-                legend=legend,
-                style=style,
-                size=s,
-                sizes=(marker_size[0] + 1, marker_size[0] + 1),
-                linewidth=linewidth,
-                hue_norm=density_trange,
-                zorder=2,
-                ax=ax1,
-                edgecolor=edgecolor,
-                **scatter_kwargs,
-            )
-            sns.scatterplot(
-                data=density_plot_data.loc[density_plot_data["DENSITY"] > density_threshold, :],
-                x='i',
-                y='scaled_P',
-                hue=hue,
-                palette=density_palette,
-                legend=legend,
-                style=style,
-                size=s,
-                sizes=marker_size,
-                hue_norm=density_range,
-                linewidth=linewidth,
-                zorder=2,
-                ax=ax1,
-                edgecolor=edgecolor,
-                **scatter_kwargs,
-            )
-        else:
-            log.write(" -Creating background plot...", verbose=verbose)
-            sns.scatterplot(
-                data=sumstats,
-                x='i',
-                y='scaled_P',
-                hue='chr_hue',
-                palette=palette,
-                legend=legend,
-                style=style,
-                size="s",
-                sizes=marker_size,
-                linewidth=linewidth,
-                zorder=2,
-                ax=ax1,
-                edgecolor=edgecolor,
-                **scatter_kwargs,
-            )
+        log.write(" -Creating background plot...", verbose=verbose)
+        sns.scatterplot(
+            data=sumstats,
+            x="i",
+            y="scaled_P",
+            hue="chr_hue",
+            palette=palette,
+            legend=legend,
+            style=style,
+            size="s",
+            sizes=marker_size,
+            linewidth=linewidth,
+            zorder=2,
+            ax=ax1,
+            edgecolor=edgecolor,
+            **scatter_kwargs,
+        )
 
     ax1.set_rasterization_zorder(0)
 
@@ -177,12 +176,11 @@ def draw_manhattan_panel(
             for i, pinpoint_set in enumerate(pinpoint):
                 if sum(sumstats[snpid].isin(pinpoint_set)) > 0:
                     to_pinpoint = sumstats.loc[sumstats[snpid].isin(pinpoint_set), :]
-                    log.write(" -Pinpointing set {} target variants...".format(i + 1), verbose=verbose)
+                    log.write(f" -Pinpointing set {i + 1} target variants...", verbose=verbose)
                     ax1.scatter(to_pinpoint["i"], to_pinpoint["scaled_P"], color=pinpoint_color[i % len(pinpoint_color)], zorder=100, s=marker_size[1] + 1)
-        else:
-            if sum(sumstats[snpid].isin(pinpoint)) > 0:
-                to_pinpoint = sumstats.loc[sumstats[snpid].isin(pinpoint), :]
-                log.write(" -Pinpointing target variants...", verbose=verbose)
-                ax1.scatter(to_pinpoint["i"], to_pinpoint["scaled_P"], color=pinpoint_color, zorder=100, s=marker_size[1] + 1)
+        elif sum(sumstats[snpid].isin(pinpoint)) > 0:
+            to_pinpoint = sumstats.loc[sumstats[snpid].isin(pinpoint), :]
+            log.write(" -Pinpointing target variants...", verbose=verbose)
+            ax1.scatter(to_pinpoint["i"], to_pinpoint["scaled_P"], color=pinpoint_color, zorder=100, s=marker_size[1] + 1)
 
     return highlight_i

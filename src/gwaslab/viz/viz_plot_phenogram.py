@@ -1,17 +1,19 @@
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Ellipse
+from adjustText import adjust_text
 from matplotlib.collections import PatchCollection
-from pathlib import Path
-from typing import Optional, Union, Dict, Any, List
+from matplotlib.patches import Ellipse, Rectangle
+
+from gwaslab.bd.bd_common_data import get_chr_to_number, get_number_to_chr
 from gwaslab.info.g_Log import Log
 from gwaslab.util.util_in_get_sig import _get_sig
-from gwaslab.bd.bd_common_data import get_chr_to_number, get_number_to_chr
+from gwaslab.viz.viz_aux_reposition_text import adjust_text_position
 from gwaslab.viz.viz_aux_save_figure import save_figure
 from gwaslab.viz.viz_aux_style_options import set_plot_style
-from gwaslab.viz.viz_aux_reposition_text import adjust_text_position
-from adjustText import adjust_text
 
 
 def _plot_phenogram(
@@ -23,19 +25,19 @@ def _plot_phenogram(
     mlog10p: str = "MLOG10P",
     windowsizekb: int = 500,
     sig_level: float = 5e-8,
-    cytoband_path: Optional[str] = None,
+    cytoband_path: str | None = None,
     build: str = "19",
     ncols: int = 11,
     figsize: tuple = (20, 40),
     dpi: int = 100,
     annotate_snps: bool = True,
-    annotation_kwargs: Optional[Dict[str, Any]] = None,
+    annotation_kwargs: dict[str, Any] | None = None,
     anno_style: str = "expand",
     repel_force: float = 0.5,
     anno_max_iter: int = 100,
     save: Union[bool, str] = False,
-    save_kwargs: Optional[Dict[str, Any]] = None,
-    fig_kwargs: Optional[Dict[str, Any]] = None,
+    save_kwargs: dict[str, Any] | None = None,
+    fig_kwargs: dict[str, Any] | None = None,
     verbose: bool = True,
     log: Log = Log(),
 ) -> plt.Figure:
@@ -95,16 +97,16 @@ def _plot_phenogram(
     matplotlib.figure.Figure
         The created matplotlib figure object
     """
-    
+
     log.write("Start to create phenogram plot...", verbose=verbose)
-    
+
     # Extract dataframe if Sumstats object is passed
-    if hasattr(insumstats, 'data') and not isinstance(insumstats, pd.DataFrame):
+    if hasattr(insumstats, "data") and not isinstance(insumstats, pd.DataFrame):
         insumstats = insumstats.data
-    
+
     # Create working copy to preserve original (plotting functions should not modify input)
     sumstats = insumstats.copy()
-    
+
     # Get leads from sumstats
     log.write(" -Extracting lead variants...", verbose=verbose)
     leads = _get_sig(
@@ -119,13 +121,13 @@ def _plot_phenogram(
         log=log,
         verbose=verbose
     )
-    
+
     if leads is None or len(leads) == 0:
         log.write(" -No lead variants found. Plotting chromosomes without annotations.", verbose=verbose)
         leads = pd.DataFrame()
     else:
-        log.write(" -Found {} lead variants to annotate.".format(len(leads)), verbose=verbose)
-    
+        log.write(f" -Found {len(leads)} lead variants to annotate.", verbose=verbose)
+
     # Load cytoband data
     if cytoband_path is None:
         # Use default cytoband file path
@@ -137,17 +139,17 @@ def _plot_phenogram(
         else:
             # Default to hg19
             cytoband_path = data_dir / "cytoBand_hg19.txt.gz"
-            log.write(" -Unknown build '{}', using hg19 cytoband data.".format(build), verbose=verbose)
-    
-    log.write(" -Loading cytoband data from: {}".format(cytoband_path), verbose=verbose)
-    
+            log.write(f" -Unknown build '{build}', using hg19 cytoband data.", verbose=verbose)
+
+    log.write(f" -Loading cytoband data from: {cytoband_path}", verbose=verbose)
+
     try:
-        cytobands = pd.read_csv(cytoband_path, sep="\s+", header=None, compression='gzip')
+        cytobands = pd.read_csv(cytoband_path, sep=r"\s+", header=None, compression="gzip")
         cytobands.columns = ["CHR", "START", "END", "ARM", "STAIN"]
     except Exception as e:
-        log.write(" -Error loading cytoband data: {}".format(e), verbose=verbose)
-        raise ValueError("Could not load cytoband data from {}".format(cytoband_path))
-    
+        log.write(f" -Error loading cytoband data: {e}", verbose=verbose)
+        raise ValueError(f"Could not load cytoband data from {cytoband_path}")
+
     # Color dictionary for cytobands
     color_dict = {
         "gpos100": (100/255, 100/255, 100/255),
@@ -163,17 +165,17 @@ def _plot_phenogram(
         "stalk": (100/255, 127/255, 164/255)
     }
     cytobands["COLOR"] = cytobands["STAIN"].map(color_dict)
-    
+
     # Get chromosome sizes from cytoband data
     chr_sizes = {}
     for chr_name in cytobands["CHR"].unique():
         chr_bands = cytobands[cytobands["CHR"] == chr_name]
         chr_sizes[chr_name] = chr_bands["END"].max()
-    
+
     # Convert chromosome names to numbers for sorting
     chr_to_num = get_chr_to_number(out_chr=True, xymt=["X", "Y", "MT"])
     num_to_chr = get_number_to_chr()
-    
+
     # Get numeric chromosome list (1-22, X, Y, MT)
     chr_list = []
     for chr_name in sorted(cytobands["CHR"].unique()):
@@ -189,7 +191,7 @@ def _plot_phenogram(
                         chr_list.append(chr_name)
             except ValueError:
                 continue
-    
+
     # Sort chromosomes numerically (1-22, then X, Y, MT)
     def chr_sort_key(chr_name):
         if not chr_name.startswith("chr"):
@@ -205,15 +207,15 @@ def _plot_phenogram(
             return (25, chr_name)
         else:
             return (999, chr_name)
-    
+
     chr_list = sorted(chr_list, key=chr_sort_key)
-    
+
     # Limit to autosomes (1-22) for now - can be extended later
     chr_list = [c for c in chr_list if c.startswith("chr") and c[3:].isdigit() and 1 <= int(c[3:]) <= 22]
     n_chr = len(chr_list)
-    
-    log.write(" -Plotting {} chromosomes...".format(n_chr), verbose=verbose)
-    
+
+    log.write(f" -Plotting {n_chr} chromosomes...", verbose=verbose)
+
     # Set up style
     style = set_plot_style(
         plot="plot_phenogram",
@@ -225,28 +227,28 @@ def _plot_phenogram(
     )
     fig_kwargs = style.get("fig_kwargs", {})
     save_kwargs = style.get("save_kwargs", {})
-    
+
     # Create figure
     if "figsize" not in fig_kwargs:
         fig_kwargs["figsize"] = figsize
     if "dpi" not in fig_kwargs:
         fig_kwargs["dpi"] = dpi
-    
-    fig, axes = plt.subplots(nrows=1, ncols=ncols, figsize=fig_kwargs["figsize"], 
+
+    fig, axes = plt.subplots(nrows=1, ncols=ncols, figsize=fig_kwargs["figsize"],
                              dpi=fig_kwargs["dpi"])
-    
+
     # Handle single axis case
     if ncols == 1:
         axes = [axes]
     else:
         axes = axes.flatten()
-    
+
     # Calculate offsets for each chromosome
     max_chr_size = max(chr_sizes.values())
     offset = [0 for _ in range(ncols)]
     max_row_offset = 0
     row_n = 0
-    
+
     # Prepare leads data for annotation
     leads_dict = {}
     if len(leads) > 0:
@@ -260,41 +262,41 @@ def _plot_phenogram(
                 if pd.notna(chr_val) and pd.notna(pos_val):
                     # Convert to chr format
                     if isinstance(chr_val, (int, float)):
-                        chr_str = "chr{}".format(int(chr_val))
+                        chr_str = f"chr{int(chr_val)}"
                     else:
                         chr_str = str(chr_val)
                         if not chr_str.startswith("chr"):
                             # Try to extract number
                             try:
                                 chr_num = int(chr_str)
-                                chr_str = "chr{}".format(chr_num)
+                                chr_str = f"chr{chr_num}"
                             except (ValueError, TypeError):
                                 # If it's already a string like "X", "Y", etc., add "chr" prefix
-                                chr_str = "chr{}".format(chr_str)
-                    
+                                chr_str = f"chr{chr_str}"
+
                     # Only include if it's a valid chromosome (1-22, X, Y, MT)
-                    if chr_str in chr_list or (chr_str.startswith("chr") and 
+                    if chr_str in chr_list or (chr_str.startswith("chr") and
                                                (chr_str[3:].isdigit() or chr_str[3:] in ["X", "Y", "MT"])):
                         leads_dict.setdefault(chr_str, []).append({
-                            'pos': int(pos_val) if pd.notna(pos_val) else None,
-                            'snpid': row[snpid] if snpid in leads_copy.columns and pd.notna(row[snpid]) else None,
-                            'index': idx
+                            "pos": int(pos_val) if pd.notna(pos_val) else None,
+                            "snpid": row[snpid] if snpid in leads_copy.columns and pd.notna(row[snpid]) else None,
+                            "index": idx
                         })
-    
+
     # Plot each chromosome
     chr_bottom_positions = {}  # Store bottom position for each chromosome for label placement
     for i, chr_name in enumerate(chr_list):
         chr_cytobands = cytobands.loc[cytobands["CHR"] == chr_name, :].copy()
-        
+
         if i // ncols > row_n:
             row_n += 1
             max_row_offset += 1.2
-        
+
         chr_size = chr_sizes[chr_name]
-        
+
         # Get the offset for this specific chromosome
         chr_offset = max_row_offset
-        
+
         # Calculate bottom position of chromosome for label placement
         # The chromosome extends from offset to offset + chr_size/max_chr_size
         # Plus telomere at bottom (0.02)
@@ -306,7 +308,7 @@ def _plot_phenogram(
         # So the bottom edge is at: offset + chr_size/max_chr_size + telemere_full_length/2
         chr_bottom_with_telomere = chr_size / max_chr_size + chr_offset + telemere_full_length / 2
         chr_bottom_positions[i] = chr_bottom_with_telomere
-        
+
         # Get centromere boundaries
         acen_bands = chr_cytobands.loc[chr_cytobands["STAIN"] == "acen", :]
         if len(acen_bands) > 0:
@@ -316,7 +318,7 @@ def _plot_phenogram(
             # Default centromere position if not found
             chr_centromere_u = chr_size * 0.44
             chr_centromere_l = chr_size * 0.46
-        
+
         # Plot chromosome
         _plot_chr(
             axes[i % ncols],
@@ -336,15 +338,15 @@ def _plot_phenogram(
             log=log,
             verbose=verbose
         )
-    
+
     # Set axis properties
     for i in range(n_chr):
         axes[i % ncols].set_ylim(-0.1, max_row_offset + 1)
         axes[i % ncols].invert_yaxis()
-        axes[i % ncols].spines['top'].set_visible(False)
-        axes[i % ncols].spines['right'].set_visible(False)
-        axes[i % ncols].spines['bottom'].set_visible(False)
-        axes[i % ncols].spines['left'].set_visible(False)
+        axes[i % ncols].spines["top"].set_visible(False)
+        axes[i % ncols].spines["right"].set_visible(False)
+        axes[i % ncols].spines["bottom"].set_visible(False)
+        axes[i % ncols].spines["left"].set_visible(False)
         # Add chromosome label - position right below the chromosome (avoiding telomere overlap)
         chr_num = chr_list[i][3:] if chr_list[i].startswith("chr") else chr_list[i]
         # Use stored bottom position for this chromosome
@@ -355,21 +357,21 @@ def _plot_phenogram(
             # chr_bottom_with_telomere is already the bottom edge of telomere
             # Add padding (0.03) to ensure no overlap
             label_y = chr_bottom_with_telomere + 0.03
-            axes[i % ncols].text(0.1, label_y, chr_num, ha='center', va='bottom', 
+            axes[i % ncols].text(0.1, label_y, chr_num, ha="center", va="bottom",
                                 fontsize=10, zorder=300)
-    
+
     # Hide unused axes
     for i in range(n_chr, len(axes)):
         axes[i].set_visible(False)
-    
+
     fig.tight_layout()
-    
+
     # Save figure
-    save_figure(fig=fig, save=save, keyword="phenogram", save_kwargs=save_kwargs, 
+    save_figure(fig=fig, save=save, keyword="phenogram", save_kwargs=save_kwargs,
                 log=log, verbose=verbose)
-    
+
     log.write("Finished creating phenogram plot.", verbose=verbose)
-    
+
     return fig
 
 
@@ -382,9 +384,9 @@ def _plot_chr(
     offset: float,
     chr_cytobands: pd.DataFrame,
     chr_name: str,
-    leads: List[Dict[str, Any]],
+    leads: list[dict[str, Any]],
     annotate_snps: bool = True,
-    annotation_kwargs: Dict[str, Any] = None,
+    annotation_kwargs: dict[str, Any] = None,
     anno_style: str = "expand",
     repel_force: float = 0.02,
     anno_max_iter: int = 100,
@@ -423,53 +425,53 @@ def _plot_chr(
     verbose : bool
         If True, print progress messages
     """
-    
+
     if annotation_kwargs is None:
         annotation_kwargs = {}
-    
+
     positions = [
         0 + offset,
         chr_centromere_u / max_chr_size + offset,
         chr_centromere_l / max_chr_size + offset,
         chr_size / max_chr_size + offset
     ]
-    
+
     centromere_full_length = (chr_centromere_l - chr_centromere_u) / max_chr_size
     telemere_full_length = 0.02
-    
+
     height_for_arm1 = positions[1] - positions[0]
     height_for_arm2 = positions[3] - positions[2]
-    
+
     full_length = height_for_arm1 + height_for_arm2 + centromere_full_length
-    
+
     # Draw chromosome arms
     arms = [
         Rectangle((0, positions[0]), width=0.21, height=height_for_arm1),
         Rectangle((0, positions[1] + centromere_full_length), width=0.21, height=height_for_arm2)
     ]
-    
+
     # Draw centromeres
     centromeres = [
         Ellipse(xy=(0.1, positions[1] + centromere_full_length), width=0.2, height=centromere_full_length),
         Ellipse(xy=(0.1, positions[1]), width=0.2, height=centromere_full_length)
     ]
-    
+
     # Draw telomeres
     telemeres = [
         Ellipse(xy=(0.105, positions[0]), width=0.21, height=telemere_full_length),
         Ellipse(xy=(0.105, positions[0] + full_length), width=0.21, height=telemere_full_length)
     ]
-    
+
     # Create patch collections
     arms_pc = PatchCollection(arms, facecolor="white", edgecolor="grey", zorder=100)
     centromeres_pc = PatchCollection(centromeres, facecolor="grey", edgecolor="black", zorder=99)
     telemeres_pc = PatchCollection(telemeres, facecolor="white", edgecolor="grey", zorder=1)
-    
+
     # Add collections to axes
     ax.add_collection(arms_pc)
     ax.add_collection(centromeres_pc)
     ax.add_collection(telemeres_pc)
-    
+
     # Draw cytobands
     for index, row in chr_cytobands.iterrows():
         if row["END"] <= chr_centromere_u:
@@ -483,35 +485,35 @@ def _plot_chr(
         else:
             # Skip centromere bands (already drawn)
             continue
-        
+
         band_height = band_end - band_start
-        
+
         if band_height > 0:
             band = Rectangle((0.01, band_start), width=0.2, height=band_height)
             facecolor = row["COLOR"]
-            
+
             if row["STAIN"] == "stalk":
-                bands_pc = PatchCollection([band], facecolor=facecolor, edgecolor=None, 
+                bands_pc = PatchCollection([band], facecolor=facecolor, edgecolor=None,
                                            linewidths=0, zorder=102)
             else:
-                bands_pc = PatchCollection([band], facecolor=facecolor, edgecolor=None, 
+                bands_pc = PatchCollection([band], facecolor=facecolor, edgecolor=None,
                                          linewidths=0, zorder=101)
             ax.add_collection(bands_pc)
-    
+
     # Annotate lead SNPs with arrows using expand style (horizontal layout)
     if annotate_snps and len(leads) > 0:
         # Filter and sort leads by position
-        leads_sorted = sorted([l for l in leads if l['pos'] is not None and pd.notna(l['pos'])], 
-                             key=lambda x: x['pos'])
-        
+        leads_sorted = sorted([l for l in leads if l["pos"] is not None and pd.notna(l["pos"])],
+                             key=lambda x: x["pos"])
+
         if len(leads_sorted) == 0:
             return
-        
+
         # Calculate y positions on chromosome for all leads
         leads_with_y = []
         for lead in leads_sorted:
-            pos = lead['pos']
-            
+            pos = lead["pos"]
+
             # Calculate y position on chromosome based on genomic position
             if pos <= chr_centromere_u:
                 # Upper arm
@@ -522,19 +524,19 @@ def _plot_chr(
             else:
                 # In centromere region, skip annotation
                 continue
-            
+
             leads_with_y.append({
-                'lead': lead,
-                'y_pos_chr': y_pos_chr,
-                'original_y': y_pos_chr
+                "lead": lead,
+                "y_pos_chr": y_pos_chr,
+                "original_y": y_pos_chr
             })
-        
+
         if len(leads_with_y) == 0:
             return
-        
+
         # Extract y positions for adjustment
-        y_positions = np.array([l['y_pos_chr'] for l in leads_with_y])
-        
+        y_positions = np.array([l["y_pos_chr"] for l in leads_with_y])
+
         # Always adjust positions to avoid overlap (using expand style logic)
         # Calculate y span for this chromosome
         if len(y_positions) > 1:
@@ -544,7 +546,7 @@ def _plot_chr(
                 y_span = 0.1
         else:
             y_span = 0.1
-        
+
         # Adjust positions using adjust_text_position to prevent overlap
         adjusted_y = adjust_text_position(
             y_positions.copy(),
@@ -555,24 +557,24 @@ def _plot_chr(
             log=log,
             verbose=verbose
         )
-        
+
         # Update y positions with adjusted values
         for i, l in enumerate(leads_with_y):
-            l['y_pos_chr'] = adjusted_y[i]
-        
+            l["y_pos_chr"] = adjusted_y[i]
+
         # Base x position for annotations (on the right side)
         annotation_x_base = 0.5
-        
+
         # Calculate fixed armB for this chromosome (vertical distance from annotation area to chromosome)
         # Use a representative y position (middle of annotation area) to calculate the distance
         if len(leads_with_y) > 0:
             # Use the first lead's adjusted y position as reference
-            ref_y = leads_with_y[0]['y_pos_chr']
-            ref_original_y = leads_with_y[0]['original_y']
+            ref_y = leads_with_y[0]["y_pos_chr"]
+            ref_original_y = leads_with_y[0]["original_y"]
         else:
             ref_y = offset + chr_size / max_chr_size / 2
             ref_original_y = ref_y
-        
+
         # Calculate fixed armB in pixels (horizontal distance)
         transform = ax.transData
         annotation_pixel = transform.transform((annotation_x_base, ref_y))
@@ -580,37 +582,37 @@ def _plot_chr(
         chr_right_edge_pixel = transform.transform((0.21, ref_original_y))
         # Fixed horizontal distance from annotation area to right edge of chromosome
         armB_length_pixel = abs(annotation_pixel[0] - chr_right_edge_pixel[0])
-        
+
         # Create annotation objects
         anno_objects = []
-        
+
         for l in leads_with_y:
-            lead = l['lead']
-            y_pos_chr = l['y_pos_chr']
-            original_y = l['original_y']
-            
+            lead = l["lead"]
+            y_pos_chr = l["y_pos_chr"]
+            original_y = l["original_y"]
+
             # Plot marker on chromosome at original position (as a horizontal line)
             # Draw a horizontal line across the full width of the chromosome
             # Chromosome rectangle: Rectangle((0, y), width=0.21) extends from x=0 to x=0.21
             # The line should exactly match the rectangle edges
             # Use exact coordinates to align with rectangle boundaries
-            ax.plot([0.0, 0.21], [original_y, original_y], 
+            ax.plot([0.0, 0.21], [original_y, original_y],
                    color="red", linewidth=2, clip_on=False, zorder=200)
-            
-            if lead['snpid'] is not None:
-                snp_text = str(lead['snpid'])
+
+            if lead["snpid"] is not None:
+                snp_text = str(lead["snpid"])
                 # Truncate long SNP IDs
                 if len(snp_text) > 20:
                     snp_text = snp_text[:17] + "..."
-                
+
                 # Point on chromosome (right edge where arrow points)
                 chr_point_x = 0.21  # Right edge of chromosome
                 chr_point_y = original_y
-                
+
                 # Text position (on the right, using adjusted y)
                 text_x = annotation_x_base
                 text_y = y_pos_chr
-                
+
                 # Set default annotation style
                 anno_default = {
                     "fontsize": 8,
@@ -620,7 +622,7 @@ def _plot_chr(
                 }
                 if annotation_kwargs:
                     anno_default.update(annotation_kwargs)
-                
+
                 # Create annotation with arrow
                 # armA = 0 (no horizontal arm, go directly horizontal)
                 # armB = fixed for this chromosome (horizontal distance to chromosome)
@@ -641,7 +643,7 @@ def _plot_chr(
                     **anno_default
                 )
                 anno_objects.append(anno_obj)
-        
+
         # Use adjust_text for final fine-tuning (vertical movement only for horizontal layout)
         # Note: We skip adjust_text for now as it interferes with arrow positioning
         # The initial adjust_text_position should be sufficient for spacing
@@ -663,7 +665,7 @@ def _plot_chr(
         #         avoid_points=False,
         #         lim=100
         #     )
-    
+
     ax.set_xticks(ticks=[])
     ax.set_yticks(ticks=[])
     # Extend xlim to accommodate annotations on the right

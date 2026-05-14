@@ -4,9 +4,10 @@ Test suite for SSF validator.
 import os
 import sys
 import tempfile
-import pandas as pd
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 import pytest
 
 # Add parent directory to path
@@ -23,11 +24,11 @@ def create_test_ssf_file(
 ) -> Path:
     """Create a test SSF file."""
     if compress:
-        output_file = filename.with_suffix('.tsv.gz')
-        data.to_csv(output_file, sep='\t', index=False, compression='gzip')
+        output_file = filename.with_suffix(".tsv.gz")
+        data.to_csv(output_file, sep="\t", index=False, compression="gzip")
     else:
-        output_file = filename.with_suffix('.tsv')
-        data.to_csv(output_file, sep='\t', index=False)
+        output_file = filename.with_suffix(".tsv")
+        data.to_csv(output_file, sep="\t", index=False)
     return output_file
 
 

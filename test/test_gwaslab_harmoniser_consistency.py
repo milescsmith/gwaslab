@@ -10,14 +10,15 @@ This script:
 5. Compares the results (STATUS codes vs hm_code)
 """
 
-import pandas as pd
-import numpy as np
-import subprocess
-import tempfile
 import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import List, Tuple
+
+import numpy as np
+import pandas as pd
 
 # Ensure we use the latest source code, not the installed package
 # Add the source directory to the beginning of sys.path
@@ -27,14 +28,14 @@ _source_dir = _project_root / "src"
 if _source_dir.exists() and str(_source_dir) not in sys.path:
     sys.path.insert(0, str(_source_dir))
     # Also clear any cached gwaslab modules to force reload
-    modules_to_remove = [m for m in list(sys.modules.keys()) if m.startswith('gwaslab')]
+    modules_to_remove = [m for m in list(sys.modules.keys()) if m.startswith("gwaslab")]
     for m in modules_to_remove:
         del sys.modules[m]
 
 def create_toy_vcf(vcf_file: str):
     """Create a toy VCF file with various test variants."""
     print(f"Creating toy VCF: {vcf_file}")
-    
+
     # Create test variants covering different scenarios
     variants = [
         # Format: (CHROM, POS, ID, REF, ALT, AF_NFE)
@@ -59,29 +60,29 @@ def create_toy_vcf(vcf_file: str):
         # Indel
         ("1", 10000, "rs10", "A", "AT", 0.3),
     ]
-    
-    with open(vcf_file, 'w') as f:
+
+    with open(vcf_file, "w") as f:
         # Write VCF header
         f.write("##fileformat=VCFv4.3\n")
         f.write("##contig=<ID=1,length=10000000>\n")
-        f.write("##INFO=<ID=AF_NFE,Number=A,Type=Float,Description=\"Allele frequency in NFE\">\n")
+        f.write('##INFO=<ID=AF_NFE,Number=A,Type=Float,Description="Allele frequency in NFE">\n')
         f.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
-        
+
         # Write variants
         for chrom, pos, rsid, ref, alt, af in variants:
             f.write(f"{chrom}\t{pos}\t{rsid}\t{ref}\t{alt}\t.\tPASS\tAF_NFE={af}\n")
-    
+
     # Index with tabix
-    subprocess.run(['bgzip', '-f', vcf_file], check=True)
-    subprocess.run(['tabix', '-p', 'vcf', vcf_file + '.gz'], check=True)
-    
+    subprocess.run(["bgzip", "-f", vcf_file], check=True)
+    subprocess.run(["tabix", "-p", "vcf", vcf_file + ".gz"], check=True)
+
     print(f"Created VCF with {len(variants)} variants")
-    return vcf_file + '.gz'
+    return vcf_file + ".gz"
 
 def create_toy_sumstats(sumstats_file: str):
     """Create toy sumstats with various scenarios."""
     print(f"Creating toy sumstats: {sumstats_file}")
-    
+
     # Create test cases covering different harmonization scenarios
     # Define variants with FASTA reference alleles
     # FASTA REF at each position: 1000=A, 2000=C, 3000=G, 4000=T, 5000=A, 6000=G, 7000=A, 8000=G, 9000=A, 10000=A, 20000=A, 21000=A, 22000=A
@@ -117,24 +118,24 @@ def create_toy_sumstats(sumstats_file: str):
         # FASTA has "AT" at pos 22000-22001, so NEA=A matches ref AND EA=AT matches ref → digit 6=6
         ("1:22000_A_AT", 1, 22000, "AT", "A", 0.3, 0.1, 0.01, 1e-5),  # Both alleles on ref ✓
     ]
-    
+
     df = pd.DataFrame(sumstats, columns=[
-        'SNPID', 'CHR', 'POS', 'EA', 'NEA', 'EAF', 'BETA', 'SE', 'P'
+        "SNPID", "CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P"
     ])
-    
-    df.to_csv(sumstats_file, sep='\t', index=False)
+
+    df.to_csv(sumstats_file, sep="\t", index=False)
     print(f"Created sumstats with {len(df)} variants")
     return df
 
 def run_gwaslab_harmonize(sumstats_file: str, vcf_file: str, fasta_file: str, output_file: str):
     """Run GWASLab harmonization."""
-    print(f"\nRunning GWASLab harmonization...")
-    
+    print("\nRunning GWASLab harmonization...")
+
     try:
         import gwaslab as gl
-        
+
         # Load sumstats
-        mysumstats = gl.Sumstats(sumstats_file, 
+        mysumstats = gl.Sumstats(sumstats_file,
                                  snpid="SNPID",
                                  chrom="CHR",
                                  pos="POS",
@@ -144,7 +145,7 @@ def run_gwaslab_harmonize(sumstats_file: str, vcf_file: str, fasta_file: str, ou
                                  beta="BETA",
                                  se="SE",
                                  p="P")
-        
+
         # Harmonize
         mysumstats.harmonize(
             ref_rsid_vcf=vcf_file,
@@ -156,12 +157,12 @@ def run_gwaslab_harmonize(sumstats_file: str, vcf_file: str, fasta_file: str, ou
             remove=False,
             verbose=True
         )
-        
+
         # Save results
-        mysumstats.data.to_csv(output_file, sep='\t', index=False)
+        mysumstats.data.to_csv(output_file, sep="\t", index=False)
         print(f"GWASLab harmonization completed. Results saved to {output_file}")
         return mysumstats.data
-        
+
     except Exception as e:
         print(f"Error running GWASLab: {e}")
         import traceback
@@ -170,28 +171,28 @@ def run_gwaslab_harmonize(sumstats_file: str, vcf_file: str, fasta_file: str, ou
 
 def run_harmoniser(sumstats_file: str, vcf_file: str, output_file: str, stats_file: str):
     """Run genetics-sumstat-harmoniser."""
-    print(f"\nRunning genetics-sumstat-harmoniser...")
-    
-    harmoniser_dir = Path('/home/yunye/work/github/genetics-sumstat-harmoniser')
-    harmoniser_path = harmoniser_dir / 'sumstat_harmoniser' / 'main.py'
-    
+    print("\nRunning genetics-sumstat-harmoniser...")
+
+    harmoniser_dir = Path("/home/yunye/work/github/genetics-sumstat-harmoniser")
+    harmoniser_path = harmoniser_dir / "sumstat_harmoniser" / "main.py"
+
     cmd = [
-        'python', str(harmoniser_path),
-        '--sumstats', sumstats_file,
-        '--vcf', vcf_file,
-        '--hm_sumstats', output_file,
-        '--hm_statfile', stats_file,
-        '--chrom_col', 'CHR',
-        '--pos_col', 'POS',
-        '--effAl_col', 'EA',
-        '--otherAl_col', 'NEA',
-        '--eaf_col', 'EAF',
-        '--beta_col', 'BETA',
-        '--palin_mode', 'infer',
-        '--infer_maf_threshold', '0.42',
-        '--af_vcf_field', 'AF_NFE',
+        "python", str(harmoniser_path),
+        "--sumstats", sumstats_file,
+        "--vcf", vcf_file,
+        "--hm_sumstats", output_file,
+        "--hm_statfile", stats_file,
+        "--chrom_col", "CHR",
+        "--pos_col", "POS",
+        "--effAl_col", "EA",
+        "--otherAl_col", "NEA",
+        "--eaf_col", "EAF",
+        "--beta_col", "BETA",
+        "--palin_mode", "infer",
+        "--infer_maf_threshold", "0.42",
+        "--af_vcf_field", "AF_NFE",
     ]
-    
+
     try:
         result = subprocess.run(
             cmd,
@@ -202,9 +203,9 @@ def run_harmoniser(sumstats_file: str, vcf_file: str, output_file: str, stats_fi
             cwd=str(harmoniser_dir)
         )
         print("Harmoniser completed successfully")
-        
+
         if os.path.exists(output_file):
-            df = pd.read_csv(output_file, sep='\t')
+            df = pd.read_csv(output_file, sep="\t")
             print(f"Loaded {len(df)} variants from harmoniser output")
             if len(df) > 0:
                 print(f"Columns: {df.columns.tolist()}")
@@ -213,7 +214,7 @@ def run_harmoniser(sumstats_file: str, vcf_file: str, output_file: str, stats_fi
         else:
             print(f"Error: Output file not found: {output_file}")
             return None
-            
+
     except subprocess.CalledProcessError as e:
         print(f"Error running harmoniser: {e}")
         print(f"Stderr: {e.stderr}")
@@ -224,49 +225,49 @@ def compare_results(df_gwaslab: pd.DataFrame, df_harmoniser: pd.DataFrame):
     print("\n" + "=" * 80)
     print("Comparing Results")
     print("=" * 80)
-    
+
     # Create key for matching - use position-based matching (CHR:POS) as it's more reliable
     # Both tools should have CHR and POS, and this avoids SNPID format differences
     def create_position_key(chr_col, pos_col):
         """Create position-based key from CHR and POS columns."""
         if chr_col is None or pos_col is None:
-            return pd.Series('', index=chr_col.index if chr_col is not None else pos_col.index)
-        return chr_col.astype(str) + ':' + pos_col.astype(str)
-    
+            return pd.Series("", index=chr_col.index if chr_col is not None else pos_col.index)
+        return chr_col.astype(str) + ":" + pos_col.astype(str)
+
     # Get CHR and POS from both dataframes
-    gwaslab_chr = df_gwaslab.get('CHR', None)
-    gwaslab_pos = df_gwaslab.get('POS', None)
-    
+    gwaslab_chr = df_gwaslab.get("CHR", None)
+    gwaslab_pos = df_gwaslab.get("POS", None)
+
     # Try multiple possible column names for harmoniser
     harmoniser_chr = None
     harmoniser_pos = None
-    for chr_col in ['CHR', 'chrom', 'hm_chrom', 'chromosome']:
+    for chr_col in ["CHR", "chrom", "hm_chrom", "chromosome"]:
         if chr_col in df_harmoniser.columns:
             harmoniser_chr = df_harmoniser[chr_col]
             break
-    for pos_col in ['POS', 'pos', 'hm_pos', 'position', 'bp', 'BP']:
+    for pos_col in ["POS", "pos", "hm_pos", "position", "bp", "BP"]:
         if pos_col in df_harmoniser.columns:
             harmoniser_pos = df_harmoniser[pos_col]
             break
-    
+
     # Create position-based keys
     if gwaslab_chr is not None and gwaslab_pos is not None:
-        df_gwaslab['key'] = create_position_key(gwaslab_chr, gwaslab_pos)
+        df_gwaslab["key"] = create_position_key(gwaslab_chr, gwaslab_pos)
     else:
         print("Warning: GWASLab missing CHR or POS, using SNPID as key")
-        df_gwaslab['key'] = df_gwaslab.get('SNPID', pd.Series('', index=df_gwaslab.index)).astype(str)
-    
+        df_gwaslab["key"] = df_gwaslab.get("SNPID", pd.Series("", index=df_gwaslab.index)).astype(str)
+
     if harmoniser_chr is not None and harmoniser_pos is not None:
-        df_harmoniser['key'] = create_position_key(harmoniser_chr, harmoniser_pos)
+        df_harmoniser["key"] = create_position_key(harmoniser_chr, harmoniser_pos)
     else:
         print("Warning: Harmoniser missing CHR or POS, using SNPID as key")
-        if 'SNPID' in df_harmoniser.columns:
-            df_harmoniser['key'] = df_harmoniser['SNPID'].astype(str)
+        if "SNPID" in df_harmoniser.columns:
+            df_harmoniser["key"] = df_harmoniser["SNPID"].astype(str)
         else:
-            df_harmoniser['key'] = pd.Series('', index=df_harmoniser.index)
-    
+            df_harmoniser["key"] = pd.Series("", index=df_harmoniser.index)
+
     # Debug: print keys to understand matching issue
-    print(f"\nDebug - Matching keys (CHR:POS):")
+    print("\nDebug - Matching keys (CHR:POS):")
     print(f"GWASLab keys (first 5): {df_gwaslab['key'].head().tolist()}")
     print(f"Harmoniser keys (first 5): {df_harmoniser['key'].head().tolist()}")
     print(f"GWASLab CHR:POS (first 5): {df_gwaslab[['CHR', 'POS']].head().values.tolist()}")
@@ -275,114 +276,114 @@ def compare_results(df_gwaslab: pd.DataFrame, df_harmoniser: pd.DataFrame):
     print(f"Unique GWASLab keys: {df_gwaslab['key'].nunique()} / {len(df_gwaslab)}")
     print(f"Unique Harmoniser keys: {df_harmoniser['key'].nunique()} / {len(df_harmoniser)}")
     print(f"Overlapping keys: {len(set(df_gwaslab['key']) & set(df_harmoniser['key']))}")
-    
+
     # Merge - include all relevant columns from both sources
     # Get all columns from harmoniser (except key which we'll use for merging)
-    harmoniser_cols = ['key', 'hm_code']
+    harmoniser_cols = ["key", "hm_code"]
     # Add EAF column if available
-    if 'hm_eaf' in df_harmoniser.columns:
-        harmoniser_cols.append('hm_eaf')
-    elif 'EAF' in df_harmoniser.columns:
-        harmoniser_cols.append('EAF')
+    if "hm_eaf" in df_harmoniser.columns:
+        harmoniser_cols.append("hm_eaf")
+    elif "EAF" in df_harmoniser.columns:
+        harmoniser_cols.append("EAF")
     # Add other harmoniser columns (hm_effect_allele, hm_other_allele, etc.)
     for col in df_harmoniser.columns:
-        if col.startswith('hm_') and col not in harmoniser_cols:
+        if col.startswith("hm_") and col not in harmoniser_cols:
             harmoniser_cols.append(col)
     # Add original columns that might be preserved
-    for col in ['CHR', 'POS', 'EA', 'NEA', 'EAF', 'BETA', 'SE', 'P']:
+    for col in ["CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P"]:
         if col in df_harmoniser.columns and col not in harmoniser_cols:
             harmoniser_cols.append(col)
-    
+
     # Rename columns before merge to avoid conflicts
     df_gwaslab_merge = df_gwaslab.copy()
     # Rename GWASLab columns with _gwaslab suffix
     gwaslab_rename = {}
     for col in df_gwaslab_merge.columns:
-        if col in ['EAF', 'BETA', 'SE', 'P', 'EA', 'NEA', 'CHR', 'POS', 'STATUS']:
-            gwaslab_rename[col] = f'{col}_gwaslab'
+        if col in ["EAF", "BETA", "SE", "P", "EA", "NEA", "CHR", "POS", "STATUS"]:
+            gwaslab_rename[col] = f"{col}_gwaslab"
     df_gwaslab_merge = df_gwaslab_merge.rename(columns=gwaslab_rename)
-    
+
     df_harmoniser_merge = df_harmoniser[harmoniser_cols].copy()
     # Rename harmoniser columns with _harmoniser suffix
     harmoniser_rename = {}
     for col in df_harmoniser_merge.columns:
-        if col not in ['key', 'hm_code']:
-            if col.startswith('hm_'):
-                harmoniser_rename[col] = col.replace('hm_', 'hm_')  # Keep hm_ prefix
-            elif col in ['CHR', 'POS', 'EA', 'NEA', 'EAF', 'BETA', 'SE', 'P']:
-                harmoniser_rename[col] = f'{col}_harmoniser'
+        if col not in ["key", "hm_code"]:
+            if col.startswith("hm_"):
+                harmoniser_rename[col] = col.replace("hm_", "hm_")  # Keep hm_ prefix
+            elif col in ["CHR", "POS", "EA", "NEA", "EAF", "BETA", "SE", "P"]:
+                harmoniser_rename[col] = f"{col}_harmoniser"
     df_harmoniser_merge = df_harmoniser_merge.rename(columns=harmoniser_rename)
-    
+
     merged = df_gwaslab_merge.merge(
         df_harmoniser_merge,
-        on='key',
-        how='outer'  # Use outer join to show all variants from both sides
+        on="key",
+        how="outer"  # Use outer join to show all variants from both sides
     )
-    
+
     # Create comparison dataframe with all relevant columns
     comparison_dict = {}
-    
+
     # Basic identifiers
-    if 'SNPID' in merged.columns:
-        comparison_dict['SNPID'] = merged['SNPID']
+    if "SNPID" in merged.columns:
+        comparison_dict["SNPID"] = merged["SNPID"]
     else:
-        comparison_dict['SNPID'] = merged.index
-    
+        comparison_dict["SNPID"] = merged.index
+
     # CHR and POS - try both sources
-    if 'CHR_gwaslab' in merged.columns:
-        comparison_dict['CHR'] = merged['CHR_gwaslab']
-    elif 'CHR_harmoniser' in merged.columns:
-        comparison_dict['CHR'] = merged['CHR_harmoniser']
+    if "CHR_gwaslab" in merged.columns:
+        comparison_dict["CHR"] = merged["CHR_gwaslab"]
+    elif "CHR_harmoniser" in merged.columns:
+        comparison_dict["CHR"] = merged["CHR_harmoniser"]
     else:
-        comparison_dict['CHR'] = pd.Series('', index=merged.index)
-    
-    if 'POS_gwaslab' in merged.columns:
-        comparison_dict['POS'] = merged['POS_gwaslab']
-    elif 'POS_harmoniser' in merged.columns:
-        comparison_dict['POS'] = merged['POS_harmoniser']
+        comparison_dict["CHR"] = pd.Series("", index=merged.index)
+
+    if "POS_gwaslab" in merged.columns:
+        comparison_dict["POS"] = merged["POS_gwaslab"]
+    elif "POS_harmoniser" in merged.columns:
+        comparison_dict["POS"] = merged["POS_harmoniser"]
     else:
-        comparison_dict['POS'] = pd.Series('', index=merged.index)
-    
+        comparison_dict["POS"] = pd.Series("", index=merged.index)
+
     # GWASLab columns (skip SE and P)
-    for col in ['EA', 'NEA', 'EAF', 'BETA', 'STATUS']:
-        col_name = f'{col}_gwaslab'
+    for col in ["EA", "NEA", "EAF", "BETA", "STATUS"]:
+        col_name = f"{col}_gwaslab"
         if col_name in merged.columns:
             comparison_dict[col_name] = merged[col_name]
         else:
             comparison_dict[col_name] = pd.Series(None, index=merged.index, dtype=object)
-    
+
     # Harmoniser columns - try multiple possible column names
-    if 'hm_effect_allele' in merged.columns:
-        comparison_dict['EA_harmoniser'] = merged['hm_effect_allele']
-    elif 'EA_harmoniser' in merged.columns:
-        comparison_dict['EA_harmoniser'] = merged['EA_harmoniser']
-    elif 'EA' in merged.columns:
-        comparison_dict['EA_harmoniser'] = merged['EA']
+    if "hm_effect_allele" in merged.columns:
+        comparison_dict["EA_harmoniser"] = merged["hm_effect_allele"]
+    elif "EA_harmoniser" in merged.columns:
+        comparison_dict["EA_harmoniser"] = merged["EA_harmoniser"]
+    elif "EA" in merged.columns:
+        comparison_dict["EA_harmoniser"] = merged["EA"]
     else:
-        comparison_dict['EA_harmoniser'] = pd.Series('', index=merged.index)
-    
-    if 'hm_other_allele' in merged.columns:
-        comparison_dict['NEA_harmoniser'] = merged['hm_other_allele']
-    elif 'NEA_harmoniser' in merged.columns:
-        comparison_dict['NEA_harmoniser'] = merged['NEA_harmoniser']
-    elif 'NEA' in merged.columns:
-        comparison_dict['NEA_harmoniser'] = merged['NEA']
+        comparison_dict["EA_harmoniser"] = pd.Series("", index=merged.index)
+
+    if "hm_other_allele" in merged.columns:
+        comparison_dict["NEA_harmoniser"] = merged["hm_other_allele"]
+    elif "NEA_harmoniser" in merged.columns:
+        comparison_dict["NEA_harmoniser"] = merged["NEA_harmoniser"]
+    elif "NEA" in merged.columns:
+        comparison_dict["NEA_harmoniser"] = merged["NEA"]
     else:
-        comparison_dict['NEA_harmoniser'] = pd.Series('', index=merged.index)
-    
-    if 'hm_eaf' in merged.columns:
-        comparison_dict['EAF_harmoniser'] = merged['hm_eaf']
-    elif 'EAF_harmoniser' in merged.columns:
-        comparison_dict['EAF_harmoniser'] = merged['EAF_harmoniser']
-    elif 'EAF' in merged.columns:
-        comparison_dict['EAF_harmoniser'] = merged['EAF']
+        comparison_dict["NEA_harmoniser"] = pd.Series("", index=merged.index)
+
+    if "hm_eaf" in merged.columns:
+        comparison_dict["EAF_harmoniser"] = merged["hm_eaf"]
+    elif "EAF_harmoniser" in merged.columns:
+        comparison_dict["EAF_harmoniser"] = merged["EAF_harmoniser"]
+    elif "EAF" in merged.columns:
+        comparison_dict["EAF_harmoniser"] = merged["EAF"]
     else:
-        comparison_dict['EAF_harmoniser'] = pd.Series(None, index=merged.index, dtype=float)
-    
+        comparison_dict["EAF_harmoniser"] = pd.Series(None, index=merged.index, dtype=float)
+
     # Add other harmoniser stats if available (skip SE and P)
-    for col in ['BETA']:
-        col_name = f'{col}_harmoniser'
-        hm_col = f'hm_{col.lower()}'
+    for col in ["BETA"]:
+        col_name = f"{col}_harmoniser"
+        hm_col = f"hm_{col.lower()}"
         if hm_col in merged.columns:
             comparison_dict[col_name] = merged[hm_col]
         elif col_name in merged.columns:
@@ -391,77 +392,77 @@ def compare_results(df_gwaslab: pd.DataFrame, df_harmoniser: pd.DataFrame):
             comparison_dict[col_name] = merged[col]
         else:
             comparison_dict[col_name] = pd.Series(None, index=merged.index, dtype=float)
-    
-    if 'hm_code' in merged.columns:
-        comparison_dict['hm_code'] = merged['hm_code']
+
+    if "hm_code" in merged.columns:
+        comparison_dict["hm_code"] = merged["hm_code"]
     else:
-        comparison_dict['hm_code'] = pd.Series(None, index=merged.index, dtype=object)
-    
+        comparison_dict["hm_code"] = pd.Series(None, index=merged.index, dtype=object)
+
     # Add result comparisons (EA, NEA, EAF, BETA)
-    comparison_dict['EA_match'] = (
-        comparison_dict.get('EA_gwaslab', pd.Series('', index=merged.index)) == 
-        comparison_dict.get('EA_harmoniser', pd.Series('', index=merged.index))
+    comparison_dict["EA_match"] = (
+        comparison_dict.get("EA_gwaslab", pd.Series("", index=merged.index)) ==
+        comparison_dict.get("EA_harmoniser", pd.Series("", index=merged.index))
     )
-    comparison_dict['NEA_match'] = (
-        comparison_dict.get('NEA_gwaslab', pd.Series('', index=merged.index)) == 
-        comparison_dict.get('NEA_harmoniser', pd.Series('', index=merged.index))
+    comparison_dict["NEA_match"] = (
+        comparison_dict.get("NEA_gwaslab", pd.Series("", index=merged.index)) ==
+        comparison_dict.get("NEA_harmoniser", pd.Series("", index=merged.index))
     )
-    
+
     # EAF comparison (with tolerance for floating point)
-    eaf_gwaslab = comparison_dict.get('EAF_gwaslab', pd.Series(None, index=merged.index, dtype=float))
-    eaf_harmoniser = comparison_dict.get('EAF_harmoniser', pd.Series(None, index=merged.index, dtype=float))
+    eaf_gwaslab = comparison_dict.get("EAF_gwaslab", pd.Series(None, index=merged.index, dtype=float))
+    eaf_harmoniser = comparison_dict.get("EAF_harmoniser", pd.Series(None, index=merged.index, dtype=float))
     if isinstance(eaf_gwaslab, pd.Series) and isinstance(eaf_harmoniser, pd.Series):
         eaf_match = (eaf_gwaslab.isna() & eaf_harmoniser.isna()) | (
-            eaf_gwaslab.notna() & eaf_harmoniser.notna() & 
+            eaf_gwaslab.notna() & eaf_harmoniser.notna() &
             (abs(eaf_gwaslab - eaf_harmoniser) < 0.001)
         )
     else:
         eaf_match = pd.Series(False, index=merged.index)
-    comparison_dict['EAF_match'] = eaf_match
-    
+    comparison_dict["EAF_match"] = eaf_match
+
     # BETA comparison (with tolerance)
-    beta_gwaslab = comparison_dict.get('BETA_gwaslab', pd.Series(None, index=merged.index, dtype=float))
-    beta_harmoniser = comparison_dict.get('BETA_harmoniser', pd.Series(None, index=merged.index, dtype=float))
+    beta_gwaslab = comparison_dict.get("BETA_gwaslab", pd.Series(None, index=merged.index, dtype=float))
+    beta_harmoniser = comparison_dict.get("BETA_harmoniser", pd.Series(None, index=merged.index, dtype=float))
     if isinstance(beta_gwaslab, pd.Series) and isinstance(beta_harmoniser, pd.Series):
         beta_match = (beta_gwaslab.isna() & beta_harmoniser.isna()) | (
-            beta_gwaslab.notna() & beta_harmoniser.notna() & 
+            beta_gwaslab.notna() & beta_harmoniser.notna() &
             (abs(beta_gwaslab - beta_harmoniser) < 0.001)
         )
     else:
         beta_match = pd.Series(False, index=merged.index)
-    comparison_dict['BETA_match'] = beta_match
-    
+    comparison_dict["BETA_match"] = beta_match
+
     # Overall match (all key fields match)
-    comparison_dict['results_match'] = (
-        comparison_dict['EA_match'] & 
-        comparison_dict['NEA_match'] & 
-        comparison_dict['EAF_match'] &
-        comparison_dict['BETA_match']
+    comparison_dict["results_match"] = (
+        comparison_dict["EA_match"] &
+        comparison_dict["NEA_match"] &
+        comparison_dict["EAF_match"] &
+        comparison_dict["BETA_match"]
     )
-    
+
     comparison = pd.DataFrame(comparison_dict)
-    
+
     # Print results
     print("\n" + "=" * 120)
     print("Detailed Comparison - Full Results from Both Sources")
     print("=" * 120)
-    
+
     # Set pandas display options for better formatting
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.width', None)
-    pd.set_option('display.max_colwidth', 15)
-    
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", None)
+    pd.set_option("display.max_colwidth", 15)
+
     print(comparison.to_string(index=False))
-    
+
     # Statistics - compare actual results
     total = len(comparison)
-    ea_matched = comparison['EA_match'].sum()
-    nea_matched = comparison['NEA_match'].sum()
-    eaf_matched = comparison['EAF_match'].sum()
-    beta_matched = comparison['BETA_match'].sum()
-    results_matched = comparison['results_match'].sum()
-    
-    print(f"\n" + "=" * 120)
+    ea_matched = comparison["EA_match"].sum()
+    nea_matched = comparison["NEA_match"].sum()
+    eaf_matched = comparison["EAF_match"].sum()
+    beta_matched = comparison["BETA_match"].sum()
+    results_matched = comparison["results_match"].sum()
+
+    print("\n" + "=" * 120)
     print("Summary - Result Comparisons:")
     print(f"  Total variants: {total}")
     print(f"  EA matches: {ea_matched} ({ea_matched/total*100:.1f}%)")
@@ -470,28 +471,28 @@ def compare_results(df_gwaslab: pd.DataFrame, df_harmoniser: pd.DataFrame):
     print(f"  BETA matches: {beta_matched} ({beta_matched/total*100:.1f}%)")
     print(f"  All results match (EA, NEA, EAF, BETA): {results_matched} ({results_matched/total*100:.1f}%)")
     print("=" * 120)
-    
+
     # Show mismatches in results
-    mismatches = comparison[~comparison['results_match']]
+    mismatches = comparison[~comparison["results_match"]]
     if len(mismatches) > 0:
-        print(f"\nMismatches (results differ - EA, NEA, EAF, or BETA):")
+        print("\nMismatches (results differ - EA, NEA, EAF, or BETA):")
         print("=" * 120)
         # Show which fields don't match
         mismatch_details = mismatches.copy()
-        mismatch_details['mismatch_fields'] = mismatch_details.apply(
-            lambda row: ', '.join([
-                'EA' if not row['EA_match'] else '',
-                'NEA' if not row['NEA_match'] else '',
-                'EAF' if not row['EAF_match'] else '',
-                'BETA' if not row['BETA_match'] else ''
-            ]).strip(', '),
+        mismatch_details["mismatch_fields"] = mismatch_details.apply(
+            lambda row: ", ".join([
+                "EA" if not row["EA_match"] else "",
+                "NEA" if not row["NEA_match"] else "",
+                "EAF" if not row["EAF_match"] else "",
+                "BETA" if not row["BETA_match"] else ""
+            ]).strip(", "),
             axis=1
         )
-        print(mismatch_details[['SNPID', 'CHR', 'POS', 'EA_gwaslab', 'EA_harmoniser', 
-                                'NEA_gwaslab', 'NEA_harmoniser', 'EAF_gwaslab', 'EAF_harmoniser',
-                                'BETA_gwaslab', 'BETA_harmoniser', 'mismatch_fields']].to_string(index=False))
+        print(mismatch_details[["SNPID", "CHR", "POS", "EA_gwaslab", "EA_harmoniser",
+                                "NEA_gwaslab", "NEA_harmoniser", "EAF_gwaslab", "EAF_harmoniser",
+                                "BETA_gwaslab", "BETA_harmoniser", "mismatch_fields"]].to_string(index=False))
         print("=" * 120)
-    
+
     return comparison
 
 def main():
@@ -499,64 +500,64 @@ def main():
     print("=" * 80)
     print("GWASLab vs Harmoniser Consistency Test")
     print("=" * 80)
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         # Create toy data
-        sumstats_file = os.path.join(tmpdir, 'toy_sumstats.txt')
-        vcf_file = os.path.join(tmpdir, 'toy.vcf')
-        fasta_file = os.path.join(tmpdir, 'toy.fasta')
-        
+        sumstats_file = os.path.join(tmpdir, "toy_sumstats.txt")
+        vcf_file = os.path.join(tmpdir, "toy.vcf")
+        fasta_file = os.path.join(tmpdir, "toy.fasta")
+
         # Create toy sumstats
         df_sumstats = create_toy_sumstats(sumstats_file)
-        
+
         # Create toy VCF
         vcf_gz = create_toy_vcf(vcf_file)
-        
+
         # Create FASTA with actual sequences at variant positions
         # We need sequences that match the VCF reference alleles
-        with open(fasta_file, 'w') as f:
+        with open(fasta_file, "w") as f:
             f.write(">1\n")
             # Create sequence with actual bases at variant positions
             # Positions: 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000, 21000, 22000
-            sequence = ['N'] * 25000
+            sequence = ["N"] * 25000
             # Set reference alleles at variant positions
-            sequence[999] = 'A'   # pos 1000: ref A
-            sequence[1999] = 'C'  # pos 2000: ref C
-            sequence[2999] = 'G'  # pos 3000: ref G
-            sequence[3999] = 'T'  # pos 4000: ref T
-            sequence[4999] = 'A'  # pos 5000: ref A (palindromic)
-            sequence[5999] = 'G'  # pos 6000: ref G (palindromic)
-            sequence[6999] = 'A'  # pos 7000: ref A (palindromic)
-            sequence[7999] = 'G'  # pos 8000: ref G (palindromic)
-            sequence[8999] = 'A'  # pos 9000: ref A (palindromic)
-            sequence[9999] = 'A'  # pos 10000: ref A (indel)
-            sequence[19999] = 'A' # pos 20000: ref A (non-palindromic, not in VCF)
-            sequence[20999] = 'A' # pos 21000: ref A (palindromic A/T, not in VCF)
-            sequence[21999] = 'A' # pos 22000: ref A (indel, not in VCF)
-            sequence[22000] = 'T' # pos 22001: ref T (so both NEA=A and EA=AT match ref → indistinguishable indel)
-            f.write(''.join(sequence) + '\n')
-        
+            sequence[999] = "A"   # pos 1000: ref A
+            sequence[1999] = "C"  # pos 2000: ref C
+            sequence[2999] = "G"  # pos 3000: ref G
+            sequence[3999] = "T"  # pos 4000: ref T
+            sequence[4999] = "A"  # pos 5000: ref A (palindromic)
+            sequence[5999] = "G"  # pos 6000: ref G (palindromic)
+            sequence[6999] = "A"  # pos 7000: ref A (palindromic)
+            sequence[7999] = "G"  # pos 8000: ref G (palindromic)
+            sequence[8999] = "A"  # pos 9000: ref A (palindromic)
+            sequence[9999] = "A"  # pos 10000: ref A (indel)
+            sequence[19999] = "A" # pos 20000: ref A (non-palindromic, not in VCF)
+            sequence[20999] = "A" # pos 21000: ref A (palindromic A/T, not in VCF)
+            sequence[21999] = "A" # pos 22000: ref A (indel, not in VCF)
+            sequence[22000] = "T" # pos 22001: ref T (so both NEA=A and EA=AT match ref → indistinguishable indel)
+            f.write("".join(sequence) + "\n")
+
         # Run GWASLab
-        gwaslab_output = os.path.join(tmpdir, 'gwaslab_output.txt')
+        gwaslab_output = os.path.join(tmpdir, "gwaslab_output.txt")
         df_gwaslab = run_gwaslab_harmonize(sumstats_file, vcf_gz, fasta_file, gwaslab_output)
-        
+
         # Run harmoniser
-        harmoniser_output = os.path.join(tmpdir, 'harmoniser_output.txt')
-        harmoniser_stats = os.path.join(tmpdir, 'harmoniser_stats.txt')
+        harmoniser_output = os.path.join(tmpdir, "harmoniser_output.txt")
+        harmoniser_stats = os.path.join(tmpdir, "harmoniser_stats.txt")
         df_harmoniser = run_harmoniser(sumstats_file, vcf_gz, harmoniser_output, harmoniser_stats)
-        
+
         # Compare results
         if df_gwaslab is not None and df_harmoniser is not None:
             comparison = compare_results(df_gwaslab, df_harmoniser)
-            
+
             # Save comparison
-            output_file = 'test/output/gwaslab_harmoniser_toy_comparison.tsv'
-            os.makedirs('test/output', exist_ok=True)
-            comparison.to_csv(output_file, sep='\t', index=False)
+            output_file = "test/output/gwaslab_harmoniser_toy_comparison.tsv"
+            os.makedirs("test/output", exist_ok=True)
+            comparison.to_csv(output_file, sep="\t", index=False)
             print(f"\nComparison saved to: {output_file}")
         else:
             print("\nError: Could not complete comparison (one or both tools failed)")
-    
+
     print("\n" + "=" * 80)
     print("Test completed!")
     print("=" * 80)

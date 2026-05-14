@@ -1,30 +1,26 @@
-from typing import TYPE_CHECKING, Union, Optional, List, Dict, Any, Tuple
-from gwaslab.qc.qc_check_datatype import check_datatype
-import pandas as pd
-import numpy as np
-import scipy as sp
 import gc
 from os import path
-from gwaslab.info.g_Log import Log
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
-from gwaslab.bd.bd_common_data import get_chr_to_number
-from gwaslab.bd.bd_common_data import get_number_to_chr
-from gwaslab.bd.bd_common_data import get_chr_to_NC
-from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
-from gwaslab.io.io_gtf import gtf_to_protein_coding
-from gwaslab.io.io_gtf import gtf_to_all_gene
-from gwaslab.io.io_gtf import read_gtf
-from gwaslab.bd.bd_download import check_and_download
-from gwaslab.qc.qc_build import _process_build
-from gwaslab.qc.qc_fix_sumstats import check_dataframe_shape
-from gwaslab.qc.qc_build import _check_build
-from gwaslab.util.util_in_correct_winnerscurse import wc_correct
-from gwaslab.util.util_ex_gwascatalog import gwascatalog_trait
-from gwaslab.extension.gwascatalog import GWASCatalogClient
+import numpy as np
+import pandas as pd
+import scipy as sp
+
 import gwaslab as gl
+from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
+from gwaslab.bd.bd_common_data import get_chr_to_NC, get_chr_to_number, get_number_to_chr
+from gwaslab.bd.bd_download import check_and_download
+from gwaslab.extension.gwascatalog import GWASCatalogClient
+from gwaslab.info.g_Log import Log
+from gwaslab.io.io_gtf import gtf_to_all_gene, gtf_to_protein_coding, read_gtf
+from gwaslab.qc.qc_build import _check_build, _process_build
+from gwaslab.qc.qc_check_datatype import check_datatype
+from gwaslab.qc.qc_decorator import with_logging
+from gwaslab.qc.qc_fix_sumstats import check_dataframe_shape
+from gwaslab.util.util_ex_gwascatalog import gwascatalog_trait
+from gwaslab.util.util_in_correct_winnerscurse import wc_correct
 from gwaslab.util.util_in_fill_data import fill_p
 from gwaslab.util.util_in_get_density import _get_signal_density2
-from gwaslab.qc.qc_decorator import with_logging
 
 if TYPE_CHECKING:
     from gwaslab.g_Sumstats import Sumstats
@@ -36,7 +32,7 @@ if TYPE_CHECKING:
         start_function=".get_lead()",
         fix=True
 )
-def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
+def _get_sig(insumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
            variant_id: str = "SNPID",
            chrom: str = "CHR",
            pos: str = "POS",
@@ -47,13 +43,13 @@ def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
            windowsizekb: int = 500,
            sig_level: float = 5e-8,
            log: Log = Log(),
-           xymt: List[str] = ["X","Y","MT"],
+           xymt: list[str] = ["X","Y","MT"],
            anno: bool = False,
            wc_correction: bool = False,
            build: str = "19",
            source: str = "ensembl",
-           gtf_path: Optional[str] = None,
-           verbose: bool = True) -> Optional[pd.DataFrame]:
+           gtf_path: str | None = None,
+           verbose: bool = True) -> pd.DataFrame | None:
     """
     Extract lead variants by P values using a sliding window approach with significance thresholding.
 
@@ -105,25 +101,24 @@ def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
     log.write(" -Processing "+str(len(insumstats))+" variants...", verbose=verbose)
     log.write(" -Significance threshold :", sig_level, verbose=verbose)
     log.write(" -Sliding window size:", str(windowsizekb) ," kb", verbose=verbose)
-    
+
     #if "SNPID" in insumstats.columns:
     #    id = "SNPID"
     #else:
     #    id = "rsID"
-#
     ##load data
     #sumstats=insumstats.loc[~insumstats[id].isna(),:].copy()
-    
+
     sumstats = insumstats.copy()
     #convert chrom to int
     if sumstats[chrom].dtype in ["object",str,pd.StringDtype]:
         chr_to_num = get_chr_to_number(out_chr=True,xymt=["X","Y","MT"])
         sumstats[chrom]=sumstats[chrom].map(chr_to_num)
-    
+
     # make sure the dtype is integer
-    sumstats[chrom] = np.floor(pd.to_numeric(sumstats[chrom], errors='coerce')).astype('Int64')
-    sumstats[pos] = np.floor(pd.to_numeric(sumstats[pos], errors='coerce')).astype('Int64')
-    
+    sumstats[chrom] = np.floor(pd.to_numeric(sumstats[chrom], errors="coerce")).astype("Int64")
+    sumstats[pos] = np.floor(pd.to_numeric(sumstats[pos], errors="coerce")).astype("Int64")
+
     #create internal uniqid
     sumstats["__ID"] = range(len(sumstats))
     id_col = "__ID"
@@ -131,15 +126,15 @@ def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
     #extract all significant variants
     ## use mlog10p first
     if use_p==False and (mlog10p in sumstats.columns):
-        log.write(" -Using {} for extracting lead variants...".format(mlog10p),verbose=verbose)
+        log.write(f" -Using {mlog10p} for extracting lead variants...",verbose=verbose)
         sumstats_sig = sumstats.loc[sumstats[mlog10p]>= -np.log10(sig_level),:].copy()
-        sumstats_sig.loc[:,"__SCALEDP"] = -pd.to_numeric(sumstats_sig[mlog10p], errors='coerce')
+        sumstats_sig.loc[:,"__SCALEDP"] = -pd.to_numeric(sumstats_sig[mlog10p], errors="coerce")
     else:
         #use P
-        log.write(" -Using {} for extracting lead variants...".format(p),verbose=verbose)         
-        sumstats[p] = pd.to_numeric(sumstats[p], errors='coerce')
+        log.write(f" -Using {p} for extracting lead variants...",verbose=verbose)
+        sumstats[p] = pd.to_numeric(sumstats[p], errors="coerce")
         sumstats_sig = sumstats.loc[sumstats[p]<=sig_level,:].copy()
-        sumstats_sig.loc[:,"__SCALEDP"] = pd.to_numeric(sumstats_sig[p], errors='coerce')
+        sumstats_sig.loc[:,"__SCALEDP"] = pd.to_numeric(sumstats_sig[p], errors="coerce")
     log.write(" -Found "+str(len(sumstats_sig))+" significant variants in total...", verbose=verbose)
 
     sumstats_sig = sumstats_sig.sort_values([chrom,pos])
@@ -151,10 +146,10 @@ def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
     sig_index_list = _collect_leads_generic(sumstats_sig, chrom, pos, windowsizekb, p, id_col, maximize=False)
 
     log.write(" -Identified "+str(len(sig_index_list))+" lead variants!", verbose=verbose)
-    
+
     # drop internal __SCALEDP
     sumstats_sig = sumstats_sig.drop("__SCALEDP",axis=1)
-    
+
     # extract the lead variants
     # Note: sig_index_list contains __ID values (internal IDs), not the original variant_id column values
     # So we need to filter using __ID, not the variant_id parameter
@@ -162,9 +157,9 @@ def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
 
     # annotate GENENAME
     if anno is True and len(output)>0:
-        log.write(" -Annotating variants using references:{}".format(source), verbose=verbose)
-        log.write(" -Annotating variants using references based on genome build:{}".format(build), verbose=verbose)
-        
+        log.write(f" -Annotating variants using references:{source}", verbose=verbose)
+        log.write(f" -Annotating variants using references based on genome build:{build}", verbose=verbose)
+
         output = _anno_gene(
                output,
                id=variant_id,
@@ -175,7 +170,7 @@ def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
                source=source,
                gtf_path=gtf_path,
                verbose=verbose)
-        
+
     # drop internal id
     output = output.drop("__ID",axis=1)
     if wc_correction==True:
@@ -194,22 +189,22 @@ def _get_sig(insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
         fix=True
 )
 def _get_top(
-    insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
+    insumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
     variant_id: str = "SNPID",
     chrom: str = "CHR",
     pos: str = "POS",
     by: str = "DENSITY",
-    threshold: Optional[float] = None,
+    threshold: float | None = None,
     windowsizekb: int = 500,
     bwindowsizekb: int = 100,
     log: Log = Log(),
-    xymt: List[str] = ["X","Y","MT"],
+    xymt: list[str] = ["X","Y","MT"],
     anno: bool = False,
     build: str = "19",
     source: str = "ensembl",
-    gtf_path: Optional[str] = None,
+    gtf_path: str | None = None,
     verbose: bool = True
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame | None:
     """
     Extract top variants by maximizing a metric within sliding windows. (used for get top density variants)
 
@@ -250,8 +245,8 @@ def _get_top(
     if sumstats[chrom].dtype in ["object",str,pd.StringDtype]:
         chr_to_num = get_chr_to_number(out_chr=True,xymt=["X","Y","MT"])
         sumstats[chrom]=sumstats[chrom].map(chr_to_num)
-    sumstats[chrom] = np.floor(pd.to_numeric(sumstats[chrom], errors='coerce')).astype('Int64')
-    sumstats[pos] = np.floor(pd.to_numeric(sumstats[pos], errors='coerce')).astype('Int64')
+    sumstats[chrom] = np.floor(pd.to_numeric(sumstats[chrom], errors="coerce")).astype("Int64")
+    sumstats[pos] = np.floor(pd.to_numeric(sumstats[pos], errors="coerce")).astype("Int64")
 
     if (by == "DENSITY") and ("DENSITY" not in sumstats.columns):
         sumstats = _get_signal_density2(insumstats=sumstats,
@@ -262,21 +257,21 @@ def _get_top(
                                      log=log,
                                      verbose=verbose)
     if by not in sumstats.columns:
-        raise ValueError("Please make sure {} column is in input sumstats.".format(by))
+        raise ValueError(f"Please make sure {by} column is in input sumstats.")
 
     sumstats["__ID"] = range(len(sumstats))
     id_col = "__ID"
     sumstats_sig = sumstats.loc[~sumstats[by].isna(),:].copy()
-    sumstats_sig["__BYNUM"] = pd.to_numeric(sumstats_sig[by], errors='coerce')
+    sumstats_sig["__BYNUM"] = pd.to_numeric(sumstats_sig[by], errors="coerce")
     if threshold is None:
         chr_max = sumstats_sig.groupby(chrom, sort=False)["__BYNUM"].max()
         threshold = float(chr_max.median()) if len(chr_max) > 0 else None
     if threshold is not None:
         sumstats_sig = sumstats_sig.loc[sumstats_sig["__BYNUM"] >= threshold, :]
-        log.write(" -Using {} threshold: {}".format(by, threshold), verbose=verbose)
+        log.write(f" -Using {by} threshold: {threshold}", verbose=verbose)
     sumstats_sig = sumstats_sig.sort_values([chrom,pos])
     if len(sumstats_sig) == 0:
-        log.write(" -No variants passing {} threshold or valid metric".format(by), verbose=verbose)
+        log.write(f" -No variants passing {by} threshold or valid metric", verbose=verbose)
         return None
 
     sig_index_list = _collect_leads_generic(sumstats_sig, chrom, pos, windowsizekb, "__BYNUM", id_col, maximize=True)
@@ -299,14 +294,14 @@ def _get_top(
     return output.copy()
 
 def _collect_leads_generic(
-    df: pd.DataFrame, 
-    chrom: str, 
-    pos: str, 
-    windowsizekb: int, 
-    score_col: str, 
-    id_col: str, 
+    df: pd.DataFrame,
+    chrom: str,
+    pos: str,
+    windowsizekb: int,
+    score_col: str,
+    id_col: str,
     maximize: bool = True
-) -> List[Any]:
+) -> list[Any]:
     # Return empty immediately if the input is empty
     if len(df) == 0:
         return []
@@ -326,12 +321,12 @@ def _collect_leads_generic(
     if df[score_col].notna().sum() == 0:
         return []
     # Add cluster_id as a temporary column to ensure proper alignment with DataFrame index
-    df['__CLUSTER_ID'] = cluster_id
+    df["__CLUSTER_ID"] = cluster_id
     try:
         if maximize:
-            idx = df.groupby('__CLUSTER_ID', sort=False)[score_col].idxmax()
+            idx = df.groupby("__CLUSTER_ID", sort=False)[score_col].idxmax()
         else:
-            idx = df.groupby('__CLUSTER_ID', sort=False)[score_col].idxmin()
+            idx = df.groupby("__CLUSTER_ID", sort=False)[score_col].idxmin()
         # Return the corresponding id values for selected indices
         # Use idx.values (row indices) not idx.index (cluster_ids) for lookup
         # Filter out any NaN values that might occur if score_col has all NaN in a cluster
@@ -341,7 +336,7 @@ def _collect_leads_generic(
         result = df.loc[valid_idx.values, id_col].tolist()
     finally:
         # Clean up temporary column
-        df.drop('__CLUSTER_ID', axis=1, inplace=True)
+        df.drop("__CLUSTER_ID", axis=1, inplace=True)
     return result
 
 
@@ -366,26 +361,26 @@ class SimpleGenome:
         self.gtf_path = gtf_path_or_url
         self._genes_df = None
         self._indexed = False
-    
+
     def index(self):
         """Load and index the GTF file. This is called automatically on first query."""
         if not self._indexed:
             # Load GTF file and filter to gene features
             self._genes_df = read_gtf(
                 self.gtf_path,
-                features={'gene'},
-                usecols=['seqname', 'start', 'end', 'gene_id', 'gene_name'],
+                features={"gene"},
+                usecols=["seqname", "start", "end", "gene_id", "gene_name"],
                 expand_attribute_column=True
             )
             # Ensure seqname is string for consistent matching
-            self._genes_df['seqname'] = self._genes_df['seqname'].astype(str)
+            self._genes_df["seqname"] = self._genes_df["seqname"].astype(str)
             self._indexed = True
-    
+
     def _ensure_indexed(self):
         """Ensure the GTF is loaded and indexed."""
         if not self._indexed:
             self.index()
-    
+
     def _normalize_contig(self, contig):
         """Normalize chromosome/contig name for matching."""
         # Use ChromosomeMapper for normalization
@@ -396,7 +391,7 @@ class SimpleGenome:
         mapper.detect_sumstats_format(pd.Series([contig]))
         normalized = mapper.to_string(contig)
         return str(normalized)
-    
+
     def gene_names_at_locus(self, contig, position):
         """
         Get gene names at a specific genomic position.
@@ -415,24 +410,24 @@ class SimpleGenome:
         """
         self._ensure_indexed()
         contig_norm = self._normalize_contig(contig)
-        
+
         # Filter genes that overlap this position
         mask = (
-            (self._genes_df['seqname'] == contig_norm) &
-            (self._genes_df['start'] <= position) &
-            (self._genes_df['end'] >= position)
+            (self._genes_df["seqname"] == contig_norm) &
+            (self._genes_df["start"] <= position) &
+            (self._genes_df["end"] >= position)
         )
         matching_genes = self._genes_df[mask]
-        
+
         if len(matching_genes) == 0:
             return []
-        
+
         # Get unique gene names, filtering out None/NaN
-        gene_names = matching_genes['gene_name'].dropna().unique().tolist()
+        gene_names = matching_genes["gene_name"].dropna().unique().tolist()
         # Filter out empty strings
         gene_names = [g for g in gene_names if g and str(g).strip()]
         return gene_names
-    
+
     def gene_ids_at_locus(self, contig, position):
         """
         Get gene IDs at a specific genomic position.
@@ -451,24 +446,24 @@ class SimpleGenome:
         """
         self._ensure_indexed()
         contig_norm = self._normalize_contig(contig)
-        
+
         # Filter genes that overlap this position
         mask = (
-            (self._genes_df['seqname'] == contig_norm) &
-            (self._genes_df['start'] <= position) &
-            (self._genes_df['end'] >= position)
+            (self._genes_df["seqname"] == contig_norm) &
+            (self._genes_df["start"] <= position) &
+            (self._genes_df["end"] >= position)
         )
         matching_genes = self._genes_df[mask]
-        
+
         if len(matching_genes) == 0:
             return []
-        
+
         # Get unique gene IDs, filtering out None/NaN
-        gene_ids = matching_genes['gene_id'].dropna().unique().tolist()
+        gene_ids = matching_genes["gene_id"].dropna().unique().tolist()
         # Filter out empty strings
         gene_ids = [g for g in gene_ids if g and str(g).strip()]
         return gene_ids
-    
+
     def closest_gene(self, chrom, pos, use_gene_id=False, max_distance=1000000):
         """
         Find the closest gene to a given chromosome and position.
@@ -492,32 +487,32 @@ class SimpleGenome:
             - gene_names: str, comma-separated gene names (or "intergenic" if no gene found)
         """
         self._ensure_indexed()
-        
+
         # Normalize chromosome name
         contig_norm = self._normalize_contig(str(chrom))
-        
+
         # Filter genes on this chromosome
-        chr_genes = self._genes_df[self._genes_df['seqname'] == contig_norm].copy()
-        
+        chr_genes = self._genes_df[self._genes_df["seqname"] == contig_norm].copy()
+
         if len(chr_genes) == 0:
             return max_distance, "intergenic"
-        
+
         # Check if position is within any gene
         within_genes = chr_genes[
-            (chr_genes['start'] <= pos) & (chr_genes['end'] >= pos)
+            (chr_genes["start"] <= pos) & (chr_genes["end"] >= pos)
         ]
-        
+
         if len(within_genes) > 0:
             # Position is within gene(s)
             if use_gene_id:
-                gene_col = 'gene_id'
+                gene_col = "gene_id"
             else:
-                gene_col = 'gene_name'
+                gene_col = "gene_name"
             gene_names = within_genes[gene_col].dropna().unique().tolist()
             gene_names = [str(g).strip() for g in gene_names if g and str(g).strip()]
             if gene_names:
                 return 0, ",".join(gene_names)
-        
+
         # Calculate distances to all genes
         # Distance is negative if upstream, positive if downstream
         # If position is before gene start: distance = start - pos (positive = downstream)
@@ -525,50 +520,50 @@ class SimpleGenome:
         # We want the minimum absolute distance
         distances = []
         for _, gene in chr_genes.iterrows():
-            if pos < gene['start']:
+            if pos < gene["start"]:
                 # Position is upstream of gene
-                dist = gene['start'] - pos
-            elif pos > gene['end']:
+                dist = gene["start"] - pos
+            elif pos > gene["end"]:
                 # Position is downstream of gene
-                dist = pos - gene['end']
+                dist = pos - gene["end"]
             else:
                 # Shouldn't happen (we checked above), but handle it
                 dist = 0
-            
+
             if dist <= max_distance:
                 distances.append((dist, gene))
-        
+
         if not distances:
             return max_distance, "intergenic"
-        
+
         # Find the closest gene(s)
         min_dist = min(d[0] for d in distances)
         closest_genes = [d[1] for d in distances if d[0] == min_dist]
-        
+
         # Get gene names
         if use_gene_id:
-            gene_col = 'gene_id'
+            gene_col = "gene_id"
         else:
-            gene_col = 'gene_name'
-        
-        gene_names = [str(g[gene_col]).strip() for g in closest_genes 
+            gene_col = "gene_name"
+
+        gene_names = [str(g[gene_col]).strip() for g in closest_genes
                      if g[gene_col] and str(g[gene_col]).strip()]
-        
+
         if not gene_names:
             return min_dist, "intergenic"
-        
+
         # Determine if upstream or downstream
         # Check the first closest gene to determine direction
         first_gene = closest_genes[0]
-        if pos < first_gene['start']:
+        if pos < first_gene["start"]:
             # Upstream
             distance = -min_dist
         else:
             # Downstream
             distance = min_dist
-        
+
         return distance, ",".join(gene_names)
-    
+
     def closest_genes_vectorized(self, chrom, positions, use_gene_id=False, max_distance=1000000):
         """
         Find closest genes for multiple positions on the same chromosome (vectorized).
@@ -590,83 +585,83 @@ class SimpleGenome:
             DataFrame with columns ['distance', 'gene_names'] and same index as positions
         """
         self._ensure_indexed()
-        
+
         # Normalize chromosome name
         contig_norm = self._normalize_contig(str(chrom))
-        
+
         # Filter genes on this chromosome
-        chr_genes = self._genes_df[self._genes_df['seqname'] == contig_norm].copy()
-        
+        chr_genes = self._genes_df[self._genes_df["seqname"] == contig_norm].copy()
+
         if len(chr_genes) == 0:
             # No genes on this chromosome
             result = pd.DataFrame({
-                'distance': [max_distance] * len(positions),
-                'gene_names': ['intergenic'] * len(positions)
+                "distance": [max_distance] * len(positions),
+                "gene_names": ["intergenic"] * len(positions)
             }, index=range(len(positions)))
             return result
-        
+
         # Convert positions to numpy array for vectorized operations
         positions = np.asarray(positions, dtype=np.int64)
         n_positions = len(positions)
-        
+
         # Initialize results
         distances = np.full(n_positions, max_distance, dtype=np.int64)
-        gene_names_list = ['intergenic'] * n_positions
-        
+        gene_names_list = ["intergenic"] * n_positions
+
         # Get gene column name
         if use_gene_id:
-            gene_col = 'gene_id'
+            gene_col = "gene_id"
         else:
-            gene_col = 'gene_name'
-        
+            gene_col = "gene_name"
+
         # Convert gene coordinates to numpy arrays for vectorized operations
-        gene_starts = chr_genes['start'].values
-        gene_ends = chr_genes['end'].values
-        gene_names_arr = chr_genes[gene_col].fillna('').astype(str).str.strip().values
-        
+        gene_starts = chr_genes["start"].values
+        gene_ends = chr_genes["end"].values
+        gene_names_arr = chr_genes[gene_col].fillna("").astype(str).str.strip().values
+
         # Vectorized check for positions within genes
         # Create a 2D array: positions (rows) x genes (columns)
         # positions[:, None] creates a column vector, gene_starts/gene_ends are row vectors
         positions_2d = positions[:, None]
         within_mask = (positions_2d >= gene_starts) & (positions_2d <= gene_ends)
-        
+
         # For each position, find genes it overlaps
         for pos_idx in range(n_positions):
             overlapping_genes = np.where(within_mask[pos_idx])[0]
-            
+
             if len(overlapping_genes) > 0:
                 # Position is within gene(s)
                 distances[pos_idx] = 0
                 names = [gene_names_arr[i] for i in overlapping_genes if gene_names_arr[i]]
                 if names:
                     gene_names_list[pos_idx] = ",".join(names)
-        
+
         # For positions not within genes, find closest gene using vectorized operations
         not_within_mask = distances != 0
         not_within_indices = np.where(not_within_mask)[0]
-        
+
         if len(not_within_indices) > 0:
             not_within_positions = positions[not_within_indices]
-            
+
             # For each position, calculate distances to all genes
-            for pos_idx, pos in zip(not_within_indices, not_within_positions):
+            for pos_idx, pos in zip(not_within_indices, not_within_positions, strict=False):
                 # Calculate distances: upstream (pos < start) or downstream (pos > end)
                 upstream_dist = np.where(pos < gene_starts, gene_starts - pos, np.inf)
                 downstream_dist = np.where(pos > gene_ends, pos - gene_ends, np.inf)
-                
+
                 # Minimum distance for each gene
                 gene_distances = np.minimum(upstream_dist, downstream_dist)
-                
+
                 # Find minimum distance
                 min_dist = np.min(gene_distances)
-                
+
                 if min_dist < max_distance:
                     # Find all genes at minimum distance
                     closest_gene_indices = np.where(gene_distances == min_dist)[0]
-                    
+
                     # Get gene names
                     names = [gene_names_arr[i] for i in closest_gene_indices if gene_names_arr[i]]
-                    
+
                     if names:
                         # Determine direction (check first closest gene)
                         first_idx = closest_gene_indices[0]
@@ -675,13 +670,13 @@ class SimpleGenome:
                         else:
                             distances[pos_idx] = int(min_dist)
                         gene_names_list[pos_idx] = ",".join(names)
-        
+
         # Create result DataFrame
         result = pd.DataFrame({
-            'distance': distances,
-            'gene_names': gene_names_list
+            "distance": distances,
+            "gene_names": gene_names_list
         }, index=range(n_positions))
-        
+
         return result
 
 
@@ -689,13 +684,13 @@ Genome = SimpleGenome
 
 
 def closest_gene(
-    x: pd.Series, 
-    data: Any, 
-    chrom: str = "CHR", 
-    pos: str = "POS", 
-    source: str = "ensembl", 
+    x: pd.Series,
+    data: Any,
+    chrom: str = "CHR",
+    pos: str = "POS",
+    source: str = "ensembl",
     build: str = "19"
-) -> Tuple[int, str]:
+) -> tuple[int, str]:
     """
     Find the closest gene to a variant position.
     
@@ -720,7 +715,7 @@ def closest_gene(
         (distance, gene_names) where distance is int and gene_names is str
     """
     use_gene_id = (source == "refseq")
-    
+
     # Handle chromosome conversion for RefSeq
     if source == "refseq":
         chrom_str = get_number_to_chr()[x[chrom]]
@@ -735,14 +730,14 @@ def closest_gene(
         finished_msg="annotating variants with nearest gene name(s) successfully!"
 )
 def _anno_gene(
-    insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
+    insumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
     id: str = "SNPID",
     chrom: str = "CHR",
     pos: str = "POS",
     log: Log = Log(),
     build: str = "19",
     source: str = "ensembl",
-    gtf_path: Optional[str] = None,
+    gtf_path: str | None = None,
     verbose: bool = True
 ) -> pd.DataFrame:
     import pandas as pd
@@ -751,15 +746,15 @@ def _anno_gene(
         insumstats = insumstats_or_dataframe
     else:
         insumstats = insumstats_or_dataframe.data
-    
+
     # Auto-detect ID column if using default and column doesn't exist
     if id == "SNPID" and id not in insumstats.columns:
         if "rsID" in insumstats.columns:
             id = "rsID"
-    
+
     build = _process_build(build, log=log,verbose=verbose)
     output = insumstats.copy()
-    
+
     # Determine GTF path and prepare genome object
     if source == "ensembl":
         if build=="19":
@@ -768,18 +763,18 @@ def _anno_gene(
                 gtf_path = check_and_download("ensembl_hg19_gtf")
                 gtf_path = gtf_to_protein_coding(gtf_path,log=log,verbose=verbose)
             else:
-                log.write(" -Using user-provided gtf:{}".format(gtf_path))
+                log.write(f" -Using user-provided gtf:{gtf_path}")
                 gtf_path = gtf_to_all_gene(gtf_path,log=log,verbose=verbose)
-            reference_name = 'GRCh37'
+            reference_name = "GRCh37"
         elif build=="38":
             log.write(" -Assigning Gene name using ensembl_hg38_gtf for protein coding genes", verbose=verbose)
             if gtf_path is None:
                 gtf_path = check_and_download("ensembl_hg38_gtf")
                 gtf_path = gtf_to_protein_coding(gtf_path,log=log,verbose=verbose)
             else:
-                log.write(" -Using user-provided gtf:{}".format(gtf_path))
+                log.write(f" -Using user-provided gtf:{gtf_path}")
                 gtf_path = gtf_to_all_gene(gtf_path,log=log,verbose=verbose)
-            reference_name = 'GRCh38'
+            reference_name = "GRCh38"
         else:
             raise ValueError(f"Unsupported build: {build}")
         use_gene_id = False
@@ -790,98 +785,98 @@ def _anno_gene(
                 gtf_path = check_and_download("refseq_hg19_gtf")
                 gtf_path = gtf_to_protein_coding(gtf_path,log=log,verbose=verbose)
             else:
-                log.write(" -Using user-provided gtf:{}".format(gtf_path))
+                log.write(f" -Using user-provided gtf:{gtf_path}")
                 gtf_path = gtf_to_all_gene(gtf_path,log=log,verbose=verbose)
-            reference_name = 'GRCh37'
+            reference_name = "GRCh37"
         elif build=="38":
             log.write(" -Assigning Gene name using NCBI refseq latest GRCh38 for protein coding genes", verbose=verbose)
             if gtf_path is None:
                 gtf_path = check_and_download("refseq_hg38_gtf")
                 gtf_path = gtf_to_protein_coding(gtf_path,log=log,verbose=verbose)
             else:
-                log.write(" -Using user-provided gtf:{}".format(gtf_path))
+                log.write(f" -Using user-provided gtf:{gtf_path}")
                 gtf_path = gtf_to_all_gene(gtf_path,log=log,verbose=verbose)
-            reference_name = 'GRCh38'
+            reference_name = "GRCh38"
         else:
             raise ValueError(f"Unsupported build: {build}")
         use_gene_id = True
     else:
         raise ValueError(f"Unsupported source: {source}")
-    
+
     # Check if input is empty
     if len(output) == 0:
         output["LOCATION"] = ""
         output["GENE"] = ""
         return output
-    
+
     # Initialize genome object
     data = Genome(
         reference_name=reference_name,
         annotation_name=source.capitalize(),
         gtf_path_or_url=gtf_path)
-    
+
     # Pre-index the genome (load GTF data once)
     log.write(" -Loading and indexing GTF file...", verbose=verbose)
     data.index()
-    
+
     # Initialize result columns
     output["LOCATION"] = 0
     output["GENE"] = "Unknown"
-    
+
     # Process by chromosome for efficiency
     log.write(" -Processing variants by chromosome...", verbose=verbose)
-    
+
     # Get unique chromosomes
     unique_chroms = output[chrom].unique()
-    
+
     # Process each chromosome
     for chrom_val in unique_chroms:
         # Get variants on this chromosome
         chrom_mask = output[chrom] == chrom_val
         chrom_indices = output[chrom_mask].index
         chrom_variants = output.loc[chrom_mask]
-        
+
         if len(chrom_variants) == 0:
             continue
-        
+
         # Convert chromosome name for query
         if source == "refseq":
             chrom_str = get_number_to_chr()[chrom_val]
             query_chrom = get_chr_to_NC(build=build)[chrom_str]
         else:
             query_chrom = chrom_val
-        
+
         # Get positions
         positions = chrom_variants[pos].values
-        
+
         # Use vectorized method to find closest genes
         results = data.closest_genes_vectorized(
-            query_chrom, 
-            positions, 
+            query_chrom,
+            positions,
             use_gene_id=use_gene_id
         )
-        
+
         # Update output using the original indices
         output.loc[chrom_indices, "LOCATION"] = results["distance"].values
         output.loc[chrom_indices, "GENE"] = results["gene_names"].values
-        
+
         if verbose and len(unique_chroms) > 1:
             log.write(f"   -Processed {len(chrom_variants)} variants on chromosome {chrom_val}", verbose=verbose)
-    
+
     # Replace empty strings and "intergenic" with "Unknown"
     output["GENE"] = output["GENE"].replace("","Unknown")
     output["GENE"] = output["GENE"].replace("intergenic","Unknown")
-    
+
     return output
 
 def _get_known_variants_from_gwascatalog(
-    client: Any, 
-    efo: str, 
-    sig_level: float = 5e-8, 
+    client: Any,
+    efo: str,
+    sig_level: float = 5e-8,
     show_child_traits: bool = True,
     use_cache: bool = True,
     cache_dir: str = "./",
-    verbose: bool = True, 
+    verbose: bool = True,
     log: Log = Log()
 ) -> pd.DataFrame:
     """
@@ -915,32 +910,32 @@ def _get_known_variants_from_gwascatalog(
     pd.DataFrame
         DataFrame with columns: SNPID, CHR, POS, and other association metadata
     """
-    
+
     # Delegate to the client method which handles all GWAS Catalog API logic
     knownsig = client.get_known_variants_for_trait(
         efo=efo, sig_level=sig_level, show_child_traits=show_child_traits,
         use_cache=use_cache, cache_dir=cache_dir, verbose=verbose
     )
-    
+
     if len(knownsig) == 0:
         return pd.DataFrame()
-    
+
     # Remove duplicates based on CHR:POS
     before_dedup = len(knownsig)
-    knownsig = knownsig.drop_duplicates(subset=['CHR', 'POS'], keep='first')
+    knownsig = knownsig.drop_duplicates(subset=["CHR", "POS"], keep="first")
     if before_dedup > len(knownsig):
-        log.write(" -Removed {} duplicate variants (kept {} unique)".format(before_dedup - len(knownsig), len(knownsig)), verbose=verbose)
-    
+        log.write(f" -Removed {before_dedup - len(knownsig)} duplicate variants (kept {len(knownsig)} unique)", verbose=verbose)
+
     # Create Sumstats object for consistency with old format and process coordinates
-    known_Sumstats = gl.Sumstats(knownsig.copy(), fmt="gwaslab", 
-                                 other=['REPORT_GENENAME', 'TRAIT', 'STUDY', 'PUBMEDID', 'AUTHOR'],
+    known_Sumstats = gl.Sumstats(knownsig.copy(), fmt="gwaslab",
+                                 other=["REPORT_GENENAME", "TRAIT", "STUDY", "PUBMEDID", "AUTHOR"],
                                  verbose=False)
     known_Sumstats.fix_pos(verbose=False)
     known_Sumstats.fix_chr(verbose=False)
     known_Sumstats.sort_coordinate(verbose=False)
-    
-    log.write(" -Processed {} unique variants from GWAS Catalog".format(len(known_Sumstats.data)), verbose=verbose)
-    
+
+    log.write(f" -Processed {len(known_Sumstats.data)} unique variants from GWAS Catalog", verbose=verbose)
+
     return known_Sumstats.data
 
 @with_logging(
@@ -950,22 +945,22 @@ def _get_known_variants_from_gwascatalog(
         start_function=".get_novel()"
 )
 def _get_novel(
-    insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
+    insumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
     variant_id: str = "SNPID",
     chrom: str = "CHR",
     pos: str = "POS",
     p: str = "P",
     use_p: bool = False,
     known: Union[bool, pd.DataFrame, str] = False,
-    efo: Union[bool, str, List[str]] = False,
+    efo: Union[bool, str, list[str]] = False,
     only_novel: bool = False,
-    group_key: Optional[str] = None,
+    group_key: str | None = None,
     if_get_lead: bool = True,
     windowsizekb_for_novel: int = 1000,
     windowsizekb: int = 500,
     sig_level: float = 5e-8,
     log: Log = Log(),
-    xymt: List[str] = ["X","Y","MT"],
+    xymt: list[str] = ["X","Y","MT"],
     anno: bool = False,
     wc_correction: bool = False,
     use_cache: bool = True,
@@ -1047,7 +1042,7 @@ def _get_novel(
 
     # When build is hg19, liftover to hg38 first (GWAS catalog and downstream steps use hg38)
     processed_build = _process_build(build, log=log, verbose=False)
-    
+
     if processed_build == "19" and efo != False:
         from gwaslab.hm.hm_liftover_v2 import _liftover_variant
         log.write(" -Sumstats build is hg19; lifting over to hg38 for GWAS catalog / novelty check...", verbose=verbose)
@@ -1093,12 +1088,12 @@ def _get_novel(
     if efo != False:
         # For GWAS catalog, checking if sumstats build is hg38
         _check_build(target_build="38" ,build=build ,log=log,verbose=verbose)
-        
+
         # Use new GWAS Catalog API v2 client
         client = GWASCatalogClient(verbose=verbose, log=log)
-        
+
         if type(efo) is not list:
-            log.write("Start to retrieve data using EFO: {}...".format(efo), verbose=verbose)
+            log.write(f"Start to retrieve data using EFO: {efo}...", verbose=verbose)
             knownsig = _get_known_variants_from_gwascatalog(
                 client=client,
                 efo=efo,
@@ -1109,9 +1104,9 @@ def _get_novel(
                 verbose=verbose,
                 log=log
             )
-        else:            
+        else:
             knownsig=pd.DataFrame()
-            log.write("Start to retrieve data using {} EFOs: {}...".format(len(efo),efo), verbose=verbose)
+            log.write(f"Start to retrieve data using {len(efo)} EFOs: {efo}...", verbose=verbose)
 
             for single_efo in efo:
                 knownsig_single = _get_known_variants_from_gwascatalog(
@@ -1127,11 +1122,11 @@ def _get_novel(
                 if len(knownsig_single) > 0:
                     knownsig_single["EFOID"] = single_efo
                     knownsig = pd.concat([knownsig, knownsig_single],ignore_index=True)
-        
+
         if len(knownsig) > 0:
             knownsig["CHR"] = knownsig["CHR"].astype("Int64")
             knownsig["POS"] = knownsig["POS"].astype("Int64")
-            log.write(" -Retrieved {} associations from GWAS catalog.".format(len(knownsig)), verbose=verbose)
+            log.write(f" -Retrieved {len(knownsig)} associations from GWAS catalog.", verbose=verbose)
         else:
             log.write(" -No associations found in GWAS catalog for the specified EFO trait(s).", verbose=verbose)
     if type(known) is pd.DataFrame:
@@ -1142,13 +1137,13 @@ def _get_novel(
         if "SNPID" not in knownsig.columns:
             knownsig["SNPID"] =knownsig["CHR"].astype("string") + ":" + knownsig["POS"].astype("string")
     elif type(known) is str:
-        knownsig_2 = pd.read_csv(known,sep="\s+",dtype={"CHR":"Int64","POS":"Int64"})
+        knownsig_2 = pd.read_csv(known,sep=r"\s+",dtype={"CHR":"Int64","POS":"Int64"})
         knownsig = pd.concat([knownsig, knownsig_2],ignore_index=True)
         knownsig["CHR"] = knownsig["CHR"].astype("Int64")
         knownsig["POS"] = knownsig["POS"].astype("Int64")
         if "SNPID" not in knownsig.columns:
             knownsig["SNPID"] =knownsig["CHR"].astype("string") + ":" + knownsig["POS"].astype("string")
-    
+
     if len(knownsig) < 1:
         if efo != False:
             log.write(
@@ -1166,7 +1161,7 @@ def _get_novel(
                 return out, pd.DataFrame()
             return out
         raise ValueError("Please input a dataframe of known loci or valid efo code")
-    
+
     if group_key is not None:
         if (group_key not in allsig.columns) or (group_key not in knownsig.columns):
             raise ValueError("Please check if group_key is in both sumstats and list of known associations.")
@@ -1187,7 +1182,7 @@ def _get_novel(
     big_number = determine_big_number(maxpos)
     knownsig = add_tchr_pos(knownsig, chrom, pos, big_number)
     allsig = add_tchr_pos(allsig, chrom, pos, big_number)
-    ############################################################################################   
+    ############################################################################################
     #sorting
     allsig = allsig.sort_values(by="TCHR+POS",ignore_index=True)
     knownsig = knownsig.sort_values(by="TCHR+POS",ignore_index=True)
@@ -1195,10 +1190,10 @@ def _get_novel(
     if group_key is not None:
         number_of_groups_allsig = allsig[group_key].nunique()
         number_of_groups_known = knownsig[group_key].nunique()
-        log.write(" -Number of groups in sumstats:{}".format(number_of_groups_allsig), verbose=verbose)
-        log.write(" -Number of groups in reference:{}".format(number_of_groups_known), verbose=verbose)
+        log.write(f" -Number of groups in sumstats:{number_of_groups_allsig}", verbose=verbose)
+        log.write(f" -Number of groups in reference:{number_of_groups_known}", verbose=verbose)
 
-    log.write(" -Reference variants (known loci): {}".format(len(knownsig)), verbose=verbose)
+    log.write(f" -Reference variants (known loci): {len(knownsig)}", verbose=verbose)
     log.write(
         " -For each lead variant, computing distance to the nearest reference variant...",
         verbose=verbose,
@@ -1208,7 +1203,7 @@ def _get_novel(
     if group_key is None:
         # get distance
         allsig = determine_distance(allsig, knownsig)
-        # get other info 
+        # get other info
         allsig = fill_meta_info_for_known(allsig, knownsig)
         ############################################################################################
         # determine if novel
@@ -1222,7 +1217,7 @@ def _get_novel(
         #groups1 = set(allsig[group_key].unique())
         #groups2 = set(knownsig[group_key].unique())
         #common_group = groups1.intersection(groups2)
-        
+
         #allsig_no_group = allsig.loc[~allsig[group_key].isin(common_group),:].copy()
         allsig_group = pd.DataFrame()
 
@@ -1232,26 +1227,26 @@ def _get_novel(
 
             #if len(allsig_single_group) >0 and len(knownsig_single_group) >0:
             allsig_single_group = determine_distance(allsig_single_group, knownsig_single_group)
-            # get other info 
+            # get other info
             allsig_single_group = fill_meta_info_for_known(allsig_single_group, knownsig_single_group)
-            
+
             # determine if novel
             allsig_single_group = determine_novel(allsig_single_group, windowsizekb_for_novel)
-            
+
             # determine location
             allsig_single_group = determine_location(allsig_single_group)
-            
+
             # if not on same chromosome, distance set to pd.NA
-            allsig_single_group = determine_if_same_chromosome(allsig_single_group, knownsig_single_group, maxpos) 
-            
+            allsig_single_group = determine_if_same_chromosome(allsig_single_group, knownsig_single_group, maxpos)
+
             allsig_group = pd.concat([allsig_group, allsig_single_group], ignore_index=True)
-        
+
         allsig = allsig_group
         #pd.concat([allsig_no_group, allsig_group], ignore_index=True)
-        
+
     # drop helper column TCHR+POS
     allsig = allsig.drop(["TCHR+POS"], axis=1)
-    
+
     try:
         allsig = allsig.where(~pd.isna(allsig), pd.NA)
     except:
@@ -1260,7 +1255,7 @@ def _get_novel(
     if len(allsig) > 0 and "NOVEL" in allsig.columns:
         log.write(" -Identified ",len(allsig)-sum(allsig["NOVEL"])," known variants in current sumstats...", verbose=verbose)
         log.write(" -Identified ",sum(allsig["NOVEL"])," novel variants in current sumstats...", verbose=verbose)
-    
+
     # how to return
     if only_novel is True:
         if output_known is True:
@@ -1271,11 +1266,10 @@ def _get_novel(
             if len(allsig) == 0 or "NOVEL" not in allsig.columns:
                 return allsig
             return allsig.loc[allsig["NOVEL"],:]
+    elif output_known is True:
+        return allsig, knownsig
     else:
-        if output_known is True:
-            return allsig, knownsig
-        else:
-            return allsig
+        return allsig
 ##################################################################################################################################################################################################
 
 @with_logging(
@@ -1286,19 +1280,19 @@ def _get_novel(
         must_kwargs=["group_key"]
 )
 def _check_cis(
-    insumstats_or_dataframe: Union['Sumstats', pd.DataFrame],
-    variant_id: Optional[str] = None,
+    insumstats_or_dataframe: Union["Sumstats", pd.DataFrame],
+    variant_id: str | None = None,
     chrom: str = "CHR",
     pos: str = "POS",
     p: str = "P",
     use_p: bool = False,
     known: Union[bool, pd.DataFrame, str] = False,
-    group_key: Optional[str] = None,
+    group_key: str | None = None,
     if_get_lead: bool = False,
     windowsizekb: int = 500,
     sig_level: float = 5e-8,
     log: Log = Log(),
-    xymt: List[str] = ["X","Y","MT"],
+    xymt: list[str] = ["X","Y","MT"],
     anno: bool = False,
     build: str = "19",
     source: str = "ensembl",
@@ -1310,9 +1304,9 @@ def _check_cis(
         insumstats = insumstats_or_dataframe
     else:
         insumstats = insumstats_or_dataframe.data
-    
+
     ##start function with col checking##########################################################
-    
+
     # Auto-detect ID column if not provided
     if variant_id is None:
         if "SNPID" in insumstats.columns:
@@ -1321,7 +1315,7 @@ def _check_cis(
             variant_id = "rsID"
         else:
             raise ValueError("Cannot find SNPID or rsID column in sumstats")
-    
+
     if if_get_lead == True:
         allsig = _get_sig(insumstats=insumstats,
             variant_id=variant_id,chrom=chrom,pos=pos,p=p,use_p=use_p,windowsizekb=windowsizekb,sig_level=sig_level,log=log,
@@ -1338,15 +1332,15 @@ def _check_cis(
         knownsig["START"] = knownsig["START"].astype("Int64")
         knownsig["END"] = knownsig["END"].astype("Int64")
     elif type(known) is str:
-        knownsig_2 = pd.read_csv(known,sep="\s+",dtype={"CHR":"Int64","POS":"Int64"})
+        knownsig_2 = pd.read_csv(known,sep=r"\s+",dtype={"CHR":"Int64","POS":"Int64"})
         knownsig = pd.concat([knownsig, knownsig_2],ignore_index=True)
         knownsig["CHR"] = knownsig["CHR"].astype("Int64")
         knownsig["START"] = knownsig["START"].astype("Int64")
         knownsig["END"] = knownsig["END"].astype("Int64")
-    
+
     if len(knownsig)<1:
         raise ValueError("Please input a dataframe of gene list with GENE, CHR, START, END.")
-    
+
     if group_key is not None:
         if group_key not in knownsig.columns:
             raise ValueError("Please check if group_key is in both sumstats and list of known associations.")
@@ -1355,11 +1349,11 @@ def _check_cis(
     if group_key is not None:
         number_of_groups_allsig = allsig[group_key].nunique()
         number_of_groups_known = knownsig[group_key].nunique()
-        log.write(" -Number of groups in sumstats:{}".format(number_of_groups_allsig), verbose=verbose)
-        log.write(" -Number of groups in reference:{}".format(number_of_groups_known), verbose=verbose)
+        log.write(f" -Number of groups in sumstats:{number_of_groups_allsig}", verbose=verbose)
+        log.write(f" -Number of groups in reference:{number_of_groups_known}", verbose=verbose)
 
-    log.write(" -Checking if variants in cis/trans regions grouped by {}...".format(group_key), verbose=verbose)
-    log.write(" -Window size in kb adding to start and end: {}...".format(windowsizekb), verbose=verbose)
+    log.write(f" -Checking if variants in cis/trans regions grouped by {group_key}...", verbose=verbose)
+    log.write(f" -Window size in kb adding to start and end: {windowsizekb}...", verbose=verbose)
     ############################################################################################
     #convert to  a dict
     reference_dict = {}
@@ -1381,17 +1375,17 @@ def _check_cis(
         allsig = allsig.where(~pd.isna(allsig), pd.NA)
     except:
         pass
-    
+
     try:
         number_of_cis = sum(allsig["CIS/TRANS"] == "Cis")
         number_of_trans = sum(allsig["CIS/TRANS"] == "Trans")
         number_of_noreference = sum(allsig["CIS/TRANS"] == "NoReference")
-        log.write (" -Number of Cis variants: {}".format(number_of_cis),verbose=verbose)
-        log.write (" -Number of Trans variants: {}".format(number_of_trans),verbose=verbose)
-        log.write (" -Number of NoReference variants: {}".format(number_of_noreference),verbose=verbose)
+        log.write (f" -Number of Cis variants: {number_of_cis}",verbose=verbose)
+        log.write (f" -Number of Trans variants: {number_of_trans}",verbose=verbose)
+        log.write (f" -Number of NoReference variants: {number_of_noreference}",verbose=verbose)
     except:
         pass
-    
+
     return allsig
 
 ###################################################################################################################################################################################################
@@ -1424,24 +1418,24 @@ def fill_meta_info_for_known(allsig, knownsig):
         knownefo=knownsig["EFOID"].values
 
     if "SNPID" in knownsig.columns:
-        allsig["KNOWN_ID"] = allsig["TCHR+POS"].apply(lambda x:knownids[np.argmin(np.abs(knownsig["TCHR+POS"]-x))])    
+        allsig["KNOWN_ID"] = allsig["TCHR+POS"].apply(lambda x:knownids[np.argmin(np.abs(knownsig["TCHR+POS"]-x))])
     if "PUBMEDID" in knownsig.columns:
         allsig["KNOWN_PUBMED_ID"] = allsig["TCHR+POS"].apply(lambda x:knownpubmedids[np.argmin(np.abs(knownsig["TCHR+POS"]-x))])
     if "AUTHOR" in knownsig.columns:
         allsig["KNOWN_AUTHOR"] = allsig["TCHR+POS"].apply(lambda x:knownauthor[np.argmin(np.abs(knownsig["TCHR+POS"]-x))])
     if "EFOID" in knownsig.columns:
-        allsig["KNOWN_EFOID"] = allsig["TCHR+POS"].apply(lambda x:knownefo[np.argmin(np.abs(knownsig["TCHR+POS"]-x))])    
+        allsig["KNOWN_EFOID"] = allsig["TCHR+POS"].apply(lambda x:knownefo[np.argmin(np.abs(knownsig["TCHR+POS"]-x))])
     return allsig
 
 def determine_if_cis(x, group_key,windowsizekb, reference_dict):
     if x[group_key] in reference_dict.keys():
         is_same_chr = str(reference_dict[x[group_key]][0]) == str(x["CHR"])
         is_large_than_start = int(reference_dict[x[group_key]][1]) - windowsizekb*1000 <= x["POS"]
-        is_smaller_than_end = int(reference_dict[x[group_key]][2]) + windowsizekb*1000 >= x["POS"]               
-        
+        is_smaller_than_end = int(reference_dict[x[group_key]][2]) + windowsizekb*1000 >= x["POS"]
+
         if  is_same_chr and is_large_than_start  and is_smaller_than_end:
             return "Cis"
-        else: 
+        else:
             return "Trans"
     else:
         return "NoReference"
@@ -1450,18 +1444,18 @@ def determine_if_cis2(x, group_key,windowsizekb, reference_dict):
     if x[group_key] in reference_dict.keys():
         is_same_chr = str(reference_dict[x[group_key]][0]) == str(x["CHR"])
         is_large_than_start = int(reference_dict[x[group_key]][1]) - windowsizekb*1000 <= x["POS"]
-        is_smaller_than_end = int(reference_dict[x[group_key]][2]) + windowsizekb*1000 >= x["POS"]               
-        
+        is_smaller_than_end = int(reference_dict[x[group_key]][2]) + windowsizekb*1000 >= x["POS"]
+
         if  is_same_chr and is_large_than_start  and is_smaller_than_end:
             return "Cis", int(reference_dict[x[group_key]][0]), int(reference_dict[x[group_key]][1]), int(reference_dict[x[group_key]][2])
-        else: 
+        else:
             return "Trans", int(reference_dict[x[group_key]][0]), int(reference_dict[x[group_key]][1]), int(reference_dict[x[group_key]][2])
     else:
         return "NoReference", pd.NA, pd.NA, pd.NA
 
 
 def determine_distance(allsig, knownsig):
-    if len(allsig)==0: 
+    if len(allsig)==0:
         return allsig
     if len(knownsig)==0:
         allsig["DISTANCE_TO_KNOWN"] = pd.NA
@@ -1537,9 +1531,9 @@ def _check_novel_set(insumstats_or_dataframe,
         insumstats = insumstats_or_dataframe
     else:
         insumstats = insumstats_or_dataframe.data
-    
+
     ##start function with col checking##########################################################
-    
+
     # Auto-detect ID column if not provided
     if variant_id is None:
         if "SNPID" in insumstats.columns:
@@ -1548,12 +1542,12 @@ def _check_novel_set(insumstats_or_dataframe,
             variant_id = "rsID"
         else:
             raise ValueError("Cannot find SNPID or rsID column in sumstats")
-    
+
     # Auto-detect snpid for known set if using default and column doesn't exist
     if snpid == "SNPID" and snpid not in insumstats.columns:
         if "rsID" in insumstats.columns:
             snpid = "rsID"
-    
+
     if if_get_lead == True:
         allsig = _get_sig(insumstats=insumstats,
             variant_id=variant_id,chrom=chrom,pos=pos,p=p,use_p=use_p,windowsizekb=windowsizekb,sig_level=sig_level,log=log,
@@ -1570,15 +1564,15 @@ def _check_novel_set(insumstats_or_dataframe,
         knownsig[snpset] = knownsig[snpset].astype("string")
         knownsig[group_key] = knownsig[group_key].astype("string")
     elif type(known) is str:
-        knownsig_2 = pd.read_csv(known,sep="\s+",dtype={"CHR":"Int64","POS":"Int64"})
+        knownsig_2 = pd.read_csv(known,sep=r"\s+",dtype={"CHR":"Int64","POS":"Int64"})
         knownsig = pd.concat([knownsig, knownsig_2],ignore_index=True)
         knownsig[snpid] = knownsig[snpid].astype("string")
         knownsig[snpset] = knownsig[snpset].astype("string")
         knownsig[group_key] = knownsig[group_key].astype("string")
-    
+
     if len(knownsig)<1:
         raise ValueError("Please input a dataframe of gene list with GENE, CHR, START, END.")
-    
+
     if group_key is not None:
         if group_key not in knownsig.columns:
             raise ValueError("Please check if group_key is in both sumstats and list of known associations.")
@@ -1587,11 +1581,11 @@ def _check_novel_set(insumstats_or_dataframe,
     if group_key is not None:
         number_of_groups_allsig = allsig[group_key].nunique()
         number_of_groups_known = knownsig[group_key].nunique()
-        log.write(" -Number of groups in sumstats:{}".format(number_of_groups_allsig), verbose=verbose)
-        log.write(" -Number of groups in reference:{}".format(number_of_groups_known), verbose=verbose)
+        log.write(f" -Number of groups in sumstats:{number_of_groups_allsig}", verbose=verbose)
+        log.write(f" -Number of groups in reference:{number_of_groups_known}", verbose=verbose)
 
-    log.write(" -Checking if variants in cis/trans regions grouped by {}...".format(group_key), verbose=verbose)
-    
+    log.write(f" -Checking if variants in cis/trans regions grouped by {group_key}...", verbose=verbose)
+
     ############################################################################################
     #convert to  a dict
     reference_dict = {}
@@ -1614,16 +1608,16 @@ def _check_novel_set(insumstats_or_dataframe,
         pass
     ############################################################################################
 
-    log.write(" -Checking if variants are in reference variant sets...", verbose=verbose)    
+    log.write(" -Checking if variants are in reference variant sets...", verbose=verbose)
     #known_list = allsig.apply(lambda x: check_overlap(x,snpid, group_key,reference_dict), axis=1)
     new_row_list = []
     for index, row in allsig.iterrows():
-        
+
         row = check_overlap(row, snpset, snpid, group_key,reference_dict)
         new_row_list = new_row_list+row
         known_df = pd.DataFrame(new_row_list,
-                                columns=[snpid,group_key, snpset,"KNOWN_SET","OVERLAP_VARIANT","KNOWN_SET_VARIANT"])   
-    
+                                columns=[snpid,group_key, snpset,"KNOWN_SET","OVERLAP_VARIANT","KNOWN_SET_VARIANT"])
+
     allsig = pd.merge(allsig,known_df, on=[snpid, group_key, snpset],how="left")
 
     #allsig["KNOWN_SET"] = known_list.str[0]
@@ -1650,12 +1644,12 @@ def _check_novel_set(insumstats_or_dataframe,
     allsig["SUMSTATS_SET_VARIANT"] = allsig.apply(lambda x: assign_set_variant(x,group_key,snpset,back_dict), axis=1)
     allsig["SUMSTATS_SET_SIZE"] = 0
     allsig["SUMSTATS_SET_SIZE"] = allsig[ "SUMSTATS_SET_VARIANT"].str.len()
-    
-    
+
+
     return allsig
 
 def check_overlap(x,snpset, snpid, group_key,reference_dict):
-    
+
     matched=[]
     if x[group_key] in reference_dict.keys():
         # if trait match

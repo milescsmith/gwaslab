@@ -1,93 +1,77 @@
-from typing import TYPE_CHECKING, Optional, Dict, Any, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+
 import pandas as pd
 
+from gwaslab.bd.bd_common_data import (
+    get_chr_list,
+    get_chr_to_NC,
+    get_chr_to_number,
+    get_format_dict,
+    get_formats_list,
+    get_high_ld,
+    get_NC_to_chr,
+    get_NC_to_number,
+    get_number_to_chr,
+    get_number_to_NC,
+)
+from gwaslab.bd.bd_config import options
+from gwaslab.bd.bd_download import (
+    add_local_data,
+    check_available_ref,
+    check_downloaded_ref,
+    check_format,
+    download_ref,
+    get_path,
+    list_formats,
+    list_formats_with_descriptions,
+    remove_file,
+    remove_local_record,
+    scan_downloaded_files,
+    update_available_ref,
+    update_formatbook,
+    update_record,
+)
+from gwaslab.extension.gwascatalog.sumstats_download import download_sumstats
 from gwaslab.g_Sumstats import Sumstats
 from gwaslab.g_Sumstats_polars import Sumstatsp
-from gwaslab.g_SumstatsT import SumstatsT
-from gwaslab.g_SumstatsPair import SumstatsPair
 from gwaslab.g_SumstatsMulti import SumstatsMulti
+from gwaslab.g_SumstatsPair import SumstatsPair
 from gwaslab.g_SumstatsSet import SumstatsSet
+from gwaslab.g_SumstatsT import SumstatsT
+from gwaslab.info.g_Log import Log
 from gwaslab.info.g_version import _show_version as show_version
-
-from gwaslab.util.util_in_convert_h2 import h2_obs_to_liab
-from gwaslab.util.util_in_convert_h2 import _get_per_snp_r2
-from gwaslab.util.util_in_convert_h2 import h2_se_to_p
-from gwaslab.util.util_in_calculate_power import get_power
-from gwaslab.util.util_in_calculate_power import get_beta
+from gwaslab.io.io_bedpe import read_bedpe
+from gwaslab.io.io_bigwig_bigbed import read_bigbed, read_bigwig, read_bigwig_intervals, read_bigwig_stats
+from gwaslab.io.io_gtf import read_gtf, read_gtf_file
+from gwaslab.io.io_gwaslab_standard import load_gsf
+from gwaslab.io.io_read_ldsc import read_greml, read_ldsc, read_popcorn
+from gwaslab.io.io_read_tabular import _read_tabular as read_tabular
+from gwaslab.io.io_read_tabular import read_bgen_sample, read_bim, read_fam, read_psam, read_pvar
+from gwaslab.io.io_to_pickle import dump_pickle, load_pickle
+from gwaslab.io.io_ucsc_bed import read_bed
+from gwaslab.qc.qc_reserved_headers import researved_header
+from gwaslab.util.rwrapper.util_ex_run_susie import _run_susie_rss as run_susie_rss
 from gwaslab.util.util_ex_gwascatalog import gwascatalog_trait
 from gwaslab.util.util_ex_process_h5 import process_vcf_to_hfd5
-from gwaslab.util.rwrapper.util_ex_run_susie import _run_susie_rss as run_susie_rss
+from gwaslab.util.util_in_calculate_power import get_beta, get_power
+from gwaslab.util.util_in_convert_h2 import _get_per_snp_r2, h2_obs_to_liab, h2_se_to_p
 from gwaslab.util.util_in_fill_data import rank_based_int
-from gwaslab.util.util_in_simulate import simulate_sumstats_region
-from gwaslab.util.util_in_simulate import simulate_sumstats_global
-
-from gwaslab.io.io_read_ldsc import read_ldsc
-from gwaslab.io.io_read_ldsc import read_popcorn
-from gwaslab.io.io_read_ldsc import read_greml
-from gwaslab.io.io_to_pickle import dump_pickle
-from gwaslab.io.io_to_pickle import load_pickle
-from gwaslab.io.io_gwaslab_standard import load_gsf
-from gwaslab.io.io_read_tabular import _read_tabular as read_tabular
-from gwaslab.io.io_read_tabular import read_bim
-from gwaslab.io.io_read_tabular import read_fam
-from gwaslab.io.io_read_tabular import read_psam
-from gwaslab.io.io_read_tabular import read_pvar
-from gwaslab.io.io_read_tabular import read_bgen_sample
-from gwaslab.io.io_gtf import read_gtf
-from gwaslab.io.io_gtf import read_gtf_file
-from gwaslab.io.io_bigwig_bigbed import read_bigwig
-from gwaslab.io.io_bigwig_bigbed import read_bigwig_intervals
-from gwaslab.io.io_bigwig_bigbed import read_bigwig_stats
-from gwaslab.io.io_bigwig_bigbed import read_bigbed
-from gwaslab.io.io_bedpe import read_bedpe
-from gwaslab.io.io_ucsc_bed import read_bed
-
+from gwaslab.util.util_in_simulate import simulate_sumstats_global, simulate_sumstats_region
+from gwaslab.view.view_report import generate_qc_report
+from gwaslab.viz.viz_aux_panel import Panel
+from gwaslab.viz.viz_aux_params import VizParamsManager, load_viz_config
+from gwaslab.viz.viz_plot_arc import plot_arc
 from gwaslab.viz.viz_plot_compare_effect import compare_effect as _compare_effect
 from gwaslab.viz.viz_plot_forestplot import plot_forest as _plot_forest
+from gwaslab.viz.viz_plot_ld_block import plot_ld_block as _plot_ld_block
 from gwaslab.viz.viz_plot_miamiplot2 import plot_miami2 as _plot_miami2
 from gwaslab.viz.viz_plot_rg_heatmap import plot_rg as _plot_rg
+from gwaslab.viz.viz_plot_scatter_with_reg import scatter as _scatter
+from gwaslab.viz.viz_plot_stackedpanel import plot_panels as _plot_panels
 from gwaslab.viz.viz_plot_stackedregional import plot_stacked_mqq as _plot_stacked_mqq
+from gwaslab.viz.viz_plot_track import plot_track
 from gwaslab.viz.viz_plot_trumpetplot import plot_power as _plot_power
 from gwaslab.viz.viz_plot_trumpetplot import plot_power_x as _plot_power_x
-from gwaslab.viz.viz_plot_scatter_with_reg import scatter as _scatter
-from gwaslab.viz.viz_plot_ld_block import plot_ld_block as _plot_ld_block
-from gwaslab.viz.viz_plot_track import plot_track
-from gwaslab.viz.viz_plot_arc import plot_arc
-from gwaslab.viz.viz_aux_panel import Panel
-from gwaslab.viz.viz_plot_stackedpanel import plot_panels as _plot_panels
-
-from gwaslab.bd.bd_common_data import get_NC_to_chr
-from gwaslab.bd.bd_common_data import get_NC_to_number
-from gwaslab.bd.bd_common_data import get_chr_to_NC
-from gwaslab.bd.bd_common_data import get_number_to_NC
-from gwaslab.bd.bd_common_data import get_chr_list
-from gwaslab.bd.bd_common_data import get_number_to_chr
-from gwaslab.bd.bd_common_data import get_chr_to_number
-from gwaslab.bd.bd_common_data import get_high_ld
-from gwaslab.bd.bd_common_data import get_format_dict
-from gwaslab.bd.bd_common_data import get_formats_list
-from gwaslab.bd.bd_download import update_formatbook
-from gwaslab.bd.bd_download import list_formats
-from gwaslab.bd.bd_download import list_formats_with_descriptions
-from gwaslab.bd.bd_download import check_format
-from gwaslab.bd.bd_download import check_available_ref
-from gwaslab.bd.bd_download import update_available_ref
-from gwaslab.bd.bd_download import check_downloaded_ref
-from gwaslab.bd.bd_download import download_ref
-from gwaslab.bd.bd_download import check_available_ref
-from gwaslab.bd.bd_download import remove_file
-from gwaslab.bd.bd_download import get_path
-from gwaslab.bd.bd_download import update_record
-from gwaslab.bd.bd_download import scan_downloaded_files
-from gwaslab.bd.bd_download import add_local_data
-from gwaslab.bd.bd_download import remove_local_record
-from gwaslab.bd.bd_config import options
-from gwaslab.extension.gwascatalog.sumstats_download import download_sumstats
-from gwaslab.qc.qc_reserved_headers import researved_header
-from gwaslab.info.g_Log import Log
-from gwaslab.viz.viz_aux_params import VizParamsManager, load_viz_config
-from gwaslab.view.view_report import generate_qc_report
-
 
 _viz_params = VizParamsManager()
 load_viz_config(_viz_params)
@@ -104,7 +88,7 @@ def plot_forest(data: Union[pd.DataFrame, Sumstats], **kwargs: Any) -> Any:
     params = _viz_params.filter(_plot_forest, params, key="plot_forest", log=Log(), verbose=params.get("verbose", True))
     return _plot_forest(data, **params)
 
-def plot_miami2(path1: Optional[str] = None, path2: Optional[str] = None, merged_sumstats: Optional[Union[pd.DataFrame, Sumstats]] = None, **kwargs: Any) -> Any:
+def plot_miami2(path1: str | None = None, path2: str | None = None, merged_sumstats: Union[pd.DataFrame, Sumstats] | None = None, **kwargs: Any) -> Any:
     """Plot Miami plot (mirrored Manhattan plot) from sumstats."""
     params = _viz_params.merge("plot_miami2", kwargs)
     params = _viz_params.filter(_plot_miami2, params, key="plot_miami2", log=Log(), verbose=params.get("verbose", True))

@@ -14,12 +14,14 @@ BEDPE format uses:
 - Optional fields: name, score, strand1, strand2
 """
 
-from typing import TYPE_CHECKING, Union, Optional, Tuple, List
-import pandas as pd
-import numpy as np
 import gzip
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+
 from gwaslab.bd.bd_chromosome_mapper import ChromosomeMapper
 from gwaslab.info.g_Log import Log
 
@@ -27,21 +29,21 @@ if TYPE_CHECKING:
     pass
 
 # BEDPE file suffix definitions
-BEDPE_SUFFIXES = ('.bedpe', '.bedpe.gz')
+BEDPE_SUFFIXES = (".bedpe", ".bedpe.gz")
 
 # BEDPE field names (standard BEDPE10 format)
-BEDPE_REQUIRED_FIELDS = ['chrom1', 'chromStart1', 'chromEnd1', 'chrom2', 'chromStart2', 'chromEnd2']
-BEDPE_OPTIONAL_FIELDS = ['name', 'score', 'strand1', 'strand2']
+BEDPE_REQUIRED_FIELDS = ["chrom1", "chromStart1", "chromEnd1", "chrom2", "chromStart2", "chromEnd2"]
+BEDPE_OPTIONAL_FIELDS = ["name", "score", "strand1", "strand2"]
 BEDPE_ALL_FIELDS = BEDPE_REQUIRED_FIELDS + BEDPE_OPTIONAL_FIELDS
 
 
 def read_bedpe(
     bedpe_path: str,
-    usecols: Optional[List[int]] = None,
-    header: Optional[bool] = None,
-    comment: Optional[str] = None,
+    usecols: list[int] | None = None,
+    header: bool | None = None,
+    comment: str | None = None,
     verbose: bool = False,
-    log: Optional[Log] = None
+    log: Log | None = None
 ) -> pd.DataFrame:
     """
     Read a BEDPE file into a pandas DataFrame.
@@ -96,17 +98,17 @@ def read_bedpe(
     """
     if not os.path.exists(bedpe_path):
         raise FileNotFoundError(f"BEDPE file not found: {bedpe_path}")
-    
+
     if log and verbose:
         log.write(f" -Reading BEDPE file: {bedpe_path}", verbose=verbose)
-    
+
     # Determine if file is compressed
-    is_gzipped = bedpe_path.endswith('.gz')
-    
+    is_gzipped = bedpe_path.endswith(".gz")
+
     # Auto-detect header lines (browser or track lines)
     if header is None:
         header = _detect_bedpe_header(bedpe_path, is_gzipped)
-    
+
     # Read BEDPE file
     if is_gzipped:
         bedpe_df = pd.read_csv(
@@ -114,7 +116,7 @@ def read_bedpe(
             sep=r"\s+",
             header=None,
             comment=comment if comment is not None else "#",
-            compression='gzip' if is_gzipped else None,
+            compression="gzip" if is_gzipped else None,
             dtype={0: "string", 1: "Int64", 2: "Int64", 3: "string", 4: "Int64", 5: "Int64"}
         )
     else:
@@ -125,16 +127,16 @@ def read_bedpe(
             comment=comment if comment is not None else "#",
             dtype={0: "string", 1: "Int64", 2: "Int64", 3: "string", 4: "Int64", 5: "Int64"}
         )
-    
+
     if len(bedpe_df) == 0:
         if log:
             log.write(" -Warning: BEDPE file is empty.", verbose=verbose)
         return pd.DataFrame(columns=BEDPE_REQUIRED_FIELDS)
-    
+
     # Select columns if specified
     if usecols is not None:
         bedpe_df = bedpe_df.iloc[:, usecols]
-    
+
     # Name columns based on BEDPE format
     n_cols = bedpe_df.shape[1]
     if n_cols >= 6:
@@ -143,12 +145,12 @@ def read_bedpe(
     else:
         # Invalid BEDPE format (less than 6 columns)
         raise ValueError(f"BEDPE file must have at least 6 columns, found {n_cols}")
-    
+
     # Validate BEDPE coordinates
     if not _validate_bedpe_coordinates(bedpe_df):
         if log:
             log.warning(" -Warning: BEDPE file contains invalid coordinates (chromStart >= chromEnd).")
-    
+
     return bedpe_df
 
 
@@ -170,19 +172,19 @@ def _detect_bedpe_header(bedpe_path: str, is_gzipped: bool) -> bool:
     """
     try:
         if is_gzipped:
-            f = gzip.open(bedpe_path, 'rt')
+            f = gzip.open(bedpe_path, "rt")
         else:
-            f = open(bedpe_path, 'r')
-        
+            f = open(bedpe_path)
+
         # Check first few lines for "browser" or "track"
         for i, line in enumerate(f):
             if i >= 10:  # Check first 10 lines
                 break
             line_lower = line.strip().lower()
-            if line_lower.startswith('browser') or line_lower.startswith('track'):
+            if line_lower.startswith("browser") or line_lower.startswith("track"):
                 f.close()
                 return True
-        
+
         f.close()
         return False
     except Exception:
@@ -203,27 +205,27 @@ def _validate_bedpe_coordinates(bedpe_df: pd.DataFrame) -> bool:
     bool
         True if all coordinates are valid, False otherwise
     """
-    required_cols = ['chromStart1', 'chromEnd1', 'chromStart2', 'chromEnd2']
+    required_cols = ["chromStart1", "chromEnd1", "chromStart2", "chromEnd2"]
     if not all(col in bedpe_df.columns for col in required_cols):
         return False
-    
+
     # Check that chromStart < chromEnd for both ends
-    valid1 = (bedpe_df['chromStart1'] < bedpe_df['chromEnd1']).all()
-    valid2 = (bedpe_df['chromStart2'] < bedpe_df['chromEnd2']).all()
+    valid1 = (bedpe_df["chromStart1"] < bedpe_df["chromEnd1"]).all()
+    valid2 = (bedpe_df["chromStart2"] < bedpe_df["chromEnd2"]).all()
     return valid1 and valid2
 
 
 def bedpe_to_sumstats_coordinates(
     bedpe_df: pd.DataFrame,
-    mapper: Optional[ChromosomeMapper] = None,
-    chrom1_col: str = 'chrom1',
-    start1_col: str = 'chromStart1',
-    end1_col: str = 'chromEnd1',
-    chrom2_col: str = 'chrom2',
-    start2_col: str = 'chromStart2',
-    end2_col: str = 'chromEnd2',
+    mapper: ChromosomeMapper | None = None,
+    chrom1_col: str = "chrom1",
+    start1_col: str = "chromStart1",
+    end1_col: str = "chromEnd1",
+    chrom2_col: str = "chrom2",
+    start2_col: str = "chromStart2",
+    end2_col: str = "chromEnd2",
     verbose: bool = False,
-    log: Optional[Log] = None
+    log: Log | None = None
 ) -> pd.DataFrame:
     """
     Convert BEDPE coordinates to sumstats-compatible format.
@@ -277,60 +279,60 @@ def bedpe_to_sumstats_coordinates(
     """
     if mapper is None:
         mapper = ChromosomeMapper(species="homo sapiens", log=log, verbose=verbose)
-    
+
     # Create a copy to avoid modifying original
     result_df = bedpe_df.copy()
-    
+
     # Convert chromosome notation to numeric for chrom1
     bedpe_chr1_numeric = result_df[chrom1_col].apply(
         lambda x: mapper.sumstats_to_number(str(x).strip().lstrip("chr").lstrip("CHR"))
         if pd.notna(x) else None
     )
-    
+
     # Convert chromosome notation to numeric for chrom2
     bedpe_chr2_numeric = result_df[chrom2_col].apply(
         lambda x: mapper.sumstats_to_number(str(x).strip().lstrip("chr").lstrip("CHR"))
         if pd.notna(x) else None
     )
-    
+
     # Filter out unconvertible chromosomes
     valid_mask = bedpe_chr1_numeric.notna() & bedpe_chr2_numeric.notna()
     n_invalid = (~valid_mask).sum()
-    
+
     if n_invalid > 0 and log:
         log.write(f" -Warning: {n_invalid} BEDPE regions have unconvertible chromosome notation.", verbose=verbose)
-    
+
     result_df = result_df[valid_mask].copy()
     bedpe_chr1_numeric = bedpe_chr1_numeric[valid_mask]
     bedpe_chr2_numeric = bedpe_chr2_numeric[valid_mask]
-    
+
     # Convert numeric chromosomes to sumstats format
-    result_df['CHR1'] = bedpe_chr1_numeric.apply(
+    result_df["CHR1"] = bedpe_chr1_numeric.apply(
         lambda x: mapper.number_to_sumstats(x) if pd.notna(x) else None
     )
-    result_df['CHR2'] = bedpe_chr2_numeric.apply(
+    result_df["CHR2"] = bedpe_chr2_numeric.apply(
         lambda x: mapper.number_to_sumstats(x) if pd.notna(x) else None
     )
-    
+
     # Convert BEDPE coordinates to 1-based for matching
     # BEDPE [start, end) in 0-based = [start+1, end] in 1-based
     # For matching, we use: START = start + 1, END = end (both inclusive)
-    result_df['START1'] = result_df[start1_col] + 1  # Convert 0-based to 1-based
-    result_df['END1'] = result_df[end1_col]  # End is already 1-based (exclusive in BEDPE = inclusive for matching)
-    result_df['START2'] = result_df[start2_col] + 1  # Convert 0-based to 1-based
-    result_df['END2'] = result_df[end2_col]  # End is already 1-based (exclusive in BEDPE = inclusive for matching)
-    
+    result_df["START1"] = result_df[start1_col] + 1  # Convert 0-based to 1-based
+    result_df["END1"] = result_df[end1_col]  # End is already 1-based (exclusive in BEDPE = inclusive for matching)
+    result_df["START2"] = result_df[start2_col] + 1  # Convert 0-based to 1-based
+    result_df["END2"] = result_df[end2_col]  # End is already 1-based (exclusive in BEDPE = inclusive for matching)
+
     # Rename original columns with _bedpe suffix
     rename_dict = {
-        chrom1_col: f'{chrom1_col}_bedpe',
-        start1_col: f'{start1_col}_bedpe',
-        end1_col: f'{end1_col}_bedpe',
-        chrom2_col: f'{chrom2_col}_bedpe',
-        start2_col: f'{start2_col}_bedpe',
-        end2_col: f'{end2_col}_bedpe'
+        chrom1_col: f"{chrom1_col}_bedpe",
+        start1_col: f"{start1_col}_bedpe",
+        end1_col: f"{end1_col}_bedpe",
+        chrom2_col: f"{chrom2_col}_bedpe",
+        start2_col: f"{start2_col}_bedpe",
+        end2_col: f"{end2_col}_bedpe"
     }
     result_df = result_df.rename(columns=rename_dict)
-    
+
     return result_df
 
 
@@ -338,13 +340,13 @@ def bedpe_contains_position(
     bedpe_df: pd.DataFrame,
     chrom: Union[str, int],
     pos: int,
-    chrom1_col: str = 'CHR1',
-    start1_col: str = 'START1',
-    end1_col: str = 'END1',
-    chrom2_col: str = 'CHR2',
-    start2_col: str = 'START2',
-    end2_col: str = 'END2',
-    mapper: Optional[ChromosomeMapper] = None
+    chrom1_col: str = "CHR1",
+    start1_col: str = "START1",
+    end1_col: str = "END1",
+    chrom2_col: str = "CHR2",
+    start2_col: str = "START2",
+    end2_col: str = "END2",
+    mapper: ChromosomeMapper | None = None
 ) -> bool:
     """
     Check if a position (chrom, pos) is contained in any BEDPE region (either end).
@@ -380,7 +382,7 @@ def bedpe_contains_position(
     """
     if len(bedpe_df) == 0:
         return False
-    
+
     # Convert chrom to match BEDPE format if mapper is provided
     if mapper is not None:
         chrom_num = mapper.sumstats_to_number(chrom)
@@ -398,6 +400,6 @@ def bedpe_contains_position(
         # Direct comparison (assumes same format)
         matches1 = (bedpe_df[chrom1_col] == chrom) & (bedpe_df[start1_col] <= pos) & (pos <= bedpe_df[end1_col])
         matches2 = (bedpe_df[chrom2_col] == chrom) & (bedpe_df[start2_col] <= pos) & (pos <= bedpe_df[end2_col])
-    
+
     return (matches1 | matches2).any()
 

@@ -1,8 +1,10 @@
-from typing import Dict, Optional
-from gwaslab.info.g_Log import Log
 import sys
+from typing import Dict, Optional
 
-def _show_version(log: Optional[Log] = None, verbose: bool = True) -> None:
+from gwaslab.info.g_Log import Log
+
+
+def _show_version(log: Log | None = None, verbose: bool = True) -> None:
     """Show version when loading sumstats."""
     if log is None:
         log = Log()
@@ -14,12 +16,12 @@ def _get_version() -> str:
     """Return short version string like v3.4.33."""
     return "v{}".format(gwaslab_info()["version"])
 
-def gwaslab_info() -> Dict[str, str]:
+def gwaslab_info() -> dict[str, str]:
     """Return version meta information."""
-    dic: Dict[str, str] = {
+    dic: dict[str, str] = {
        "version":"4.1.6",
        "release_date":"20260416"
     }
-    return dic   
+    return dic
 
 ## External tool checks moved to gwaslab.extension
